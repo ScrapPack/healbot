@@ -435,7 +435,9 @@ Items 1–8 of the original order are done (see Status above). What remains:
    fires — for exactly the use case the project exists for. ~10 min.
 4. **Confirm an *external* plugin can register a route.** F7 proved a builtin can. That decides
    whether the grid must live inside the fork or can ship separately. ~20 min.
-5. **Re-run the spike on HEAD.** F7's evidence describes it at `0fdcfb6`; the file has changed.
+5. **Run `healbot.tsx`.** Superseded in scope: the spike was replaced by the real grid at fork
+   `26c9316`. F7's TESTED evidence covers the 133-line spike at `0fdcfb6`; the grid is 339
+   lines and nothing yet records it rendering or reading live state.
 6. **Diagnose `prompt_async`** (see above) before building the spawn path on it.
 7. **Make the retirement threshold configurable** so the Phase 4 exit gate can be exercised at
    5K instead of 350K, and write down what "continuity intact" actually means.

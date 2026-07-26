@@ -112,7 +112,8 @@ Established across phases 0–2. Each is cited in the map named.
 
 **Architecture.** The grid is a plugin-registered **route**, not an `app`-slot overlay and not
 a separate app (`tui/plugin`). Focus is `api.route.navigate("session", {sessionID})` — no PTY,
-no Ink, no suspend/resume. Proven by running spike, `feature-plugins/system/healbot-spike.tsx`.
+no Ink, no suspend/resume. Proven by a running spike (PROBE F7), and now **built**:
+`feature-plugins/system/healbot.tsx` (12.8 KB) landed at fork `26c9316` and retired the spike.
 
 **Concurrency — TESTED, the founding premise holds.** Four sessions fired simultaneously at one
 `opencode serve` finished in 5.72s wall, exactly the slowest single turn, vs 10.45s serially.
@@ -214,7 +215,7 @@ Things that will silently cost correctness. All cited in the maps.
 | **Config loading mutates your disk every boot** — `$schema` injection, file seeding, `.gitignore` writes | `config/CONFIG.MAP.md` |
 | **`api.event` metadata arg works but is untyped** — needs a cast; the grid needs it for cross-directory routing | `plugin/src/PLUGIN-API.MAP.md` |
 | `permission.ask` plugin hook is **dead** — declared, zero trigger sites | `plugin/PLUGIN.MAP.md` |
-| `healbot-spike` occupies `/healbot` in the palette until removed | `tui/feature-plugins/FEATURE-PLUGINS.MAP.md` |
+| ~~`healbot-spike` occupies `/healbot` in the palette~~ — resolved at fork `26c9316`: the spike was deleted in the same commit that added the real grid, so `/healbot` now belongs to `healbot.tsx` | `tui/feature-plugins/FEATURE-PLUGINS.MAP.md` |
 
 ---
 
@@ -259,6 +260,7 @@ multi-step turns.
 |---|---|---|
 | Does `flags.client` land in the `["app","cli","desktop"]` allowlist when the grid drives sessions? | If not, the `question` tool is never registered and YELLOW never fires — for exactly the use case this project exists for | ~10 min |
 | Can an **external** plugin register a route, or only a builtin? | F7 proved a builtin can and that `route.register` is on the public API. The external case is untested, and it decides whether the grid must live inside the fork | ~20 min |
-| Is `healbot-spike.tsx` on HEAD still working? | F7's TESTED evidence describes it at commit `0fdcfb6`; the file has changed since and has not been re-run | ~10 min |
+| Has `healbot.tsx` actually been **run**? | It replaced the spike at fork `26c9316` and is 2.5x its size. F7's TESTED evidence covers the spike at `0fdcfb6`, not this. Nothing in the tree records the grid rendering, owning the keyboard, or reading live session state | ~15 min |
+| Does the grid handle the traps above? | Especially: `session.created` unhandled, RED silent under `--auto`, the project-scoped `session.list()`, and archived sessions never leaving the list | review |
 | What exactly counts as "continuity intact" for a handoff? | It is a Phase 4 exit-gate clause with no definition and no check | design |
 | Make the retirement threshold configurable | The gate says "driven past the retirement threshold"; at 350K on a frontier model that is expensive to exercise. A config key lets it be tested at 5K | small |

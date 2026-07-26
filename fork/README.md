@@ -9,15 +9,15 @@ sense, so it no longer gets its own repository.
 | Upstream | `https://github.com/sst/opencode` |
 | Base commit | `7534d23551f665e65080809975b4ca5c7d63807b` — *"chore: update nix node_modules hashes"* |
 | Version at base | **1.18.5** |
-| Overlay recorded at | fork branch `healbot` @ `5a2d8ed` |
-| Exact diff | [`healbot-fork.patch`](healbot-fork.patch) (`git diff 7534d23 5a2d8ed`) |
+| Overlay recorded at | fork branch `healbot` @ `26c9316` |
+| Exact diff | [`healbot-fork.patch`](healbot-fork.patch) (`git diff 7534d23 26c9316`) |
 
 ## What is here
 
 | Path | What |
 |---|---|
 | `packages/**/*.MAP.md` (14) | The subsystem maps. Phase 2 output, corrected by Phase 3 and the audit. Indexed from [../HARNESS.md](../HARNESS.md) |
-| `packages/tui/src/feature-plugins/system/healbot-spike.tsx` | The grid spike that proved a plugin can register a full-screen route and own the keyboard (PROBE F7) |
+| `packages/tui/src/feature-plugins/system/healbot.tsx` | The control-terminal grid itself (12.8 KB). Replaced `healbot-spike.tsx` at `26c9316`; the spike had proved a plugin can register a full-screen route and own the keyboard (PROBE F7) and was retired once the real route landed |
 | `packages/tui/src/feature-plugins/builtins.ts` | Upstream file, one line added to register the spike |
 | `.opencode/opencode.jsonc` | Project config for the fork — the model pin, references, disabled tools |
 
@@ -47,7 +47,7 @@ This overlay is a snapshot pinned to `7534d23`. Two ways it goes stale:
 
    ```sh
    diff -ru fork/packages "$(git rev-parse --show-toplevel)"/opencode/packages \
-     --include='*.MAP.md' --include='healbot-spike.tsx'
+     --include='*.MAP.md' --include='healbot.tsx' --include='builtins.ts'
    ```
 
    Re-run the overlay build from the checkout's `HEAD` when they diverge — build from `HEAD`,
