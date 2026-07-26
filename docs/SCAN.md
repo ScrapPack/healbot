@@ -7,6 +7,13 @@ follow-up verification run by the synthesizer against a **copy** of the local DB
 Evidence tiers: **VERIFIED** (code read, `file:line` cited) · **TESTED** (executed and
 observed) · **INFERRED** (unverified link, stated as such).
 
+> **⚠ Partially superseded.** Audited in [REVIEW.md](REVIEW.md). Most of this document held up
+> under adversarial re-derivation. Four things did not, and they are flagged inline below:
+> §1's engine conflict (**settled**), §2's `/api/session/{id}/context` advice (**worse than
+> stated**), §4's cost table (**wrong model**), §4's `~20 tok/skill` (**5.4x low**), §6's PURPLE
+> option 3 (**right conclusion, wrong reason**), and §7's "stop at the FIRST match"
+> (**misleading**).
+
 ---
 
 ## 0. Corrections to Phase 0
@@ -92,6 +99,19 @@ blocking:** the config-file setting from C2 disables both. Use that, and the con
 mattering for Phase 3. Resolve it in Phase 4 if the retirement policy needs engine-specific
 behavior.
 
+> **SETTLED — the lifecycle agent was right, and the config agent's claim is refuted.** The
+> `opencode` binary mounts the v2 API **with real handlers backed by an in-process v2 runner**:
+> `server/routes/instance/httpapi/server.ts:102` imports `handlers` from
+> `@opencode-ai/server/handlers`, `:177-181` wires them, and `:299-302` provides
+> `SessionExecutionLocal` whose drain calls `SessionRunner.Service.use(...)` in-process
+> (`core/src/session/execution/local.ts:16-28`). TESTED: `POST /api/session/{id}/prompt`
+> produced a complete assistant turn in ~1.2s. "Reachable only via `lildax`" is wrong.
+>
+> This is not academic, and it is not a compaction question. The v2 engine **never writes
+> `session.tokens`** (see HARNESS.md), so a session driven through `/api/session` is invisible
+> to any retirement trigger — and it is one path segment away on the same port. **Drive v1.**
+> The `fork`/`summarize` row of the table below is correct: v2 has neither.
+
 Practical split, if it holds:
 
 | | Legacy `/session` | V2 `/api/session` |
@@ -123,6 +143,14 @@ is by itself proof this is not context occupancy.
 post-compaction tail (`core/src/session/history.ts:36-38`). Summing it under-reports after
 any compaction.
 
+> **Worse than this says.** `SessionHistory` reads `SessionMessageTable` **exclusively**, and
+> the v1 engine never writes that table. So for a v1-driven session the endpoint returns an
+> **empty array** — not an under-report, zero. TESTED on the reference 101-turn session:
+> `session_message` = 0 rows, `part` = 738, `message` = 109. Repo-wide, 40/40 sessions have
+> `part` rows but only 25 have any `session_message` rows. `PLAN.md:143-144` names this
+> endpoint as the token source for the retirement trigger; on the prescribed engine it would
+> read 0 forever and the trigger would never fire.
+
 **Counters never reset through compaction.** VERIFIED (no message/part removal anywhere in
 either compactor) and TESTED (a compacted session's row equals the full pre+post sum).
 Good news for the trigger: it is **monotonic**, so it is clean to threshold on.
@@ -139,6 +167,22 @@ TESTED on a real 101-turn session:
 `cache.read` re-counts the whole cached prefix every turn. **Recommend
 `input + output + reasoning`, excluding `cache.read`** — otherwise you retire sessions at
 ~17% of their useful life.
+
+> **Superseded — this recommendation answers the wrong question, and mis-cites its own table.**
+>
+> Two corrections. First, arithmetic: the turn-90 row above is `input + output` **without**
+> reasoning. The rule recommended here, `input + output + reasoning`, crosses 350K at
+> **turn 77**, not turn 90 (recomputed against a DB copy; turn 76 = 341,999, turn 77 = 352,880).
+> The turn-90 figure is also fragile — turns 86–89 sit at 341K–347K and only clear on a 154K
+> input spike, so any additive term moves the crossing into the 70s.
+>
+> Second, and larger: 350K is a **quality** limit on context bloat, so the quantity to threshold
+> is live **occupancy**, not lifetime spend — and for occupancy `cache.read` is *included*,
+> because it is the cached prompt prefix sitting in the window. The premise that forced the
+> cumulative reading (`PLAN.md:142-144`: "the model caps at 256K, a session can never hold
+> 350K") died with F6's model decision — `gpt-5.6-sol` is context 1,050,000 / `limit.input`
+> 922,000. See HARNESS.md "Token accounting". The measurements in this section are all correct;
+> it is the recommendation drawn from them that changed.
 
 ---
 
@@ -180,6 +224,17 @@ delete is a hard recursive delete that removes all child sessions (`session/sess
 
 **TESTED** in this environment: **≈49 KB ≈ ~12,000 tokens** of standing context per request.
 
+> **⚠ Wrong model, and measured inside the fork.** These figures are `anthropic.txt` with 14
+> tools. The harness runs `openai/gpt-5.6-sol`, which routes to `gpt.txt` and swaps
+> `edit`+`write` for `apply_patch` — **11 live tools**, since `websearch` is additionally gated
+> out for provider `openai` (`tool/registry.ts:58-59, 288-290`). The block sizes below do not
+> describe the shipped harness; see [STRIP.md](STRIP.md).
+>
+> The ≈49 KB *total* does independently reproduce for the fork under `gpt-5.6-sol` (48,212 B),
+> so the headline is not wrong — but it was measured with cwd **inside the fork**, which is why
+> the skill count here is 19 and STRIP's is 18. Both are right for their directory. Standing
+> context is cwd-dependent throughout; always state the directory.
+
 | Block | Where built | Cost |
 |---|---|---|
 | **All tool defs (desc + JSON schema)** | `session/prompt.ts:1283` ← `session/tools.ts` | **~5,740 tok (14 tools)** |
@@ -197,13 +252,21 @@ delete is a hard recursive delete that removes all child sessions (`session/sess
 | Extension point | Cost |
 |---|---|
 | **Commands** | **Zero.** Templates sit behind `get template()`; nothing reaches the model until invoked (`command/index.ts`). Cheapest point in the system. |
-| **Skills** | **Metadata eager, body lazy.** Only `<name>/<description>/<location>` per skill (`skill/index.ts:321-338`); the body is injected only when the `skill` tool runs (`tool/skill.ts:51`). ~20 tok/skill standing. |
+| **Skills** | **Metadata eager, body lazy.** Only `<name>/<description>/<location>` per skill (`skill/index.ts:321-338`); the body is injected only when the `skill` tool runs (`tool/skill.ts:51`). ~~~20 tok/skill~~ → **~108 tok/skill** — see below. |
 | **Subagents** | **Eager.** Every non-primary agent appends `"- <name>: <description>"` to the `task` tool description on every request (`tool/registry.ts:260-273`) — measured 714 B for 2 subagents. |
 | **Primary agents** | Zero until switched to. |
 | **MCP servers** | **Eager and heavy.** Every tool from every server registered with full schema, no per-tool allowlist, `concurrency:"unbounded"` connect (`session/tools.ts:390-490`, `mcp/index.ts:505-529`). |
 | **Plugins** | Zero unless they contribute a `tool`. |
 | **Formatters / LSP** | Zero prompt text (LSP diagnostics ride tool *output*). |
-| **Permissions** | Subtractive — a deny removes the tool schema entirely. |
+| **Permissions** | Subtractive — a deny removes the tool schema entirely. **But it does not stop a skill**: `permission: {skill: "deny"}` removes the `skill` tool and the whole `<available_skills>` block while `/<skill-name>` still executes it, shell substitutions included (TESTED in one process). |
+
+> **The ~20 tok/skill unit price is wrong by 5.4x.** Two independent wire captures measured the
+> `<available_skills>` block at 7,794–7,798 B for 18 entries = **433 B/skill ≈ 108 tok/skill**.
+> The mechanism (metadata eager, body lazy) is confirmed; only the number is broken. Note the
+> row above contradicted itself — the block total it cites, ~1,930 tok for 19 skills, is
+> 101.6 tok/skill. Descriptions are long and each entry carries a full absolute-path
+> `<location>` line. This matters because STRIP's keep/cut test prices *individual* skills:
+> re-adding 10 costs ~1,080 tokens, not ~200.
 
 ### The cheapest lever, by a wide margin
 
@@ -293,6 +356,19 @@ call sites — dead code. Options, ranked:
 3. `session.next.compaction.started`/`.ended` — clean pair, but gated behind
    `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`.
 
+> **Option 3 is unusable, but not for the reason given.** There is no such gate: the publishers
+> at `core/src/session/compaction.ts:186` and `:215` are unconditional, and an exhaustive search
+> for `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM` finds three non-test hits, none of them an event
+> filter (`createBuiltinPlugins` discards the flag outright, `builtins.ts:22-38`). The real
+> reason is architectural: those publishers live in the **v2** compactor, invoked only from
+> `core/src/session/runner/llm.ts`. The live v1 prompt path runs a different compactor that
+> publishes exactly one event, `session.compacted` (`opencode/src/session/compaction.ts:508`).
+>
+> **This generalises, and it is the important part:** the *entire* `session.next.*` family is
+> v2-only. Zero publishers in `packages/opencode/src`. On the v1 path — the one you must use —
+> `session.next.tool.called`, `.context.updated` and the compaction pair never fire, under any
+> flag. Anyone chasing an env var will burn time and still get no purple.
+
 **Two traps:**
 - **RED never fires in auto-approve mode** — `sync.tsx:191-199` auto-replies `"once"` *before*
   writing to the store when `permission.mode === "auto"` (set by `--auto`).
@@ -332,8 +408,14 @@ params are dropped (`adapters.tsx:48-51`). Confirms the spike.
 - **`/<skill-name>` bypasses the permission gate.** Slash-invoking a skill injects the whole
   SKILL.md body as the message template (`command/index.ts:141-149`) instead of going through
   the `skill` tool and its permission check.
-- **Instruction files stop at the FIRST match** (`instruction.ts:122-133`). In this repo
-  `AGENTS.md` (8,748 B) is injected and **`CONTEXT.md` (32,094 B) is silently ignored**.
+- **Instruction files stop at the first matching FILENAME, not the first ancestor**
+  (`instruction.ts:122-133`). In this repo `AGENTS.md` (8,748 B) is injected and
+  **`CONTEXT.md` (32,094 B) is silently ignored** — that half is right. But the `break` is over
+  the filename list; `fs.findUp` (`fs-util.ts:154-166`) collects **every** `AGENTS.md` from cwd
+  up to the worktree root and adds them all. TESTED with a synthetic 3-level repo: all three
+  loaded, each under its own `Instructions from:` header. The source comment at
+  `instruction.ts:123` claims the opposite and is wrong about its own code. Consequence: a
+  session at `packages/opencode/src/session/llm` ingests 22,273 B of `AGENTS.md`, not 8,748.
 - **The `permission.ask` plugin hook is dead** — declared (`plugin/src/index.ts:261`), zero
   trigger sites repo-wide. Implementing it is a no-op.
 - **Orphan prompt files:** `copilot-gpt-5.txt` (14,241 B) and `plan-reminder-anthropic.txt`

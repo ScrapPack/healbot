@@ -22,16 +22,45 @@ figures from Phase 1. The default model routes to `gpt.txt` and swaps `edit`+`wr
 | Block | Baseline | Stripped | Δ |
 |---|---:|---:|---:|
 | Base prompt | 9,284 B (`gpt.txt`) | 1,715 B (`agent/build.md`) | **−7,569** |
-| Tool definitions (11) | 19,898 B | 19,392 B | −506 |
-| Skills block | 6,836 B (18) | 475 B (1) | **−6,361** |
+| Tool definitions (11) | 19,898 B | 19,392 B | −506 *(opt-in, ships OFF)* |
+| Skills block | ~7,900 B (18) | ~820 B (1) | **−7,112** |
 | `~/.claude/CLAUDE.md` | 698 B | 0 B | −698 |
-| **Total** | **36,716 B ≈ 9,179 tok** | **21,582 B ≈ 5,396 tok** | **−15,134 B ≈ −3,783 tok (41%)** |
+| **Total, as shipped** | **~36,710 B** | **~21,280 B** | **−15,427 B ≈ −3,857 tok (42%)** |
 
 Commands: 20 → 3. Skills: 18 → 1. Both are byproducts of the skill switch — commands are a
 projection of skills.
 
 **Capability removed: none.** All 11 tools remain registered with full schemas. Every cut is
 prose, inheritance, or duplication.
+
+### Three caveats on that headline — added after audit
+
+The absolute saving (~15.4 KB) is solid and **cwd-invariant**. The *percentage* and the
+*coverage* are not, and the original table overstated both directions in small ways:
+
+1. **The percentage is a neutral-directory best case the harness never actually runs in.**
+   Measured from the fork root, baseline standing context is 46,332 B because the project
+   `AGENTS.md` (8,748 B) loads — in **both** arms, since we deliberately keep project
+   instructions. Same 15.4 KB cut, but that is **33.3%**, not 41%. Phase 4 develops in the fork.
+2. **The prompt cut is per-agent.** `build`, `plan` and `general` each define no `prompt`
+   (`agent/agent.ts:141,156,182`), so overriding `build` leaves every `plan` session and every
+   `general` subagent receiving the full 9,284 B `gpt.txt`. A terminal that spawns subagents
+   pays full standing context on each.
+3. **The skills row was measured wrong, in the harness's favour.** 6,836 → 475 does not
+   reproduce at either position. Two independent wire captures (different rigs, different mock
+   providers) both measured Δ = **7,112 B** exactly. The baseline block is 7,794–7,936 B
+   depending on where you cut the segment boundary; the stripped block is ~820 B, not 475 —
+   and it is cwd-dependent, because the builtin skill's `<location>` renders as a bogus
+   `file://` path under the session cwd. 475 B is unreachable in any version.
+
+**Also**: the −506 B tool row requires `HARNESS_TRIM_TOOLS=1`, which `env.sh` ships commented
+out. The table above is the as-shipped (trim-off) measurement; with trim on it is 20,776 B.
+
+**And a scope warning for v2.** `packages/core` has no `gpt.txt`, no `~/.claude` ingestion and
+no external-skill discovery; its builtin `build` prompt is 190 characters
+(`core/src/plugin/agent.ts:13`). 96.7% of this delta is **v1-only**. On the v2 path the
+harness's own `build.md` would be a ~1,525-character *addition*. This is another reason the
+engine choice is load-bearing.
 
 ---
 
@@ -150,7 +179,7 @@ Not set, on purpose:
 | `OPENCODE_CONFIG_DIR` | Additive; does not isolate (Phase 1 C1) |
 | `OPENCODE_DISABLE_AUTOCOMPACT` | Only reaches the legacy compactor. `"compaction": {"auto": false}` in the config file covers both engines (C2) |
 | `OPENCODE_DISABLE_PROJECT_CONFIG` | Would also kill project `AGENTS.md`, which we want |
-| `OPENCODE_PURE` | Despite the name, only disables external plugins — already covered |
+| `OPENCODE_PURE` | **Corrected.** The old reason ("already covered by `OPENCODE_DISABLE_DEFAULT_PLUGINS`") was wrong twice: that switch is itself forbidden, and the two gate *disjoint* sets — `plugin/index.ts:166` internal (auth) plugins, `:177` external ones from the config `plugin` key. Nothing has ever covered external plugins here. Since `trim-tools.ts` **is** an external plugin, setting `PURE` would silently disable the harness's own plugin layer |
 
 ---
 
@@ -163,8 +192,23 @@ harness/
     └── opencode/
         ├── opencode.jsonc                  # model, compaction.auto=false, plugin
         ├── agent/build.md                  # 1,715 B prompt replacing gpt.txt
-        └── plugin/trim-tools.ts            # tool.definition trimming, OFF by default
+        ├── plugin/trim-tools.ts            # tool.definition trimming, OFF by default
+        ├── .gitignore          ← seeded by opencode, UNTRACKED, and self-ignoring
+        ├── package.json        ← UNTRACKED. Pins @opencode-ai/plugin 1.17.10
+        ├── package-lock.json   ← UNTRACKED
+        └── node_modules/       ← UNTRACKED
 ```
+
+**Only the first four are tracked.** opencode writes that `.gitignore` into any config dir at
+boot (`config/config.ts:297-303`, byte-identical), listing `node_modules`, `package.json`,
+`package-lock.json`, `bun.lock` and `.gitignore` itself. Because it ignores itself, `git status`
+stays clean and nothing ever surfaces this. That is the "config loading mutates your disk every
+boot" trap firing on our own deliverable.
+
+Two consequences: a fresh clone of this repo gets the harness **without** its dependency
+manifest or lockfile, and whether `trim-tools.ts` then loads depends on opencode re-seeding
+them — untested. The pin is also drifted: `1.17.10` is the installed binary, while the fork we
+target is `1.18.5`.
 
 Usage:
 
@@ -172,6 +216,11 @@ Usage:
 . ~/Desktop/healbot/harness/env.sh
 opencode
 ```
+
+`env.sh` needs `$BASH_SOURCE` to locate itself, so **zsh or bash**. It now validates the path it
+resolved and refuses loudly (exporting nothing) in dash or ksh, where it would otherwise have
+silently pointed `XDG_CONFIG_HOME` at `$PWD` and booted with an empty config — a harness that
+reports "skills disabled" while delivering none of the measured isolation.
 
 ---
 
@@ -186,7 +235,9 @@ opencode
 | Trim plugin loads clean | ✓ 0 errors; `todowrite` 2,548 → 2,042 B |
 | All 11 tools still registered | ✓ |
 | **Real model turn end-to-end** | ✓ `opencode run` → correct reply, verified under XDG alone, +skills switch, +claude-code switch, and via `env.sh` |
-| Tool-using turn (file write + read-back) | ✗ — **fails identically on stock opencode**, see below |
+| **Tool-using turn (file write + read-back)** | ✓ — **corrected, see below.** It works; the original ✗ was a model mix-up |
+| Skills/commands floor is cwd-dependent | ✗ 18→1 / 20→3 holds in a neutral dir; in the fork it is 2 skills / 12 commands / 9 agents |
+| `env.sh` portable to any POSIX sh | ✗ `${BASH_SOURCE[0]}` is a bash/zsh expansion — now guarded, refuses loudly in dash/ksh |
 
 ### The switch that broke the harness
 
@@ -211,23 +262,50 @@ noise), which independently confirms the switch had no prompt impact — it was 
 for zero benefit. This is the entire justification for running a functional smoke test rather
 than trusting static measurement.
 
-### The tool-using turn — unresolved, and not ours
+### The tool-using turn — CORRECTED. It works.
 
-The smoke test's second half (write a file, read it back) produces **no output and no file**.
-Before attributing that to the strip, I ran the identical prompt against **stock opencode with
-no harness at all**: same result. It also persists with `OPENCODE_PERMISSION` pre-granting
-`bash`/`edit`/`write`/`apply_patch`/`read`.
+**This section previously reported a failure that does not exist.** Retracted in full; the
+correction matters more than the original claim, so it is spelled out.
 
-So it is a pre-existing `opencode run` issue in this environment, not a regression from the
-strip. Consistent with the Phase 2 trap: *there is no timeout on a pending permission — a
-client that ignores `permission.asked` hangs that tool call forever.* Not confirmed as the
-cause.
+TESTED under the harness, in a scratch directory:
 
-**What this does and does not license.** It supports "the strip removed no capability" —
-tool-using turns are equally broken with and without it, and all 11 tools remain registered
-with full schemas. It does **not** amount to a verified end-to-end tool-using run. Phase 4
-drives sessions through the server API rather than `opencode run`, and should confirm tool
-use on that path early.
+```
+. ~/Desktop/healbot/harness/env.sh
+opencode run "Create a file named hello.txt containing exactly the text HELLO,
+              then read it back and tell me its contents."
+  > build · gpt-5.6-sol
+  % Patch 1 file
+  → Read hello.txt [offset=1, limit=10]
+  "Created and verified `hello.txt`. Its contents are: HELLO"
+```
+
+`hello.txt`, 6 bytes, on disk. ~8s. Reproduced three times across two auditors, including with
+`HARNESS_TRIM_TOOLS=1`.
+
+**What went wrong originally: the stock-vs-harness comparison silently compared two different
+models.** Stock config resolves to the user's global default `ollama/gemma4-agentic:q6`, which
+mangled a path (`/var":}/`) and got its own `external_directory` permission auto-rejected. The
+harness pins `openai/gpt-5.6-sol`. The decisive control — stock config with **only** the model
+forced, `opencode run -m openai/gpt-5.6-sol` — succeeds identically. So the failure was the
+model, not `opencode run`, not permissions, and not the strip.
+
+The stated cause was also wrong: `opencode run` does **not** hang on a pending permission. It
+prints `auto-rejecting` and returns.
+
+**Consequences.**
+
+- "The strip removed no capability" no longer rests on a defect; it now rests on a passing
+  end-to-end tool-using run. Stronger, not weaker.
+- Phase 4's stated mitigation ("drive the server API instead, `opencode run` is unreliable")
+  was planned around a phantom. Drive the server API for the *real* reasons — v1/v2 accounting
+  and the event vocabulary — not this one.
+- **Any other stock-vs-harness A/B in this document is suspect for the same reason.** Always
+  pass `-m` explicitly when comparing arms.
+
+Separately, and confirmed by direct test: `POST /session/{id}/prompt_async` accepts a prompt
+and executes **nothing** — the user message is stored, no assistant turn follows. The
+synchronous `POST /session/{id}/message` works. `PLAN.md` builds its Phase 4 spawn path on
+`prompt_async`; that needs revisiting.
 
 ---
 
@@ -235,8 +313,15 @@ use on that path early.
 
 - **`/code-review ultra` has not been run.** Per the plan this is where it belongs — there is
   now a real diff to review, and this phase deleted things that could be load-bearing. It is
-  user-triggered and billed; I cannot launch it. Run from `~/Desktop/healbot`.
-- The `cache.read` exclusion and the v2 token-accounting contradiction (HARNESS.md) remain
-  Phase 4 concerns; nothing here depends on them.
+  user-triggered and billed; I cannot launch it. Run from `~/Desktop/healbot`. The
+  multi-agent audit in [REVIEW.md](REVIEW.md) covered assumptions, not the diff, and found two
+  live defects in `env.sh` alone — this gate is still worth closing.
 - Cutting `explore`/`general` subagents (714 B) is deferred pending the control terminal's
-  design — it may make them redundant.
+  design — it may make them redundant. Note caveat 2 above: leaving `general` in place also
+  means every subagent session pays the full `gpt.txt`.
+- Whether `trim-tools.ts` still loads from a fresh clone, given the untracked `package.json`.
+
+**Closed since this document was written** (see [REVIEW.md](REVIEW.md)): the `cache.read`
+question — the retirement trigger measures *occupancy*, where `cache.read` is **included**;
+the v2 token-accounting contradiction — v2 does not write `session.tokens`, so v1 is a hard
+requirement; and N-way concurrency, which is TESTED working.

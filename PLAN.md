@@ -12,6 +12,37 @@ Not terminal mirroring. Status first, interaction on focus.
 
 ---
 
+## ⚠ ERRATA — read before anything below
+
+**This document was written before Phases 0–3 ran and has never been revised.** Phases 0–3 and
+the audit in [docs/REVIEW.md](docs/REVIEW.md) refuted a number of statements below that are
+still written as settled fact. The body is left intact as a record; this table is the
+correction. **Where they disagree, this table wins.**
+
+| Where | Says | Actually |
+|---|---|---|
+| §0.1 line 72, and :216, :280 | `OPENCODE_CONFIG_DIR` gives config isolation | **False, and harmful.** All three of `OPENCODE_CONFIG_DIR` / `_CONFIG` / `_CONFIG_CONTENT` **merge** the harness config on top of the inherited global one. Following this row leaves you with the ollama provider block, 18 skills and `~/.claude/CLAUDE.md` while believing you are isolated. Only `XDG_CONFIG_HOME` replaces (SCAN C1, TESTED) |
+| §0.1 line 79; §2 risk (b); :284 | risk (b) RESOLVED by `OPENCODE_DISABLE_AUTOCOMPACT` | Reaches the legacy compactor only. Use `"compaction": {"auto": false}` in the config file (SCAN C2) |
+| §0.1 line 80; §2 risk (d); :323 | the yellow border may be gated | False alarm. The gate is `["app","cli","desktop"].includes(flags.client)` and `OPENCODE_CLIENT` defaults to `cli` (SCAN C3). Still worth confirming for a non-CLI client |
+| §0.1 line 81 | `OPENCODE_ENABLE_PARALLEL` = "parallelism, relevant to N-session operation" | **Unrelated.** It selects the web-search provider (parallel.ai vs exa), `runtime-flags.ts:36-39`. Nothing to do with session concurrency |
+| §1 (:109-136) | Ink grid + PTY hand-off hybrid; focus suspends Ink and hands off to `opencode attach` | **Superseded by PROBE F7 (TESTED).** The grid is a plugin-registered route inside the fork's TUI; focus is `route.navigate("session", {sessionID})`. No PTY, no Ink, no suspend/resume. (`opencode attach --session`/`--mini` *do* exist, so the fallback is real if F7's external-plugin case fails) |
+| :119-120, :208, :237 | `packages/tui` is Go; "TS core + Go TUI" | 33 packages, **zero** `.go` files. The TUI is TypeScript + SolidJS on OpenTUI (PROBE F1/F2) |
+| §2 risk (a) (:142-145) | 350K "must mean cumulative tokens" because the model caps at 256K | **The premise died with F6.** `openai/gpt-5.6-sol` is context 1,050,000 / `limit.input` 922,000 — a session absolutely can hold 350K. The threshold is a **context-occupancy** limit, motivated by quality degradation under context bloat. See HARNESS.md "Token accounting" |
+| §2 risk (a), and :38 | `GET /api/session/{id}/context` gives per-message lifetime tokens | It returns the post-compaction tail — and for a **v1** session it returns an **empty array**, because it reads `SessionMessageTable` which v1 never writes (TESTED) |
+| §0 (:57-59) | `session.next.*` listed under "Verified event types" | The entire family is **v2-only** — zero publishers in `packages/opencode/src`. On the v1 path you must use, they never fire. That includes `session.next.tool.called`, which :328 makes a frame field |
+| §4 (:298-346) | Phase 4 build order: Ink in `control/`, `@opencode-ai/sdk`, spike S3 | Superseded by F7. The grid is a TUI plugin route |
+| :302, :307 | "P4 already proved the SDK works on Node"; "P1/P2/P4 already answered in Phase 0" | **All three were never run** (PROBE.md:21-23). P1 was answered in Phase 1 instead; P2 in Phase 1 (C3) |
+| :331 | click-to-act via `POST /permission/{id}/reply` | `client.permission.reply({requestID, ...})` — keyed by `requestID` alone |
+| :343 | "Compare against `POST /session/{id}/fork`, which is cheaper" | `fork` is disqualified — it inherits the parent's whole token count within ~3s. `summarize` also wrong. Use `POST /session` + seed prompt |
+| §5 (:356-359) | phases run fresh, handoff is the written artifact | The method has **no repair step**, which is why this errata table is necessary. Every phase should now also revise the artifacts it contradicts |
+
+**Settled since, and not reflected below:** N-way session concurrency works (4 sessions
+finished in the time of the slowest, not the sum) and a blocked permission does not stall the
+others — so the founding premise of §4 holds. `compaction.auto:false` is right, but it turns
+context overflow into a hard error rather than a compaction.
+
+---
+
 ## 0. Ground truth (verified 2026-07-26 on this machine)
 
 **Installed**

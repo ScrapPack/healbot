@@ -3,13 +3,35 @@
 
   // Managed sessions run on a hosted model. Local models stay available as an explicit
   // per-session opt-in — N concurrent sessions against one local Ollama serialize.
+  //
+  // Hosted concurrency is TESTED, not assumed: 4 sessions fired simultaneously at one
+  // `opencode serve` completed in 5.72s wall — exactly the slowest single turn — against
+  // 10.45s run serially. The server does not serialize. Per-turn latency does degrade under
+  // load (2.4-2.7s solo -> 2.8-5.7s at 4-way), so expect ~1.8x throughput at N=4, not 4x.
+  // Also TESTED: a session parked on permission.asked does NOT stall the others — three
+  // concurrent sessions finished while the blocked one hung (and it hangs forever; there is
+  // no timeout on a pending permission).
+  //
+  // gpt-5.6-sol limits: context 1,050,000 / limit.input 922,000 / output 128,000.
   "model": "openai/gpt-5.6-sol",
   "small_model": "openai/gpt-5.6-sol",
 
-  // Retirement (350K cumulative tokens) is the session lifecycle policy, so auto-compaction
-  // must not silently extend a session past it. Set HERE and not via
-  // OPENCODE_DISABLE_AUTOCOMPACT: the env var only reaches the legacy compactor
-  // (config.ts:579), while this key is read by both. See docs/SCAN.md C2.
+  // Compaction OFF is a QUALITY decision, not a cost one, and it is the right call:
+  // handing a fresh session a passover prompt beats compacting, because compaction loses
+  // specificity while re-discovery costs only a little bloat. Retirement is therefore the
+  // sole lifecycle policy and auto-compaction must not silently extend a session past it.
+  //
+  // Set HERE and not via OPENCODE_DISABLE_AUTOCOMPACT: the env var only reaches the legacy
+  // compactor (config.ts:579), while this key is read by both. See docs/SCAN.md C2.
+  //
+  // CONSEQUENCE, and it is not documented upstream: with auto:false, overflow.ts:28
+  // (`if (input.cfg.compaction?.auto === false) return false`) disables the overflow check
+  // entirely, and processor.ts:607-613 turns a real context overflow into
+  // finish:"error" + status idle. So the ceiling is a HARD ERROR, not a compaction.
+  // Retirement must fire well before it. With a 922,000-token input limit and a 350K
+  // retirement threshold there is ~570K of headroom, so this is a safety net rather than a
+  // path anything should reach — but the control terminal must render that error state,
+  // because to the grid it looks like an ordinary idle-after-error.
   "compaction": {
     "auto": false
   },

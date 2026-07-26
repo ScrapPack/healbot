@@ -12,8 +12,38 @@ collides with opencode's skill-manifest glob (`**/SKILL.md`), and `AGENTS.md` / 
 (`packages/opencode/src/session/instruction.ts:64-68`), which is the exact cost this project
 exists to remove. **Never create those four filenames anywhere in this tree.**
 
-Phase docs: [PLAN.md](PLAN.md) · [docs/PROBE.md](docs/PROBE.md) (phase 0) ·
-[docs/SCAN.md](docs/SCAN.md) (phase 1)
+Phase docs, newest first:
+
+| Doc | Phase | Read it for |
+|---|---|---|
+| [docs/REVIEW.md](docs/REVIEW.md) | audit | **Read this before trusting any figure below.** Adversarial audit of every phase-0–3 assumption; what held, what did not |
+| [docs/STRIP.md](docs/STRIP.md) | 3 | The strip: what was cut, what it measures, how to run the harness |
+| [HARNESS.md](HARNESS.md) | 2 | This file |
+| [docs/SCAN.md](docs/SCAN.md) | 1 | Architecture scan. **§4's cost table is superseded** — see REVIEW |
+| [docs/PROBE.md](docs/PROBE.md) | 0 | Empirical probes F1–F7; the architecture proof |
+| [PLAN.md](PLAN.md) | — | **Superseded in parts and never revised.** §1 and §4 describe an Ink/PTY architecture that F7 replaced, and §0.1's switch table has false rows. It carries a rev-3 errata header; read that first |
+
+## The deliverable
+
+`harness/` is the thing this project actually ships. It is not in the map table below because
+it is not part of the fork.
+
+```sh
+. ~/Desktop/healbot/harness/env.sh   # zsh or bash only — it guards and refuses elsewhere
+opencode
+```
+
+| File | Owns |
+|---|---|
+| `harness/env.sh` | The switch set. `XDG_CONFIG_HOME` isolation + the skill switch + the claude-code switch, each with its measured justification and a NOT-SET list of the switches that break things |
+| `harness/config/opencode/opencode.jsonc` | Model pin, `compaction.auto=false` and why, plugin registration |
+| `harness/config/opencode/agent/build.md` | The 1,715 B prompt that *replaces* `gpt.txt` |
+| `harness/config/opencode/plugin/trim-tools.ts` | Tool-description trimming. Ships OFF (`HARNESS_TRIM_TOOLS=1`) |
+
+Three more files exist on disk (`.gitignore`, `package.json`, `package-lock.json`) and are
+**untracked** — opencode seeds a self-ignoring `.gitignore` into any config dir at boot
+(`config/config.ts:297-303`), which is the "config loading mutates your disk" trap firing on
+our own deliverable. A fresh clone gets the harness without its dependency manifest.
 
 ---
 
@@ -78,26 +108,71 @@ Established across phases 0–2. Each is cited in the map named.
 a separate app (`tui/plugin`). Focus is `api.route.navigate("session", {sessionID})` — no PTY,
 no Ink, no suspend/resume. Proven by running spike, `feature-plugins/system/healbot-spike.tsx`.
 
-**Token accounting.** `session.tokens` is cumulative and monotonic — compaction never resets
-it (`core/session`). Threshold on `input + output + reasoning` and **exclude `cache.read`**:
-including it crosses 350K at turn 17 of 101 instead of turn 90.
+**Concurrency — TESTED, the founding premise holds.** Four sessions fired simultaneously at one
+`opencode serve` finished in 5.72s wall, exactly the slowest single turn, vs 10.45s serially.
+The server does not serialize. Per-turn latency degrades under load (2.4–2.7s solo → 2.8–5.7s
+at 4-way), so budget ~1.8x throughput at N=4, not 4x. And a session parked on
+`permission.asked` does **not** stall the others — three concurrent sessions completed while
+the blocked one hung indefinitely.
+
+**Token accounting — the retirement trigger measures OCCUPANCY, not cumulative spend.**
+Corrected; the earlier rule here was wrong for its own stated purpose.
+
+- *Why the limit exists*: model quality degrades as the context window bloats. So the quantity
+  to threshold is **how full the window is right now**, not what the session has spent over its
+  life. `session.tokens` is lifetime spend and answers a different question — the reference
+  101-turn session shows 652K input against 8.7M `cache.read`, which says nothing about
+  occupancy.
+- *What to read*: the assistant message's own `tokens` (`schema/src/v1/session.ts:472-481`),
+  delivered on every `message.updated`. Occupancy is `total`, or
+  `input + output + cache.read + cache.write` — the same expression `isOverflow` uses
+  (`session/overflow.ts:21-33`). **`cache.read` is included**: it is the cached prompt prefix,
+  and it is part of the window.
+- *Headroom*: `gpt-5.6-sol` is context 1,050,000 / `limit.input` 922,000. A 350K threshold
+  leaves ~570K before the hard ceiling.
+- *`session.tokens` is still useful* — for cost, and it is genuinely cumulative and monotonic
+  through compaction (VERIFIED + TESTED, 40/40 sessions match `SUM(step-finish)` exactly). Just
+  not for retirement.
+- *If you do threshold cumulative spend anyway*: `input + output` crosses 350K at turn 90 of
+  101; `input + output + reasoning` — the rule this file used to recommend — crosses at
+  **turn 77**, not turn 90. The old text attached SCAN's turn-90 measurement to a different
+  formula.
+
+**Compaction is off, so overflow is a HARD ERROR.** `overflow.ts:28` returns `false` outright
+when `compaction.auto === false`, and `processor.ts:607-613` then sets `finish: "error"` and
+status idle. The grid must render that as its own state; it arrives looking like an ordinary
+idle-after-error.
 
 **Handoff.** `fork` is disqualified — TESTED, a fork reports 0 tokens at creation then climbs
 to exactly the parent's total within ~3s. `summarize` mutates in place and adds tokens. Only
 `POST /session` + a seed prompt yields a zero-token session. Retire with
-`PATCH time.archived`, never `DELETE` (hard recursive delete).
+`PATCH time.archived`, never `DELETE` (hard recursive delete) — **but see the trap below:
+archiving hides a session from nothing.**
 
-**Where the tokens actually are.** Tool definitions dominate (~5,740 tok), ahead of
-instructions (~2,360), base prompt (~2,050), skills (~1,930). Measured under
-`anthropic.txt` — **re-measure under `gpt-5.6-sol`**, which routes to `gpt.txt` (9,284 B) and
-swaps `edit`+`write` out for `apply_patch` (`tool/TOOL.MAP.md`).
+**Engine choice is load-bearing, not a preference.** v1 (`POST /session/{id}/message`) and v2
+(`POST /api/session/{id}/prompt`) have incompatible token accounting *and* incompatible event
+vocabularies. Both are mounted on the same port by the shipped binary. **Use v1.** See the two
+traps below.
 
-**Cheapest strip levers**, in order:
-1. `tool.definition` plugin hook rewrites any builtin tool's description and schema — zero
-   source change, aimed at the biggest block (`plugin/PLUGIN.MAP.md`).
-2. An agent's own `prompt` **replaces** the base prompt (ternary, not append) — one
-   `agent/*.md` drops ~2,050 tok (`agent/AGENT.MAP.md`).
-3. `OPENCODE_DISABLE_EXTERNAL_SKILLS` — 18 skills → 1, 20 commands → 3 (measured, phase 0).
+**Where the tokens actually are.** Under `openai/gpt-5.6-sol` in a neutral directory: tool
+definitions ~19,900 B dominate, then base prompt 9,284 B (`gpt.txt`), skills ~7,900 B,
+instructions, `<env>` ~957 B, `<mcp_instructions>` 0 B. The stripped harness serves ~21.3 KB
+against a ~36.7 KB baseline. **Both figures are neutral-directory measurements** — in the fork
+the project AGENTS.md adds ~9 KB to *both* arms, so the percentage drops from ~41% to ~33%
+while the absolute saving stays ~15.4 KB. Earlier `anthropic.txt` figures (~5,740 / ~2,360 /
+~2,050 / ~1,930 tok) described a model this harness does not run; they are superseded.
+
+**Cheapest strip levers**, in order of measured value:
+1. An agent's own `prompt` **replaces** the base prompt (ternary, not append) — one
+   `agent/*.md` drops 7,569 B (`agent/AGENT.MAP.md`). **Per-agent**: `build`, `plan` and
+   `general` each define no `prompt` (`agent/agent.ts:141,156,182`), so overriding `build`
+   leaves every `plan` session and every `general` subagent on the full `gpt.txt`.
+2. `OPENCODE_DISABLE_EXTERNAL_SKILLS` — measured Δ **7,112 B** (two independent wire captures
+   agreed exactly). 18 skills → 1 and 20 commands → 3 *in a neutral directory*; in the fork the
+   floor is 2 skills / 12 commands, because the config-directory scan is unconditional.
+3. `tool.definition` plugin hook rewrites any builtin tool's description — zero source change,
+   aimed at the biggest block, but it recovered only 506 B and ships OFF
+   (`plugin/PLUGIN.MAP.md`). Most of that block turned out to be load-bearing.
 
 ---
 
@@ -107,8 +182,17 @@ Things that will silently cost correctness. All cited in the maps.
 
 | Trap | Where |
 |---|---|
+| **The whole `session.next.*` event family is v2-only.** Zero publishers in `packages/opencode/src` (4 hits, all consumers); the sole publisher factory is `core/src/session/runner/publish-llm-event.ts`, imported once by the v2 runner. So on the v1 path — the one you must use — `session.next.tool.called`, `.context.updated` and `.compaction.started/.ended` never fire. `PLAN.md:57-59` lists them as "verified event types" and builds frame contents on them | REVIEW |
+| **The v2 engine never writes `session.tokens`.** `applyUsage` has 5 call sites, all in v1 projections; v2 usage lands on the message row instead. TESTED — a v2 turn burned 3,399 tokens and left the session row at `{0,0,0,0,0}`. A v2-driven session is invisible to any retirement trigger | `core/session/SESSION.MAP.md` |
+| **`GET /api/session/{id}/context` returns an EMPTY array for v1 sessions.** It reads `SessionMessageTable`, which v1 never writes. TESTED: the 101-turn reference session has 0 `session_message` rows and 738 `part` rows. `PLAN.md:143-144` names this endpoint as the token source | REVIEW |
+| **`PATCH time.archived` hides a session from nothing.** `ListInput` has no `archived` field; `listByProject` (behind `GET /session`) has no `time_archived` predicate; the v2 list does not filter; `grep -rn archived packages/tui/src` → zero hits. Only `listGlobal` filters, reachable solely via `GET /experimental/session`. **The grid must filter retired sessions itself** | REVIEW |
+| **`client.session.list()` cannot enumerate across projects** — hard-scoped to `ctx.project.id` (`session.ts:548-555`), and `ListInput` has no `projectID` to widen it. Worse, the documented tripwire `api.state.session.count()` reads `sync.data.session.length` — the *same narrowed store*, so it can never detect the misses. Use `client.experimental.session.list()` (cursor-paginated) | `tui/context/CONTEXT.MAP.md` |
 | **An "always" permission applies to every session in the process** — approvals are instance-wide, never persisted, no sessionID filter. Directly hostile to a multi-session terminal | `permission/PERMISSION.MAP.md` |
-| **No timeout on a pending permission** — a client that ignores `permission.asked` hangs that tool call forever | `permission/PERMISSION.MAP.md` |
+| **No timeout on a pending permission** — a client that ignores `permission.asked` hangs that tool call forever. TESTED: it hangs indefinitely, but it does **not** stall other sessions | `permission/PERMISSION.MAP.md` |
+| **`permission: {skill: "deny"}` does not stop a skill.** TESTED in one process: the deny removes the `skill` tool *and* the whole `<available_skills>` block, yet `/<skill-name>` still executes the skill to completion, shell substitutions included. Only removing skills from the prompt closes it | `skill/SKILL.MAP.md` |
+| **Instruction files do NOT stop at the first ancestor.** The `break` is over the *filename* list; `fs-util.ts:154-166` collects every `AGENTS.md` up to the worktree root. The source comment at `instruction.ts:123` claims the opposite and is wrong. In the fork, a session under `src/session/llm` ingests 22,273 B of AGENTS.md | `session/SESSION.MAP.md` |
+| **The 18→1 skill floor is cwd-dependent** — the config-directory scan is unconditional. In the fork the harness delivers 2 skills / 12 commands / 9 agents, readmitting upstream repo tooling | `skill/SKILL.MAP.md` |
+| **`OPENCODE_CONFIG_DIR` merges rather than isolates** — it is worse than a no-op. Same for `OPENCODE_CONFIG` and `OPENCODE_CONFIG_CONTENT`. Only `XDG_CONFIG_HOME` replaces | `config/CONFIG.MAP.md` |
 | **RED never fires under `--auto`** — `sync.tsx` auto-replies before writing to the store | `tui/context/CONTEXT.MAP.md` |
 | **`session.created` is not handled** by the sync store — freshly spawned sessions don't appear until a later `session.updated` | `tui/context/CONTEXT.MAP.md` |
 | **`listSessions()` has a 30-day window + current-subdirectory filter** — a cross-directory grid silently misses sessions | `tui/context/CONTEXT.MAP.md` |
@@ -128,26 +212,47 @@ Things that will silently cost correctness. All cited in the maps.
 
 ---
 
-## Open
+## Closed
 
-| Question | Status |
+| Was open | Answer |
 |---|---|
-| **Does the v2 engine write `session.tokens`?** Two agents contradict each other: one says only v1 calls `applyUsage`, so v2-driven sessions stay at zero forever; the other says accounting is engine-independent because the v1 binary imports the same projector. **Unresolved.** My empirical attempt was inconclusive — see below | **OPEN** |
-| Does `$XDG_CONFIG_HOME` fully redirect global config? Cheapest path to real isolation | untested |
-| Re-measure standing context under `gpt-5.6-sol` (`gpt.txt`, `apply_patch` swap) | not done |
+| Does the v2 engine write `session.tokens`? | **No.** Settled at TESTED tier — see below. Drive v1 |
+| Does `$XDG_CONFIG_HOME` fully redirect global config? | **Yes**, TESTED. It is the harness's isolation mechanism (`docs/STRIP.md`) |
+| Re-measure standing context under `gpt-5.6-sol` | **Done** (`docs/STRIP.md`), corrected in `docs/REVIEW.md` |
+| Do N sessions actually run concurrently on one server? | **Yes**, TESTED. And a blocked permission does not stall the others |
+| Is the yellow border gated behind `OPENCODE_ENABLE_QUESTION_TOOL`? | **No** (SCAN C3). But confirm `flags.client` for a non-CLI client — the gate is an allowlist |
 
-### On the v2 token question — what I actually established
+### The v2 token question — settled
 
-I tried to settle it and could not. Recording the negative result rather than a guess.
+Earlier this file recorded an inconclusive result: `POST /api/session/{id}/prompt` "produces no
+assistant turn after 60s". **That is not reproducible.** A retry got a complete turn in ~1.2s;
+the earlier failures are still in the DB, each holding only `agent-switched` + `model-switched`
+rows pinning `gpt-5.6-sol`. The negative was model-specific, not structural — v2 is live.
 
-- On the **1.17.10 binary**: `POST /api/session/{id}/prompt` returns `admittedSeq: 1`, then
-  produces **zero messages**. Nothing executes.
-- On the **1.18.5 source build** (`bun dev`): the same call stores the **user** message and
-  still produces **no assistant turn** after 60s. No errors in the log.
-- `session.tokens` stayed `{0,0,0,0,0}` throughout — but since **no LLM step ever completed**,
-  that zero is not evidence about accounting.
+The answer, from source and confirmed by execution: **v2 does not write `session.tokens`.**
+`applyUsage` is called only from `SessionV1` projections (`core/src/session/projector.ts:90,
+286, 304, 327, 328`). The v2 runner publishes `SessionEvent.Step.Ended`
+(`runner/publish-llm-event.ts:396-400` → `runner/llm.ts:326-333`), which projects to the
+message row via `message-updater.ts:209-214`. TESTED: a v2 prompt burned
+`{input: 3381, output: 4, reasoning: 14}` and left the session row at `{0,0,0,0,0}`.
 
-**Practical resolution:** drive sessions through the **v1** path
-(`POST /session/{id}/message`), where token accumulation is TESTED working (phase 1, exact
-DB-sum match on a real 101-turn session). That sidesteps the contradiction entirely. Revisit
-only if the control terminal needs v2-specific behavior.
+**So `v1 only` is a hard constraint, not a workaround.** Also note `docs/SCAN.md:79-81`'s
+"v2 is reachable only via the separate `lildax` bin" is refuted — the `opencode` binary wires
+the v2 handlers with an in-process execution backend (`server.ts:102, :177-181, :299-302`).
+The v2 endpoint is one typo away on the same port.
+
+If you ever must use v2, sum `SessionMessageTable.data.tokens`; `message-updater.ts:185-206`
+appends a new assistant message per step, so the `draft.tokens =` assignment cannot lose
+multi-step turns.
+
+---
+
+## Still open
+
+| Question | Why it matters | Cost |
+|---|---|---|
+| Does `flags.client` land in the `["app","cli","desktop"]` allowlist when the grid drives sessions? | If not, the `question` tool is never registered and YELLOW never fires — for exactly the use case this project exists for | ~10 min |
+| Can an **external** plugin register a route, or only a builtin? | F7 proved a builtin can and that `route.register` is on the public API. The external case is untested, and it decides whether the grid must live inside the fork | ~20 min |
+| Is `healbot-spike.tsx` on HEAD still working? | F7's TESTED evidence describes it at commit `0fdcfb6`; the file has changed since and has not been re-run | ~10 min |
+| What exactly counts as "continuity intact" for a handoff? | It is a Phase 4 exit-gate clause with no definition and no check | design |
+| Make the retirement threshold configurable | The gate says "driven past the retirement threshold"; at 350K on a frontier model that is expensive to exercise. A config key lets it be tested at 5K | small |
