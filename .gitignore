@@ -1,0 +1,6 @@
+# The opencode fork is its own git repo (origin sst/opencode, branch `healbot`).
+# Tracked there, not here — keeps upstream history out of this repo.
+/opencode/
+
+node_modules/
+.DS_Store
