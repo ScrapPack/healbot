@@ -1,0 +1,20 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // Managed sessions run on a hosted model. Local models stay available as an explicit
+  // per-session opt-in — N concurrent sessions against one local Ollama serialize.
+  "model": "openai/gpt-5.6-sol",
+  "small_model": "openai/gpt-5.6-sol",
+
+  // Retirement (350K cumulative tokens) is the session lifecycle policy, so auto-compaction
+  // must not silently extend a session past it. Set HERE and not via
+  // OPENCODE_DISABLE_AUTOCOMPACT: the env var only reaches the legacy compactor
+  // (config.ts:579), while this key is read by both. See docs/SCAN.md C2.
+  "compaction": {
+    "auto": false
+  },
+
+  // Trims generic prose out of tool descriptions via the tool.definition hook.
+  // OFF by default — set HARNESS_TRIM_TOOLS=1 to enable. See docs/STRIP.md.
+  "plugin": ["./plugin/trim-tools.ts"]
+}
