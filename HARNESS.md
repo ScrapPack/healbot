@@ -49,39 +49,45 @@ our own deliverable. A fresh clone gets the harness without its dependency manif
 
 ## The maps
 
+The maps live at [`fork/`](fork/README.md) — the overlay of everything this project contributes
+to its opencode checkout (17 files, plus the exact patch against base `7534d23`, v1.18.5). The
+checkout itself is at `opencode/` and is gitignored: it is derived, and
+[`fork/README.md`](fork/README.md) says how to rebuild it. Links below point at the overlay, so
+they resolve here and on GitHub; the same files sit at the matching paths inside the checkout.
+
 ### Harness surface — what enters a session
 
 | Map | Owns |
 |---|---|
-| [config/CONFIG.MAP.md](opencode/packages/opencode/src/config/CONFIG.MAP.md) | Config ingress and merge order; `ConfigPaths.directories()`; the env switches; why `OPENCODE_CONFIG_DIR` does **not** isolate |
-| [skill/SKILL.MAP.md](opencode/packages/opencode/src/skill/SKILL.MAP.md) | Skill discovery across the two external trees; the dedup race; the `/<skill>` permission bypass |
-| [command/COMMAND.MAP.md](opencode/packages/opencode/src/command/COMMAND.MAP.md) | Command registry. Mostly a *projection of skills* — "20 commands" is 2 builtins + 18 skills |
-| [agent/AGENT.MAP.md](opencode/packages/opencode/src/agent/AGENT.MAP.md) | The seven built-in agents; which are structural (`build`, `compaction`) vs cuttable |
+| [config/CONFIG.MAP.md](fork/packages/opencode/src/config/CONFIG.MAP.md) | Config ingress and merge order; `ConfigPaths.directories()`; the env switches; why `OPENCODE_CONFIG_DIR` does **not** isolate |
+| [skill/SKILL.MAP.md](fork/packages/opencode/src/skill/SKILL.MAP.md) | Skill discovery across the two external trees; the dedup race; the `/<skill>` permission bypass |
+| [command/COMMAND.MAP.md](fork/packages/opencode/src/command/COMMAND.MAP.md) | Command registry. Mostly a *projection of skills* — "20 commands" is 2 builtins + 18 skills |
+| [agent/AGENT.MAP.md](fork/packages/opencode/src/agent/AGENT.MAP.md) | The seven built-in agents; which are structural (`build`, `compaction`) vs cuttable |
 
 ### Model-facing cost — where the tokens go
 
 | Map | Owns |
 |---|---|
-| [session/SESSION.MAP.md](opencode/packages/opencode/src/session/SESSION.MAP.md) | System-prompt assembly, session lifecycle, compaction, status events. The v1 engine |
-| [tool/TOOL.MAP.md](opencode/packages/opencode/src/tool/TOOL.MAP.md) | Tool registry and per-tool description costs — **the largest single token line item** |
-| [permission/PERMISSION.MAP.md](opencode/packages/opencode/src/permission/PERMISSION.MAP.md) | Permission model; which denies actually remove a tool schema |
-| [plugin/PLUGIN.MAP.md](opencode/packages/opencode/src/plugin/PLUGIN.MAP.md) | Server plugin host; the 21 hooks and which have live trigger sites |
+| [session/SESSION.MAP.md](fork/packages/opencode/src/session/SESSION.MAP.md) | System-prompt assembly, session lifecycle, compaction, status events. The v1 engine |
+| [tool/TOOL.MAP.md](fork/packages/opencode/src/tool/TOOL.MAP.md) | Tool registry and per-tool description costs — **the largest single token line item** |
+| [permission/PERMISSION.MAP.md](fork/packages/opencode/src/permission/PERMISSION.MAP.md) | Permission model; which denies actually remove a tool schema |
+| [plugin/PLUGIN.MAP.md](fork/packages/opencode/src/plugin/PLUGIN.MAP.md) | Server plugin host; the 21 hooks and which have live trigger sites |
 
 ### Control terminal — where healbot is built
 
 | Map | Owns |
 |---|---|
-| [tui/TUI.MAP.md](opencode/packages/tui/TUI.MAP.md) | The TUI package: SolidJS + OpenTUI, `app.tsx` structure, routes, slot render sites |
-| [tui/context/CONTEXT.MAP.md](opencode/packages/tui/src/context/CONTEXT.MAP.md) | `sync.tsx` all-session store, sdk, theme, route, event. **The grid's data source** |
-| [tui/plugin/PLUGIN.MAP.md](opencode/packages/tui/src/plugin/PLUGIN.MAP.md) | TUI plugin runtime: `route.register`, the `api.state` bridge, slots |
-| [tui/feature-plugins/FEATURE-PLUGINS.MAP.md](opencode/packages/tui/src/feature-plugins/FEATURE-PLUGINS.MAP.md) | Builtin plugins. `diff-viewer` = route pattern, `notifications` = state discriminator |
+| [tui/TUI.MAP.md](fork/packages/tui/TUI.MAP.md) | The TUI package: SolidJS + OpenTUI, `app.tsx` structure, routes, slot render sites |
+| [tui/context/CONTEXT.MAP.md](fork/packages/tui/src/context/CONTEXT.MAP.md) | `sync.tsx` all-session store, sdk, theme, route, event. **The grid's data source** |
+| [tui/plugin/PLUGIN.MAP.md](fork/packages/tui/src/plugin/PLUGIN.MAP.md) | TUI plugin runtime: `route.register`, the `api.state` bridge, slots |
+| [tui/feature-plugins/FEATURE-PLUGINS.MAP.md](fork/packages/tui/src/feature-plugins/FEATURE-PLUGINS.MAP.md) | Builtin plugins. `diff-viewer` = route pattern, `notifications` = state discriminator |
 
 ### v2 tree and public contract
 
 | Map | Owns |
 |---|---|
-| [core/session/SESSION.MAP.md](opencode/packages/core/src/session/SESSION.MAP.md) | The v2 engine; `projector.ts` token accumulation; v2 compaction |
-| [plugin/src/PLUGIN-API.MAP.md](opencode/packages/plugin/src/PLUGIN-API.MAP.md) | The **public** plugin contract — `TuiPluginApi`, server hooks. What healbot is built against |
+| [core/session/SESSION.MAP.md](fork/packages/core/src/session/SESSION.MAP.md) | The v2 engine; `projector.ts` token accumulation; v2 compaction |
+| [plugin/src/PLUGIN-API.MAP.md](fork/packages/plugin/src/PLUGIN-API.MAP.md) | The **public** plugin contract — `TuiPluginApi`, server hooks. What healbot is built against |
 
 ---
 

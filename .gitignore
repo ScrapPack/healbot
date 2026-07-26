@@ -1,5 +1,7 @@
-# The opencode fork is its own git repo (origin sst/opencode, branch `healbot`).
-# Tracked there, not here — keeps upstream history out of this repo.
+# A working checkout of sst/opencode, needed to run the TUI and to resolve the maps'
+# file:line citations. DERIVED, not authoritative — everything this project contributes to
+# it lives in fork/ (17 files + the exact patch against base 7534d23). See fork/README.md
+# to reconstitute this directory from scratch.
 /opencode/
 
 node_modules/
