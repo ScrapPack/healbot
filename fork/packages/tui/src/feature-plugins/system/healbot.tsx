@@ -368,7 +368,14 @@ function errorReason(error: { name?: string; data?: unknown } | undefined): stri
   if (data && typeof data === "object" && "message" in data && (data as { message?: unknown }).message === "SSE read timed out") {
     return "model stopped responding"
   }
-  return error?.name ?? "error"
+  // The one an operator of THIS terminal will actually meet, and the raw class name is both
+  // the longest string here and the least useful phrasing. At 20 characters it also overflows
+  // the cell's state line and collapses the separators around it — TESTED, the line rendered as
+  // `ERROR· ContextOverflowError· retire`. "context full" says the same thing in 12 and names
+  // the condition retirement exists to prevent.
+  if (error?.name === "ContextOverflowError") return "context full"
+  // Bounded for the same reason: an unknown error class must not push `· retire` off the line.
+  return error?.name ? truncate(error.name, 16) : "error"
 }
 
 /**

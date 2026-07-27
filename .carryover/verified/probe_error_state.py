@@ -17,11 +17,20 @@ it, and it is free because the expensive part — producing a genuine overflow �
 """
 
 import json
+import os
 import shutil
 import sqlite3
 import sys
 
 from rig import Results, boot, db, on_grid
+
+# This probe tests RENDERING, so it must be isolated from the lifecycle. The replayed session
+# sits at occupancy 359,829, which is over the 256,000 gate — so with auto-retirement on (the
+# default) the grid correctly retires it within a second of the route mounting, the cell
+# vanishes, and the assertions below fail for a reason that has nothing to do with what they
+# measure. Observed, not assumed: the run before this line existed lost `· retire` and
+# `1 to retire` exactly that way.
+os.environ["HEALBOT_AUTO_RETIRE"] = "0"
 
 PORT = 4736
 SOURCE = db("retire350")

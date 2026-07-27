@@ -3594,10 +3594,10 @@ index b67923f3c..9003fb84a 100644
  }
 diff --git a/packages/tui/src/feature-plugins/system/healbot.tsx b/packages/tui/src/feature-plugins/system/healbot.tsx
 new file mode 100644
-index 000000000..e5c624774
+index 000000000..bde859752
 --- /dev/null
 +++ b/packages/tui/src/feature-plugins/system/healbot.tsx
-@@ -0,0 +1,1297 @@
+@@ -0,0 +1,1304 @@
 +/** @jsxImportSource @opentui/solid */
 +import type { TuiPlugin, TuiPluginApi, TuiRouteCurrent } from "@opencode-ai/plugin/tui"
 +import type { PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2"
@@ -3968,7 +3968,14 @@ index 000000000..e5c624774
 +  if (data && typeof data === "object" && "message" in data && (data as { message?: unknown }).message === "SSE read timed out") {
 +    return "model stopped responding"
 +  }
-+  return error?.name ?? "error"
++  // The one an operator of THIS terminal will actually meet, and the raw class name is both
++  // the longest string here and the least useful phrasing. At 20 characters it also overflows
++  // the cell's state line and collapses the separators around it — TESTED, the line rendered as
++  // `ERROR· ContextOverflowError· retire`. "context full" says the same thing in 12 and names
++  // the condition retirement exists to prevent.
++  if (error?.name === "ContextOverflowError") return "context full"
++  // Bounded for the same reason: an unknown error class must not push `· retire` off the line.
++  return error?.name ? truncate(error.name, 16) : "error"
 +}
 +
 +/**
