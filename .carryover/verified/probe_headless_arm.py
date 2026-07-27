@@ -36,7 +36,7 @@ PORT_OFF = 4142
 SOFT = "37000"
 HARD = "41000"
 
-ARMED = r"\[healbot/auto-retire\] headless retirement armed"
+ARMED = r"\[healbot\] headless retirement armed"
 
 r = rig.Results()
 servers = []

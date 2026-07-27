@@ -12,6 +12,11 @@ venv/bin/python probe_on_grid.py     # 4/4   does the route predicate actually d
 venv/bin/python probe_fleet.py       # 10/10 does harness/fleet.sh do what it claims?
 venv/bin/python probe_error_state.py # 10/10 does a hard-errored session render ERROR?
                                      #       (replays the 350K run's real overflow DB)
+venv/bin/python probe_focus.py       # 24/24 does `enter` open the SELECTED session? (same DB)
+venv/bin/python probe_twin.py        # 20/20 do the grid and the server plugin agree on the
+                                     #       thresholds and the handoff document?
+venv/bin/python probe_headless_arm.py# 11/11 does the retirement guard arm with NOTHING rendering?
+venv/bin/python probe_control_wiring.py # 14/14 are the control tools and agent registered?
 
 # these spend credits
 venv/bin/python smoke.py             # 6/6   provider/model/config sanity — run this first
@@ -21,11 +26,31 @@ venv/bin/python verify_surface.py    # 17/18 auto-surface, suppression, tab cycl
 venv/bin/python verify_retire.py     # 17/17 the retirement observable and threshold
 venv/bin/python verify_handoff.py    # 21/21 retire and hand off with continuity intact
 venv/bin/python verify_cold.py       # 21/21 the COLD-START reconcile, via serve + attach
-venv/bin/python verify_auto_retire.py # 13/13 AUTOMATIC retirement: the gate fires by itself,
-                                     #       the turn finishes, no turn runs after it
+venv/bin/python verify_cold_question.py # 22/22 the question.rejected half of that reconcile
+venv/bin/python verify_auto_retire.py # 13/13 automatic retirement WITH THE GRID OPEN. Superseded
+                                     #       by the one below; kept because it is the record of
+                                     #       the Phase 5 behaviour
+venv/bin/python verify_headless_retire.py # 20/20 automatic retirement with NO TUI ANYWHERE
+venv/bin/python verify_control_agent.py   # 15/16 the control agent's tools, and the scoping that
+                                     #       keeps them out of every other session's prompt
 venv/bin/python verify_retire_350k.py# 25/25 retirement at a full-scale threshold.
                                      #       ~5M cumulative input tokens; run it deliberately
 ```
+
+**Since Phase 6 the SERVER enforces the retirement thresholds, not the client.** Automatic
+retirement is a server plugin (`harness/config/opencode/plugin/healbot.ts`), so a rig that sets
+`HEALBOT_RETIRE_AT` in its own environment before `attach()` is configuring the wrong process.
+`rig.serve(..., env_extra={...})` is how you reach the server; `rig.serve(..., log=path)` is how you
+read what it did, and it matters because the plugin's log line is often the only independent
+evidence that the thing under test actually happened. Under `boot()` the TUI hosts the server
+in-process, so the ambient environment still reaches it — which is why `probe_error_state.py` and
+`probe_focus.py` can still disarm the gate with `os.environ["HEALBOT_AUTO_RETIRE"] = "0"`.
+
+**`verify_control_agent.py` reports 15/16 and that is the recorded result.** The one failure was a
+mis-specified assertion — it counted the build agent's `@general` subagent, which `task`
+legitimately creates — and it has been corrected to the stronger form (*every session the build
+agent created is a subagent*). The corrected predicate was evaluated against the run's persisted
+database and is True where the old one was False, but the file has not been re-executed end to end.
 
 **Paths derive from `__file__` and fixtures generate themselves.** They did not until Phase 5:
 every `verify_*.py` hardcoded an absolute scratchpad path belonging to the session that wrote
@@ -63,6 +88,14 @@ that as the house style to guard against, not a historical note.
 Navigation is asserted on the `▸` marker's `(line, column)`, never on cell text — cell text is
 present regardless of which cell is selected. The terminal is 120 cols on purpose: at 170 the
 four cells fit one row, `j`/`k` clamp, and the keyboard-gating assertions pass vacuously.
+
+**The terminal width is part of the predicate.** 120 columns is deliberate for the navigation rigs
+— at 170 the four cells fit one row, `j`/`k` clamp, and the keyboard-gating assertions pass
+vacuously. But the session route's sidebar is gated on `width > 120`
+(`routes/session/index.tsx:264`), and that sidebar is the **only** thing that renders a session's
+id. So any assertion about *which* session was focused has to run at 170, and one written at 120
+measures terminal geometry instead of behaviour. That is not hypothetical: it is what the first
+version of `verify_cold_question.py`'s focus check reported.
 
 **A screen predicate is worthless until it has been shown FALSE.** `on_grid(t)` matches
 `Healbot\s+\d+\s+sessions?` case-sensitively — the grid's own header, and nothing else in the

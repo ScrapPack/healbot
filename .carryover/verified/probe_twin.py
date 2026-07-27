@@ -1,7 +1,7 @@
 """Do the two retirement implementations agree? — FREE, no server, no model turn.
 
 Phase 6 moved AUTOMATIC retirement out of `healbot.tsx` and into the server plugin
-`harness/config/opencode/plugin/auto-retire.ts`, because a `createEffect` in a route component
+`harness/config/opencode/plugin/healbot.ts`, because a `createEffect` in a route component
 cannot run headless. Manual retirement (`x`) stayed in the grid, because an operator retiring a
 session early is a real feature and it is TESTED.
 
@@ -32,7 +32,7 @@ sys.path.insert(0, SP)
 import rig  # noqa: E402
 
 GRID = f"{rig.HEALBOT}/opencode/packages/tui/src/feature-plugins/system/healbot.tsx"
-PLUGIN = f"{rig.HEALBOT}/harness/config/opencode/plugin/auto-retire.ts"
+PLUGIN = f"{rig.HEALBOT}/harness/config/opencode/plugin/healbot.ts"
 OVERLAY = f"{rig.HEALBOT}/fork/packages/tui/src/feature-plugins/system/healbot.tsx"
 
 
@@ -107,7 +107,7 @@ r.check(
 grid_at = default_of(grid, "RETIRE_AT")
 plugin_at = default_of(plugin, "RETIRE_AT")
 r.check("healbot.tsx declares a RETIRE_AT default", grid_at is not None, str(grid_at))
-r.check("auto-retire.ts declares a RETIRE_AT default", plugin_at is not None, str(plugin_at))
+r.check("healbot.ts (plugin) declares a RETIRE_AT default", plugin_at is not None, str(plugin_at))
 r.check(
     "the two RETIRE_AT defaults AGREE",
     grid_at is not None and grid_at == plugin_at,
@@ -152,7 +152,7 @@ r.check(
 grid_doc = document_strings(grid)
 plugin_doc = document_strings(plugin)
 r.check("healbot.tsx has a handoffDocument", bool(grid_doc), f"{len(grid_doc or [])} literals")
-r.check("auto-retire.ts has a handoffDocument", bool(plugin_doc), f"{len(plugin_doc or [])} literals")
+r.check("healbot.ts (plugin) has a handoffDocument", bool(plugin_doc), f"{len(plugin_doc or [])} literals")
 r.check(
     "the handoff documents are IDENTICAL, literal for literal",
     bool(grid_doc) and grid_doc == plugin_doc,
@@ -214,13 +214,13 @@ exports = re.findall(r"^export\s+(?:const|let|var|function|class)\s+(\w+)", plug
 fn_exports = re.findall(r"^export\s+const\s+(\w+)\s*=\s*async|^export\s+(?:async\s+)?function\s+(\w+)", plugin, re.M)
 fn_names = {a or b for a, b in fn_exports}
 r.check(
-    "auto-retire.ts exports only functions",
+    "healbot.ts (plugin) exports only functions",
     bool(exports) and set(exports) == fn_names,
     f"exports={exports} functions={sorted(fn_names)}",
 )
 r.check(
     "…and it is registered in the harness config",
-    "./plugin/auto-retire.ts" in read(f"{rig.HEALBOT}/harness/config/opencode/opencode.jsonc"),
+    "./plugin/healbot.ts" in read(f"{rig.HEALBOT}/harness/config/opencode/opencode.jsonc"),
     "an unregistered plugin is a file, not a guard",
 )
 

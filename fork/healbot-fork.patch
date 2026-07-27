@@ -3594,10 +3594,10 @@ index b67923f3c..9003fb84a 100644
  }
 diff --git a/packages/tui/src/feature-plugins/system/healbot.tsx b/packages/tui/src/feature-plugins/system/healbot.tsx
 new file mode 100644
-index 000000000..bde859752
+index 000000000..b541894f8
 --- /dev/null
 +++ b/packages/tui/src/feature-plugins/system/healbot.tsx
-@@ -0,0 +1,1304 @@
+@@ -0,0 +1,1251 @@
 +/** @jsxImportSource @opentui/solid */
 +import type { TuiPlugin, TuiPluginApi, TuiRouteCurrent } from "@opencode-ai/plugin/tui"
 +import type { PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2"
@@ -3653,46 +3653,34 @@ index 000000000..bde859752
 +const RETIRE_AT = Math.max(1, Number(process.env["HEALBOT_RETIRE_AT"]) || 256_000)
 +
 +/**
-+ * Retire automatically when a session crosses the threshold, rather than waiting for `x`.
++ * AUTOMATIC retirement does not live in this file any more. It lives in the server plugin at
++ * `harness/config/opencode/plugin/auto-retire.ts`, and `RETIRE_AT` above is now used HERE only
++ * to render the `RETIRE` border, the `N to retire` header count and the share-of-threshold
++ * figure on each cell. `x` — manual retirement — is still `retire()` below.
 + *
-+ * This restores `PLAN.md:381`'s design. An earlier pass made retirement operator-initiated on
-+ * the reasoning that the grid should never act on its own — defensible, but it leaves the
-+ * threshold advisory, and an advisory threshold is not a guard. With the ceiling measured at
-+ * ~360K there is no room for one: a session that crosses the gate and keeps working reaches a
-+ * state where every further turn dies. That is not hypothetical — a 350K run produced **25
-+ * consecutive `ContextOverflowError` turns** after the gate was met, because nothing stopped it.
++ * It moved because a `createEffect` in this component could only ever run while the grid was
++ * mounted. Two consequences, and the second is the one that mattered:
 + *
-+ * The rule this implements: **no turn consumption after the gate is met.** Cross the threshold,
-+ * finish the turn in flight, hand off, retire. The successor is seeded through `prompt_async`
-+ * and starts immediately.
++ *   1. Navigating into a session with `enter` unmounts this route (`app.tsx:1079-1085` computes
++ *      the plugin route in a `createMemo` that returns `undefined` as soon as
++ *      `route.data.type !== "plugin"`), so retirement was dead while the operator was reading a
++ *      session — the exact moment a long session is most likely to cross the gate.
++ *   2. A fleet left running with NO client attached retired nothing. `harness/fleet.sh` exists
++ *      so the server outlives the terminal, so the guard was absent in the topology the
++ *      architecture is built around.
 + *
-+ * Kill switch because it spawns and archives without asking: `HEALBOT_AUTO_RETIRE=0`.
++ * Moving it to TUI *plugin* scope would have fixed (1) and not (2) — a TUI plugin still needs a
++ * TUI — and would have been unsound anyway: plugin scope has no Solid owner (`getOwner()` is
++ * `null` there, TESTED), so the effect would never be disposed and a bare `onCleanup` is a
++ * silent no-op. `TuiPluginModule` and `PluginModule` are mutually exclusive by type
++ * (`tui?: never` / `server?: never`), so this file could not have hosted both halves regardless.
++ *
++ * **Exactly one process may own the gate.** If this effect still lived here, an operator pressing
++ * `x` and the server plugin firing on the same session would each spawn a successor. That is why
++ * it is deleted rather than kept as a fallback. Consequence to know: run the fork WITHOUT the
++ * harness config and nothing retires automatically — the border still goes purple and `x` still
++ * works. See `docs/HEADLESS.md`.
 + */
-+const AUTO_RETIRE = process.env["HEALBOT_AUTO_RETIRE"] !== "0"
-+
-+/**
-+ * The HARD gate. `RETIRE_AT` is the soft one.
-+ *
-+ * Two gates are needed because "let the agent finish what it is doing" has an overshoot cost,
-+ * and the cost is much larger than it looks. MEASURED, on one ordinary turn: occupancy went
-+ * 5,216 -> 70,898 on a single tool result, and that turn finished at **175,090**. So a turn can
-+ * add ~170K by itself.
-+ *
-+ * Apply that to the soft gate: a session sitting just under 256,000 that starts one more
-+ * read-heavy turn finishes near 426,000 — past the ~360K ceiling, dead, having obeyed the
-+ * finish-first rule the whole way. The soft gate alone cannot prevent the failure it exists to
-+ * prevent.
-+ *
-+ * So: cross `RETIRE_AT` and the turn in flight is allowed to complete. Cross `RETIRE_HARD`
-+ * *during* a turn and it is retired immediately, aborting that turn. That abort is not a loss
-+ * weighed against finishing — it is a loss weighed against `ContextOverflowError`, which
-+ * discards the same work and spends the tokens first. Retiring early keeps the tokens and the
-+ * handoff.
-+ *
-+ * Default 330,000: under the measured ceiling with room for the reply, and far enough above the
-+ * 256,000 soft gate that ordinary turns finish normally and this never fires.
-+ */
-+const RETIRE_HARD = Math.max(RETIRE_AT, Number(process.env["HEALBOT_RETIRE_HARD"]) || 330_000)
 +
 +/**
 + * How many user messages a handoff fans out over to collect changed files.
@@ -4383,8 +4371,6 @@ index 000000000..bde859752
 +  // demonstrated 25 times in a row.
 +  const [retiring, setRetiring] = createSignal<string | null>(null)
 +  const [retireNote, setRetireNote] = createSignal<string | null>(null)
-+  // Sessions this client has already acted on, so a retire that fails is not retried forever.
-+  const [handled, setHandled] = createSignal(new Set<string>())
 +
 +  const retire = async (session: Roster) => {
 +    const client = gridClient(props.api)
@@ -4568,45 +4554,6 @@ index 000000000..bde859752
 +      setRetiring(null)
 +    }
 +  }
-+
-+  /**
-+   * AUTO-RETIRE. The rule: no turn runs after the gate is met.
-+   *
-+   * Fires when a session is over the threshold AND its turn has finished — "let the agent
-+   * finish what it is doing, then hand off" — and never while it is busy, blocked on a human,
-+   * or already being retired. `handled` makes it once-per-session-per-client so a retire that
-+   * fails surfaces in the footer instead of retrying in a loop.
-+   *
-+   * Serialised deliberately (`retiring()` guard + `break`): each retire spawns a session and
-+   * archives another, and two interleaved would race `reload()` and land the cursor on a cell
-+   * that no longer exists. Anything skipped this pass is picked up on the next, because the
-+   * effect re-runs whenever occupancy or status changes.
-+   *
-+   * NOT retried against a session that is blocked: answering the block is the operator's call,
-+   * and retiring underneath a pending permission would discard the decision they were making.
-+   */
-+  createEffect(() => {
-+    if (!AUTO_RETIRE) return
-+    if (retiring()) return
-+    for (const session of sessions()) {
-+      if (handled().has(session.id)) continue
-+      if (occupancyOf(sync, session.id) < RETIRE_AT) continue
-+      const status = sync.data.session_status[session.id]
-+      const busy = status?.type === "busy" || status?.type === "retry"
-+      // Let it finish — UNLESS it has also crossed the hard gate. Cutting a turn off throws
-+      // away work the successor has to rediscover, which is the looping-discovery failure this
-+      // handoff design exists to avoid, so the soft gate always waits. But a turn can add ~170K
-+      // on its own (measured), and past RETIRE_HARD waiting means the turn dies of
-+      // ContextOverflowError instead — same work lost, tokens spent first, and no handoff.
-+      if (busy && occupancyOf(sync, session.id) < RETIRE_HARD) continue
-+      // Never underneath a pending permission or question: answering it is the operator's
-+      // decision and retiring would discard the one they were in the middle of making.
-+      if (isBlocked(session.id)) continue
-+      setHandled((prev) => new Set(prev).add(session.id))
-+      void retire(session)
-+      break
-+    }
-+  })
 +
 +  const returnRoute = (): TuiRouteCurrent | undefined => {
 +    const current = props.api.route.current

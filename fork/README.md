@@ -9,15 +9,15 @@ sense, so it no longer gets its own repository.
 | Upstream | `https://github.com/sst/opencode` |
 | Base commit | `7534d23551f665e65080809975b4ca5c7d63807b` — *"chore: update nix node_modules hashes"* |
 | Version at base | **1.18.5** |
-| Overlay recorded at | fork branch `healbot` @ `467ba9b6c` |
-| Exact diff | [`healbot-fork.patch`](healbot-fork.patch) (`git diff 7534d23 467ba9b6c`) — TESTED: applies cleanly to the base, re-checked in a throwaway worktree |
+| Overlay recorded at | fork branch `healbot` @ `88f7ce8cf` |
+| Exact diff | [`healbot-fork.patch`](healbot-fork.patch) (`git diff 7534d23 88f7ce8cf`) — TESTED: applies cleanly to the base, re-checked in a throwaway worktree |
 
 ## What is here
 
 | Path | What |
 |---|---|
 | `packages/**/*.MAP.md` (14) | The subsystem maps. Phase 2 output, corrected by Phase 3 and the audit. Indexed from [../HARNESS.md](../HARNESS.md) |
-| `packages/tui/src/feature-plugins/system/healbot.tsx` | The control-terminal grid itself. Replaced `healbot-spike.tsx` at `26c9316`; the spike had proved a plugin can register a full-screen route and own the keyboard (PROBE F7) and was retired once the real route landed. Answering a block **from** the grid landed at `25f6f14`, TESTED on `gpt-5.6-sol` ([../docs/VERIFY.md](../docs/VERIFY.md)); retirement and handoff at `392493c`/`b53e0ec`; the error state and the hardening pass in Phase 5 ([../docs/HARDEN.md](../docs/HARDEN.md)). **No byte or line count is quoted** — this row said "24.1 KB, 566 lines" for a file that was already 878 lines, and `HARNESS.md` said 12.8 KB for the same file. `wc` it |
+| `packages/tui/src/feature-plugins/system/healbot.tsx` | The control-terminal grid itself. Replaced `healbot-spike.tsx` at `26c9316`; the spike had proved a plugin can register a full-screen route and own the keyboard (PROBE F7) and was retired once the real route landed. Answering a block **from** the grid landed at `25f6f14`, TESTED on `gpt-5.6-sol` ([../docs/VERIFY.md](../docs/VERIFY.md)); retirement and handoff at `392493c`/`b53e0ec`; the error state and the hardening pass in Phase 5 ([../docs/HARDEN.md](../docs/HARDEN.md)). At `88f7ce8` it **stopped owning automatic retirement** — that moved to a server plugin so it can run headless ([../docs/HEADLESS.md](../docs/HEADLESS.md)); the grid keeps manual `x` and still paints `RETIRE` off `RETIRE_AT`. **No byte or line count is quoted** — this row said "24.1 KB, 566 lines" for a file that was already 878 lines, and `HARNESS.md` said 12.8 KB for the same file. `wc` it |
 | `packages/tui/src/feature-plugins/builtins.ts` | Upstream file, one line added to register the grid |
 | `.opencode/opencode.jsonc` | Project config for the fork — the model pin, references, disabled tools |
 

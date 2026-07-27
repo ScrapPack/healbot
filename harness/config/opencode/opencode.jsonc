@@ -46,10 +46,28 @@
   // trim-tools: trims generic prose out of tool descriptions via the tool.definition hook.
   // OFF by default — set HARNESS_TRIM_TOOLS=1 to enable. See docs/STRIP.md.
   //
-  // auto-retire: HEADLESS automatic retirement. This is the guard that keeps a session from
-  // reaching the ceiling above, and it lives here rather than in the TUI because a fleet left
-  // running with no client attached must still retire. Server plugins load in `opencode serve`
-  // AND in the server the TUI hosts in-process, so one registration covers both topologies.
-  // Kill switch: HEALBOT_AUTO_RETIRE=0. See docs/HEADLESS.md.
-  "plugin": ["./plugin/trim-tools.ts", "./plugin/auto-retire.ts"]
+  // healbot: two halves sharing one implementation of retirement. (a) HEADLESS automatic
+  // retirement — the guard that keeps a session from reaching the ceiling above. It lives here
+  // rather than in the TUI because a fleet left running with no client attached must still
+  // retire; server plugins load in `opencode serve` AND in the server the TUI hosts in-process,
+  // so one registration covers both topologies. Kill switch: HEALBOT_AUTO_RETIRE=0. (b) the
+  // control agent's tools. See docs/HEADLESS.md.
+  "plugin": ["./plugin/trim-tools.ts", "./plugin/healbot.ts"],
+
+  // The control agent's tools are DENIED globally and allowed back in agent/control.md.
+  //
+  // This is about standing token cost, which is what this whole harness exists to cut. Tool
+  // definitions are the largest single block of context — 11 shipped tools measure 19,898 B —
+  // and five more would be rent every session pays forever for a capability only one agent uses.
+  //
+  // The mechanism is specific and easy to get wrong: `Permission.disabled`
+  // (permission/index.ts:204-215) removes a tool from the request payload only when the LAST
+  // rule matching it has `pattern: "*"` and `action: "deny"`. A string value here expands to
+  // exactly that (`:190`). The agent's own permission block is merged last (agent/agent.ts:293),
+  // so control.md's `allow` wins the findLast and the tools exist for it alone. A SCOPED deny
+  // would leave the definitions in every prompt and only block execution — all of the cost, none
+  // of the benefit.
+  "permission": {
+    "healbot_*": "deny"
+  }
 }

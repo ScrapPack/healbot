@@ -1,7 +1,18 @@
 /**
- * HEADLESS automatic retirement. The lifecycle guard, moved off the screen.
+ * The healbot SERVER plugin. Two halves that share one implementation of retirement:
  *
- * WHY THIS FILE EXISTS, and why it is a SERVER plugin rather than a TUI one.
+ *   A. HEADLESS AUTOMATIC RETIREMENT — the lifecycle guard, moved off the screen (Phase 6).
+ *   B. THE CONTROL AGENT'S TOOLS — `PLAN.md:378`'s build-order step 5: "its own session in the
+ *      same server, with tools to spawn / prompt / abort / retire the others".
+ *
+ * They live in ONE file because `retire()` is the same operation for both, and it builds a
+ * handoff document whose exact prose is behaviour. There is already one unavoidable second copy
+ * of that document — `healbot.tsx` needs it for the operator's manual `x`, and the harness config
+ * directory and the fork checkout cannot import each other (one is not in the other's workspace,
+ * the other is derived and gitignored). Two copies are a compromise guarded by a test
+ * (`probe_twin.py`). A third would not be.
+ *
+ * WHY A SERVER PLUGIN RATHER THAN A TUI ONE.
  *
  * Phase 5 built automatic retirement and TESTED it 13/13 (`docs/HARDEN.md` §7), but the trigger
  * was a `createEffect` INSIDE the Healbot route component. That has two consequences, and the
@@ -48,9 +59,21 @@
  * (`plugin/index.ts:95-108`) treats every export of the module as a plugin and THROWS
  * `TypeError: Plugin export is not a function` on any export that is not one — so this file
  * exports exactly one function and nothing else. Every constant below is deliberately module-
- * private for that reason, not for encapsulation.
+ * private for that reason, not for encapsulation. (Being listed in the array AND auto-discovered
+ * by `config/plugin.ts:21`'s `{plugin,plugins}/*.{ts,js}` glob does not double-load it:
+ * `config.ts:343` dedupes plugin origins by identity. TESTED — the arming line appears once.)
  *
- * KILL SWITCH: `HEALBOT_AUTO_RETIRE=0` restores operator-initiated retirement (`x` in the grid).
+ * NO IMPORTS, deliberately, and the same choice `trim-tools.ts` makes. The harness config
+ * directory's `node_modules` is UNTRACKED (`HARNESS.md` records this: opencode seeds a
+ * self-ignoring `.gitignore` into any config dir at boot), so a fresh clone has the harness
+ * without its dependency manifest. A plugin that imported `zod` or `@opencode-ai/plugin` would
+ * fail to load there — silently, as a line in a server log. Tool argument schemas are therefore
+ * raw JSON Schema, which `tool/registry.ts:129` accepts via `legacyJsonSchema` when the entries
+ * are not zod types. That path marks every property REQUIRED (`registry.ts:365`), which is why
+ * no tool below has an optional argument.
+ *
+ * KILL SWITCH: `HEALBOT_AUTO_RETIRE=0` disables half A only — the control tools stay, because an
+ * operator who wants retirement to be deliberate still wants to be able to ask for it.
  */
 
 // ---------------------------------------------------------------------------------------------
@@ -322,13 +345,11 @@ function handoffDocument(input: {
 // The plugin
 // ---------------------------------------------------------------------------------------------
 
-export const AutoRetire = async (input: PluginInput) => {
-  if (!AUTO_RETIRE) return {}
-
+export const Healbot = async (input: PluginInput) => {
   const directory = input.directory
   const base = input.serverUrl.toString().replace(/\/$/, "")
   const api = makeApi(base, directory)
-  const log = (message: string) => console.log(`[healbot/auto-retire] ${message}`)
+  const log = (message: string) => console.log(`[healbot] ${message}`)
 
   /**
    * Sessions this process has already acted on, so a retire that FAILS is not retried on every
@@ -441,8 +462,9 @@ export const AutoRetire = async (input: PluginInput) => {
     // say "there is no work".
     if (open.length === 0) {
       await api("PATCH", `/session/${sessionID}`, { time: { archived: Date.now() } })
-      log(`retired ${label} — nothing outstanding`)
-      return
+      const outcome = `retired ${label} — nothing outstanding, no successor spawned`
+      log(outcome)
+      return outcome
     }
 
     const document = handoffDocument({
@@ -474,15 +496,17 @@ export const AutoRetire = async (input: PluginInput) => {
     // `docs/HEADLESS.md`.
     const current = await api<SessionInfo>("GET", `/session/${sessionID}`).catch(() => undefined)
     if (current?.time?.archived) {
-      log(`${label} was archived by another actor mid-handoff; successor ${successorID} is seeded and live`)
-      return
+      const outcome = `${label} was archived by another actor mid-handoff; successor ${successorID} is seeded and live`
+      log(outcome)
+      return outcome
     }
 
     await api("PATCH", `/session/${sessionID}`, { time: { archived: Date.now() } })
-    log(
+    const outcome =
       `retired ${label} at the gate — handed off ${open.length} open item${open.length === 1 ? "" : "s"}` +
-        `, ${files.length} file${files.length === 1 ? "" : "s"} -> ${successorID}`,
-    )
+      `, ${files.length} file${files.length === 1 ? "" : "s"} -> ${successorID}`
+    log(outcome)
+    return outcome
   }
 
   async function consider(sessionID: string, occupancy: number, turnOver: boolean) {
@@ -520,12 +544,208 @@ export const AutoRetire = async (input: PluginInput) => {
     }
   }
 
-  log(
-    `headless retirement armed — soft ${RETIRE_AT.toLocaleString()}, hard ${RETIRE_HARD.toLocaleString()}, ` +
-      `directory ${directory}`,
-  )
+  // -------------------------------------------------------------------------------------------
+  // B. THE CONTROL AGENT'S TOOLS
+  //
+  // `PLAN.md:378`: "Control agent. Its own session in the same server, with tools to spawn /
+  // prompt / abort / retire the others (POST /session, /prompt_async, /abort). Same registry you
+  // see." The endpoints were already exercised inside `retire()`; what was missing was the agent
+  // shell and these definitions.
+  //
+  // WHY THE PLUGIN `tool` HOOK AND NOT `<configdir>/tool/*.ts`. Both mechanisms work and both are
+  // scanned from the harness config directory. Only this one gets an HTTP client: a tool module
+  // is imported with no arguments (`tool/registry.ts:178-192`) and its `execute` context is
+  // `ToolContext` — sessionID, messageID, agent, directory, worktree, abort, metadata, ask, and
+  // no client, no serverUrl, no app instance. Tools defined HERE are created inside the plugin
+  // function and close over the server address, which is the whole difference between a control
+  // agent and a set of stubs.
+  //
+  // TOKEN COST, and why these are scoped rather than global. Tool definitions are the largest
+  // single block of standing context in this harness — 11 shipped tools measure 19,898 B. Five
+  // more, however terse, are rent every session pays forever. So `opencode.jsonc` denies
+  // `healbot_*` globally and `agent/control.md` allows it back: `Permission.fromConfig` turns a
+  // string value into `{permission, pattern: "*", action}` (`permission/index.ts:190`), and
+  // `Permission.disabled` (`:204-215`) removes a tool from the request payload exactly when the
+  // LAST matching rule is `pattern: "*"` with `action: "deny"`. The agent's own permission is
+  // merged last (`agent/agent.ts:293`), so its `allow` wins the `findLast` and the tools exist for
+  // the control agent alone. This is the one shape of deny that actually removes a schema — a
+  // scoped deny would leave the definitions in the prompt and only block execution.
+  // -------------------------------------------------------------------------------------------
+
+  const str = (description: string) => ({ type: "string", description })
+
+  /** Compact one-line state for a session, from data the control agent would otherwise have to
+   * ask for in four separate calls. Occupancy is expressed against the gate because "how close is
+   * this to being retired" is the question the agent is actually asking. */
+  async function describe(session: SessionInfo, blocked: Set<string>) {
+    const history = (await api<WithParts[]>("GET", `/session/${session.id}/message?limit=8`).catch(() => [])) ?? []
+    let occupancy = 0
+    let state = "idle"
+    for (let i = history.length - 1; i >= 0; i--) {
+      const info = history[i]?.info
+      if (!info || info.role !== "assistant") continue
+      const value = occupancyOf(info.tokens)
+      if (value > 0 && occupancy === 0) occupancy = value
+      if (occupancy > 0) {
+        state = info.error ? "errored" : finished(info) ? "done" : "working"
+        break
+      }
+    }
+    if (blocked.has(session.id)) state = "blocked"
+    const share = occupancy > 0 ? ` ${Math.round((occupancy / RETIRE_AT) * 100)}% of gate` : ""
+    const kind = session.parentID ? " subagent" : ""
+    return `${session.id}  ${state}${share}${kind}  ${(session.title ?? "untitled").slice(0, 60)}`
+  }
+
+  /** Shared by abort and retire: refuse to act on the caller. An agent that aborts its own session
+   * mid-tool-call kills the turn that issued the command, and one that retires itself spawns a
+   * successor seeded with its own control instructions. Both are recoverable and neither is
+   * something the model should be able to do by accident. */
+  function selfCheck(sessionID: string, context: { sessionID?: string }, verb: string) {
+    if (sessionID === context.sessionID) {
+      return `Refused: ${sessionID} is your own session. You cannot ${verb} yourself.`
+    }
+    return undefined
+  }
+
+  const tools = {
+    healbot_list: {
+      description:
+        "List every live session in this project with its state, context occupancy as a share of " +
+        "the retirement gate, and whether it is blocked waiting on a human. Archived (retired) " +
+        "sessions are omitted. Use this before acting on any session.",
+      args: {},
+      async execute() {
+        const [sessions, permissions, questions] = await Promise.all([
+          api<SessionInfo[]>("GET", "/session?scope=project").catch(() => []),
+          api<Pending[]>("GET", "/permission").catch(() => [] as Pending[]),
+          api<Pending[]>("GET", "/question").catch(() => [] as Pending[]),
+        ])
+        const blocked = new Set(
+          [...(permissions ?? []), ...(questions ?? [])].map((item) => item?.sessionID).filter(Boolean) as string[],
+        )
+        // Ids are DESCENDING identifiers, so ascending sort is newest-first — the same order the
+        // grid renders, so the agent and the operator are looking at the same list in the same
+        // order. Archived filtered here because archiving hides a session from nothing
+        // server-side.
+        const live = (Array.isArray(sessions) ? sessions : [])
+          .filter((session) => !session?.time?.archived)
+          .sort((a, b) => a.id.localeCompare(b.id))
+        if (live.length === 0) return "No live sessions."
+        const lines = await Promise.all(live.map((session) => describe(session, blocked)))
+        return `${live.length} live session(s), newest first:\n${lines.join("\n")}`
+      },
+    },
+
+    healbot_spawn: {
+      description:
+        "Create a new session in this project and immediately give it work. Returns the new " +
+        "session id. The prompt is its founding instruction, so state the objective fully — the " +
+        "new session sees none of your context.",
+      args: {
+        prompt: str("The full instruction for the new session. Self-contained; it sees no context of yours."),
+      },
+      async execute(args: { prompt?: string }) {
+        const text = (args?.prompt ?? "").trim()
+        if (!text) return "Refused: prompt is empty. A session spawned with no work is a wasted context window."
+        const created = await api<SessionInfo>("POST", `/session?directory=${encodeURIComponent(directory)}`, {})
+        const id = created?.id
+        if (!id) return "Failed: POST /session returned no id."
+        // prompt_async, not the blocking prompt: it acks in ~10ms and the turn runs on. The
+        // synchronous POST /session/{id}/message blocks until the whole turn completes, which
+        // would stall the control agent's own turn behind the one it just started.
+        await api("POST", `/session/${id}/prompt_async`, { parts: [{ type: "text", text }] })
+        log(`control: spawned ${id}`)
+        return `Spawned ${id} and seeded it. It is running now; use healbot_list to watch it.`
+      },
+    },
+
+    healbot_prompt: {
+      description:
+        "Send a follow-up instruction to an EXISTING session and return immediately without " +
+        "waiting for it to finish. Use healbot_list first to get the session id.",
+      args: {
+        sessionID: str("The target session id, as reported by healbot_list."),
+        prompt: str("The instruction to send."),
+      },
+      async execute(args: { sessionID?: string; prompt?: string }, context: { sessionID?: string }) {
+        const sessionID = (args?.sessionID ?? "").trim()
+        const text = (args?.prompt ?? "").trim()
+        if (!sessionID || !text) return "Refused: both sessionID and prompt are required."
+        if (sessionID === context.sessionID) return "Refused: that is your own session. Just do the work."
+        const session = await api<SessionInfo>("GET", `/session/${sessionID}`).catch(() => undefined)
+        if (!session) return `Failed: no session ${sessionID}.`
+        if (session.time?.archived) return `Refused: ${sessionID} is retired. Spawn a new one instead.`
+        await api("POST", `/session/${sessionID}/prompt_async`, { parts: [{ type: "text", text }] })
+        log(`control: prompted ${sessionID}`)
+        return `Sent. ${sessionID} is working on it.`
+      },
+    },
+
+    healbot_abort: {
+      description:
+        "Stop a session's current turn. The session stays alive and keeps its history — this " +
+        "cancels the work in flight, it does not retire anything. Idempotent: aborting an idle " +
+        "session does nothing.",
+      args: { sessionID: str("The target session id, as reported by healbot_list.") },
+      async execute(args: { sessionID?: string }, context: { sessionID?: string }) {
+        const sessionID = (args?.sessionID ?? "").trim()
+        if (!sessionID) return "Refused: sessionID is required."
+        const refusal = selfCheck(sessionID, context, "abort")
+        if (refusal) return refusal
+        await api("POST", `/session/${sessionID}/abort`)
+        log(`control: aborted ${sessionID}`)
+        return `Aborted ${sessionID}.`
+      },
+    },
+
+    healbot_retire: {
+      description:
+        "Retire a session and hand its work to a fresh one. Aborts it, collects its open todos " +
+        "and changed files, seeds a successor with a passover document, then archives it. This " +
+        "is what happens automatically at the context gate; use it to retire a session early. " +
+        "If the session has no open todos it is archived with no successor.",
+      args: { sessionID: str("The target session id, as reported by healbot_list.") },
+      async execute(args: { sessionID?: string }, context: { sessionID?: string }) {
+        const sessionID = (args?.sessionID ?? "").trim()
+        if (!sessionID) return "Refused: sessionID is required."
+        const refusal = selfCheck(sessionID, context, "retire")
+        if (refusal) return refusal
+        const session = await api<SessionInfo>("GET", `/session/${sessionID}`).catch(() => undefined)
+        if (!session) return `Failed: no session ${sessionID}.`
+        if (session.time?.archived) return `Nothing to do: ${sessionID} is already retired.`
+        if (session.parentID) {
+          return `Refused: ${sessionID} is a subagent. Retiring one orphans its parent's tool call; ` +
+            `retire the parent instead.`
+        }
+        if (busy) return "Another retirement is in flight. Try again in a moment."
+        // Mark it handled so the automatic gate does not retire it a second time if it is also
+        // over the threshold.
+        handled.add(sessionID)
+        busy = true
+        try {
+          const outcome = await retire(session)
+          return outcome
+        } catch (error) {
+          return `Retire failed for ${sessionID}: ${error instanceof Error ? error.message : String(error)}`
+        } finally {
+          busy = false
+        }
+      },
+    },
+  }
+
+  if (AUTO_RETIRE) {
+    log(
+      `headless retirement armed — soft ${RETIRE_AT.toLocaleString()}, hard ${RETIRE_HARD.toLocaleString()}, ` +
+        `directory ${directory}`,
+    )
+  } else {
+    log(`retirement gate DISABLED (HEALBOT_AUTO_RETIRE=0); control tools still available`)
+  }
 
   return {
+    tool: tools,
     /**
      * Driven off `message.updated`, which is the only event that carries the assistant message's
      * own `tokens` — `properties` is `{ sessionID, info: Message }` and `info` is the WHOLE
@@ -537,6 +757,7 @@ export const AutoRetire = async (input: PluginInput) => {
      */
     event: async ({ event }: { event: PluginEvent }) => {
       try {
+        if (!AUTO_RETIRE) return
         if (event.type !== "message.updated") return
         const info = event.properties?.["info"] as MessageInfo | undefined
         if (!info || info.role !== "assistant") return

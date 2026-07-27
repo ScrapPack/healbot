@@ -16,7 +16,8 @@ Phase docs, newest first:
 
 | Doc | Phase | Read it for |
 |---|---|---|
-| [NEXT.md](NEXT.md) | 6 | **Start here if you are a fresh session.** The prompt to continue the build, what Phase 6 is and why in that order, and the traps that silently produce wrong results instead of errors |
+| [NEXT.md](NEXT.md) | 7 | **Start here if you are a fresh session.** The prompt to continue the build, and the traps that silently produce wrong results instead of errors |
+| [docs/HEADLESS.md](docs/HEADLESS.md) | 6 | Automatic retirement moved to a **server** plugin so it runs with no client attached — and why "move it to plugin scope" was the wrong mechanism for the right goal. Plus focus and `question.rejected` closed, and the control agent built |
 | [docs/HARDEN.md](docs/HARDEN.md) | 5 | The Phase 4 audit and what it forced: six defects fixed, the rig's vacuous assertions replaced, and `serve` + `attach` built — which closed the cold-start reconcile that was recorded here as *blocked* |
 | [docs/VERIFY.md](docs/VERIFY.md) | 4 | The control terminal, verified on `gpt-5.6-sol`: answering a blocked session from the grid. What is TESTED, what is unreachable, and why the first attempt was void |
 | [docs/REVIEW.md](docs/REVIEW.md) | audit | **Read this before trusting any figure below.** Adversarial audit of every phase-0–3 assumption; what held, what did not |
@@ -47,8 +48,10 @@ the terminal — use `fleet.sh` instead. It is the architecture `PLAN.md` assume
 |---|---|
 | `harness/env.sh` | The switch set. `XDG_CONFIG_HOME` isolation + the skill switch + the claude-code switch, each with its measured justification and a NOT-SET list of the switches that break things |
 | `harness/fleet.sh` | `opencode serve` + `opencode attach`: sessions survive the terminal, and the cold-start reconcile becomes reachable. TESTED 10/10 end to end, plus 21/21 on the reconcile itself (`docs/HARDEN.md`). Resolves the fork checkout automatically — the released binary has no grid |
-| `harness/config/opencode/opencode.jsonc` | Model pin, `compaction.auto=false` and why, plugin registration |
+| `harness/config/opencode/opencode.jsonc` | Model pin, `compaction.auto=false` and why, plugin registration, and the global `healbot_*: deny` that keeps the control tools out of every other session's prompt |
 | `harness/config/opencode/agent/build.md` | The 1,715 B prompt that *replaces* `gpt.txt` |
+| `harness/config/opencode/agent/control.md` | **The control agent** — build-order step 5. `mode: primary`, and the `healbot_*: allow` that wins back the globally denied tools. TESTED 14/14 + 15/16 (`docs/HEADLESS.md` §3) |
+| `harness/config/opencode/plugin/healbot.ts` | **The retirement gate and the control tools.** Automatic retirement lives here, not in the grid, so it runs headless — a fleet with no client attached still retires. Also hosts the five `healbot_*` tools, sharing one `retire()`. TESTED 20/20 end to end with no TUI in the process table (`docs/HEADLESS.md`) |
 | `harness/config/opencode/plugin/trim-tools.ts` | Tool-description trimming. Ships OFF (`HARNESS_TRIM_TOOLS=1`) |
 
 Three more files exist on disk (`.gitignore`, `package.json`, `package-lock.json`) and are
@@ -181,6 +184,14 @@ Corrected; the earlier rule here was wrong for its own stated purpose.
   **turn 77**, not turn 90. The old text attached SCAN's turn-90 measurement to a different
   formula.
 
+**Automatic retirement is a SERVER plugin, not part of the grid — since Phase 6.**
+`harness/config/opencode/plugin/healbot.ts` runs inside `opencode serve`, driven off
+`message.updated` (whose `properties.info` is the whole assistant message, tokens included). The
+grid keeps manual `x` and keeps painting `RETIRE` off `RETIRE_AT`; its `createEffect` is **deleted**,
+because exactly one process may own the gate — kept as a fallback, `x` and the gate firing together
+would spawn two successors. Consequence: **run the fork without the harness config and nothing
+retires automatically.** `docs/HEADLESS.md`.
+
 **Compaction is off, so overflow is a HARD ERROR — and the grid now renders it. Built in Phase
 5; before that it painted GREEN.** `overflow.ts:28` returns `false` outright when
 `compaction.auto === false`, and `processor.ts:607-613` then sets `finish: "error"` and status
@@ -240,6 +251,11 @@ Things that will silently cost correctness. All cited in the maps.
 
 | Trap | Where |
 |---|---|
+| **TUI plugin scope has NO Solid owner.** `plugin/tui/runtime.ts`'s `load()` crosses an `await` before `activatePluginEntry` invokes `tui(api)` at `:529`, so the synchronous `createRoot` window has closed. TESTED: `getOwner()` is `null` there. `createSignal`/`createMemo` work (they never touch the owner), but a `createEffect` is **never disposed** and a bare `onCleanup` is a **silent no-op**. This is why "move the retirement trigger to plugin scope" was rejected — and it would not have made it headless anyway, since a TUI plugin needs a TUI | `docs/HEADLESS.md` |
+| **A server plugin gets the v1 SDK client; the TUI gets the v2 one, and they diverge silently.** The v1 client has **no `permission` and no `question` sub-client at all**; its `SessionUpdateData["body"]` is `{title?}` with no `time.archived`; its `SessionCreateData["body"]` has no `directory`. The SERVER accepts all three (`groups/session.ts:53-57`, `handlers/session.ts:200-201`) — the generated v1 types are narrower than the routes. `healbot.ts` writes the requests out with `fetch` rather than casting past the types three times | `docs/HEADLESS.md` |
+| **The session-route sidebar is gated on `width > 120`** (`routes/session/index.tsx:264`), and it is the only thing that renders a session's id. The navigation rigs use exactly 120 so cells cannot fit one row — so a focus assertion written at that width measures terminal geometry, not behaviour. TESTED, it reported a failure that way | `docs/HEADLESS.md` §2 |
+| **There is no key that returns from a session to the grid.** `healbot.open` is namespace `palette` / slashName `healbot` with no binding anywhere; the routes back are `ctrl+p` or typing `/healbot`. `returnRoute` cannot help — `adapters.tsx:47-52` drops every param but `sessionID`. The selection index does survive, in the plugin closure | `docs/HEADLESS.md` §2 |
+| **A plugin module may export ONLY functions.** `getLegacyPlugins` (`plugin/index.ts:95-108`) iterates `Object.values(mod)` and throws `TypeError: Plugin export is not a function` on the first that is not — so one exported constant disables the whole plugin, at load time, in a log line nobody reads. `applyPlugin` catches and publishes rather than crashing, so the symptom is a healthy server with a missing feature | `docs/HEADLESS.md` |
 | **The whole `session.next.*` event family is v2-only.** Zero publishers in `packages/opencode/src` (4 hits, all consumers); the sole publisher factory is `core/src/session/runner/publish-llm-event.ts`, imported once by the v2 runner. So on the v1 path — the one you must use — `session.next.tool.called`, `.context.updated` and `.compaction.started/.ended` never fire. `PLAN.md:57-59` lists them as "verified event types" and builds frame contents on them | REVIEW |
 | **The v2 engine never writes `session.tokens`.** `applyUsage` has 5 call sites, all in v1 projections; v2 usage lands on the message row instead. TESTED — a v2 turn burned 3,399 tokens and left the session row at `{0,0,0,0,0}`. A v2-driven session is invisible to any retirement trigger | `core/session/SESSION.MAP.md` |
 | **`GET /api/session/{id}/context` returns an EMPTY array for v1 sessions.** It reads `SessionMessageTable`, which v1 never writes. TESTED: the 101-turn reference session has 0 `session_message` rows and 738 `part` rows. `PLAN.md:143-144` names this endpoint as the token source | REVIEW |
@@ -293,7 +309,11 @@ Things that will silently cost correctness. All cited in the maps.
 | Is `prompt_async` broken? | **No** — REFUTED, TESTED. Acks in 0.01s, turn completes ~2s later, same answer/model/tokens as the sync path. The audit polled a row that exists ~20ms before it fills. Build the spawn-and-seed path on it (`docs/VERIFY.md` §9) |
 | Make the retirement threshold configurable | **Done.** `HEALBOT_RETIRE_AT`, default **256,000** (was 350,000); the grid renders `RETIRE` + `N to retire` + a share-of-threshold figure. TESTED at 20,000 against a session grown to 37,179 while quiet ones sat at 4,969. **Not 5K** — a fresh session's floor is ~4.8K, so 5K fires on turn one |
 | What counts as "continuity intact" for a handoff? | **Defined and TESTED.** The successor must be handed the objective, carry the predecessor's **open** todos in its own list, and be handed a file the predecessor changed — all asserted on artefacts, never on the successor's prose. Retirement is **automatic on the gate**, with `x` as the manual override (`docs/HARDEN.md` §8). 21/21, occupancy 90,310 → 5,649 (`docs/VERIFY.md` §10) |
-| Is the Phase 4 exit gate met? | **Yes**, both clauses, TESTED on `gpt-5.6-sol`. Four concurrent with one answered from the grid without focusing (§2–§5); one driven past the threshold and handed off with continuity intact (§10). Step 5's control agent is unbuilt but is **not** in the gate |
+| Is the Phase 4 exit gate met? | **Yes**, both clauses, TESTED on `gpt-5.6-sol`. Four concurrent with one answered from the grid without focusing (§2–§5); one driven past the threshold and handed off with continuity intact (§10) |
+| Does auto-retirement work headless? | **Yes**, TESTED 20/20 with no TUI in the process table. It is a **server** plugin, not a TUI one — "move it to plugin scope" would not have achieved it, because a TUI plugin needs a TUI. `docs/HEADLESS.md` |
+| Does `enter` focus the selected session? | **Yes**, TESTED 24/24 and free. Asserted on the session id the sidebar renders, cell 0 then cell 1, so the predicate runs twice with opposite expectations. Also: focusing does **not** clear ERROR cells — `storedErrorOf` re-derives them |
+| Is the `question.rejected` half of the cold reconcile exercised? | **Yes**, TESTED 22/22. Question raised unforced with no client, cell renders `QUESTION` on first paint, panel mounts from the reconciled request with real options, `escape` rejects, block clears. The plain session route could not have shown it at all — `sync.data.question` is event-fed only |
+| **Is the control agent built?** | **Yes** — build-order step 5, the last non-optional unbuilt step. Five tools on the server plugin's `tool` hook plus `agent/control.md`. 14/14 wiring (free) and 15/16 runtime: the same instruction under `control` calls `healbot_list`/`healbot_spawn` and produces a real seeded session; under `build` it calls none of them. See the honest note on the 15/16 in `docs/HEADLESS.md` §3 |
 
 ### The v2 token question — settled
 
@@ -326,11 +346,13 @@ multi-step turns.
 |---|---|---|
 | Can an **external** plugin register a route, or only a builtin? | F7 proved a builtin can and that `route.register` is on the public API. The external case is untested, and it decides whether the grid must live inside the fork | ~20 min |
 | Can an external plugin's route survive a real workload? | The grid is a builtin. Everything TESTED here was measured on the builtin path | ~20 min |
-| **Step 5 — the control agent — is not built.** | The last non-optional step of `PLAN.md`'s Phase 4 build order: a session of its own with tools to spawn / prompt / abort / retire the others. Two of the three endpoints are already exercised inside `retire()`, and `/abort` landed in Phase 5, so what is missing is the agent shell and its tool definitions. It is **not** in the exit gate | medium |
-| **Focus (`enter` → the session route) has never been tested.** | Build-order step 4. The code is three lines and the gate is about *not* focusing, so nothing ever exercised it. `.carryover/verify_nav.py` is in the void set | ~20 min |
+| **Cold start on the retirement gate.** | The trigger is purely event-driven, so a server that restarts with a session already over the threshold does nothing until that session's next turn. In practice the next turn's first `message.updated` carries the occupancy and `RETIRE_HARD` catches it mid-turn — but a startup sweep would close it properly. Deliberately not built: a restart causing mass retirement is a policy decision | policy |
+| **The manual/automatic double-retire window is narrowed, not closed.** | `retire()` re-reads the archived state immediately before archiving, reducing the window to one request. But `x` runs in the TUI and the gate runs in the server, with no shared lock, so pressing `x` at the exact moment the gate fires can still produce two successors | low |
+| `verify_control_agent.py` has not been re-executed since its one assertion was corrected | It reported 15/16; the failure was a mis-specified assertion counting the build agent's `task` subagent. The corrected predicate was evaluated against the run's persisted DB and is True, but the file has not been re-run end to end | ~4 turns |
+| The session route does not surface a **dismissed question** on screen | The text is in the session's parts over HTTP (asserted, passing) but not on the visible viewport. Scroll position, how an errored tool part renders, or both — unexamined. A property of the session route, not of the reconcile | ~20 min |
 | Does the grid handle the **remaining** traps? | Sessions created while the grid is open **do** appear (TESTED, VERIFY §5) — but that does not isolate the grid's `session.created → reload()` from the store's `session.updated` path, so the trap is mitigated in behaviour, not proven closed. Still unexercised: RED silent under `--auto`, and archived sessions never leaving the list. *(The project-scoped `session.list()` is now exercised on both the hosted and attached paths.)* | review |
 | Is 256,000 the right soft gate for *heavy-read* workloads? | **Decided at 256,000 by the owner and guarded, not closed.** One measured turn added ~170K to occupancy by itself, so a session sitting just under the soft gate can finish near 426K — past the ~360K ceiling. `RETIRE_HARD` (330,000) is what stops that, by retiring mid-turn. If a workload routinely trips the hard gate, the soft gate is too high for it | tune |
-| Is the `question.rejected` half of the cold reconcile exercised? | The permission half is TESTED (`verify_cold.py`). No rig rejects a *question* that predates the client | ~20 min |
+| The **256K gate** has never been exercised at its real value | Automatic retirement is TESTED at 20,000 and the comparison is a single `>=`, so the risk is low — but the full-scale run at 256,000 has not been paid for | ~$ |
 | **Phase 3's exit gate is still unmet** — `/code-review ultra` on the `harness/` diff | `PLAN.md:339` makes "code-review ultra findings triaged" an explicit clause. It is user-triggered and billed; it cannot be launched from an agent session. Run it from `~/Desktop/healbot` | user action |
 
 ~~Can the **cold-start reconcile** ever be tested?~~ **Closed, TESTED 21/21** — see the refuted
