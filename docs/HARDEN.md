@@ -212,7 +212,86 @@ not numbers.
 
 ---
 
-## 6. Still open after Phase 5
+## 6. Retirement at the shipped 350,000 default — 25/25, and it changed a load-bearing number
+
+Every retirement result before this ran at `HEALBOT_RETIRE_AT=20000` against an eight-message
+session. This is the shipped default firing for the first time, with `HEALBOT_RETIRE_AT`
+asserted absent from the environment so the threshold under test is the code's own.
+
+The run puts two conditions in one session deliberately: **occupancy ≥ 350,000**, so `RETIRE`
+fires at the real default, and **>100 messages**, so the store has evicted message one and the
+handoff objective can only be right if it came from the server.
+
+| | |
+|---|---|
+| occupancy at retirement | **359,829** after 104 messages, 259 s of growth |
+| `?limit=100` window (what `sync.tsx:597` hydrates) | no longer held the original instruction |
+| unlimited fetch | still did |
+| cell / header at the default | over-threshold state rendered, `1 to retire` |
+| handoff objective | carried the sentinel from the **true first message** |
+| open todos into the successor's own list | **2/2** |
+| changed file handed over | `- findings.txt`, created on **turn 1** |
+| occupancy after | 359,829 → **7,666 (2%)** |
+
+`findings.txt` is the one that proves the diff fan-out change: created on turn one of a
+104-message session, it sits outside the store's 100-message window and far outside the old
+last-20-user-message slice, so only a head-and-tail fan-out over the server's full history
+finds it.
+
+### The ceiling is ~360K, not 922,000
+
+The run kept prompting after it crossed the threshold, to reach the message count. It should
+not have been able to: **37 turns succeeded and then 25 consecutive turns failed** with the
+provider's `ContextOverflowError` — *"Your input exceeds the context window of this model."*
+
+`HARNESS.md` had recorded, and this file's own `RETIRE_AT` comment had repeated, that
+`gpt-5.6-sol` offers 922,000 `limit.input` and that "a 350K threshold leaves ~570K of headroom".
+**Measured, the margin is ~10K — under 3%.** One large tool result is ~10K, so a single read can
+carry a session from "should be retired" to "cannot run another turn". `compaction.auto:false`
+disables opencode's own overflow check (`overflow.ts:28`), so nothing catches it before the
+provider does. The threshold exists to fire *before* the hard error, and at 350K it does not.
+
+Consequence, and it is a decision rather than a measurement: **the default should probably come
+down to 200–250K.** It is left at 350,000 because that number is the project owner's to choose.
+A second consequence: at this default a session cannot reach both ≥350K occupancy and >100
+messages without failing turns on the way, so the rig's over-threshold assertion accepts either
+`RETIRE` or `ERROR` and leans on the occupancy-derived header count, which does not depend on
+state precedence.
+
+### And it caught a hole in the error state
+
+The grid rendered that session — dead for 25 turns — as `RETIRE`, not `ERROR`. The error state
+built earlier in this phase subscribes to `session.error` **inside the route component**, so it
+only ever knew about failures that happened while the grid was open. Every one of those 25
+failures predated the operator opening it.
+
+That is the same cold-start hole `reconcile()` exists to plug for permissions, and the fix is
+the same shape: derive the state from stored messages (`storedErrorOf`) rather than from having
+witnessed the event. Scanning backwards for the most recent assistant message also gives
+clear-on-recovery for free. `probe_error_state.py` proves it by replaying the real overflow
+session out of the run's own database — **10/10, and free**, because the expensive part
+(producing a genuine overflow) was already paid for.
+
+### Three test defects this run exposed, all mine
+
+- **The prompt was too easy to satisfy.** "Reply with the final ACCT number" let the model read
+  with an offset near the end — 1,386 chars instead of 25,000, occupancy growing a flat 816
+  tokens per turn. If the point of a turn is to put bytes *into* the window, the prompt must not
+  leave room to be efficient about it. The tool parameters are now dictated.
+- **Successor detection grabbed a subagent.** "Any new non-archived session" matched the
+  successor's own `@general` subagent; `retire()` had worked perfectly and the rig graded a
+  440-char model-written task prompt as the handoff document. Now matched on `parentID == null`
+  **and** the seed text. Note the irony: session ids are descending, so the newest sorts first —
+  the same ordering fact the grid was fixed for, tripping the rig.
+- **An empty file list I misdiagnosed.** I attributed it to the fan-out window and was wrong:
+  the rig's project directory is inside this repo and gitignored by `.gitignore`'s
+  `.carryover/verified/hb/`, and `SessionSummary.summarize` computes diffs with git — so no file
+  there could ever produce one. `rig.git_baseline()` now gives the project its own inner repo.
+  The fan-out change is still right, but it had not fixed what I said it fixed.
+
+---
+
+## 7. Still open after Phase 5
 
 Unchanged and honest, in `HARNESS.md`'s *Still open* table: the control agent (build-order step
 5) is not built; focus has never been tested; retirement has never run at the shipped 350K

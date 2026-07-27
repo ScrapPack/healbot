@@ -10,6 +10,8 @@ python3 -m venv venv && venv/bin/pip install pyte
 # free — no model turns, no API credits
 venv/bin/python probe_on_grid.py     # 4/4   does the route predicate actually discriminate?
 venv/bin/python probe_fleet.py       # 10/10 does harness/fleet.sh do what it claims?
+venv/bin/python probe_error_state.py # 10/10 does a hard-errored session render ERROR?
+                                     #       (replays the 350K run's real overflow DB)
 
 # these spend credits
 venv/bin/python smoke.py             # 6/6   provider/model/config sanity — run this first
@@ -19,6 +21,8 @@ venv/bin/python verify_surface.py    # 17/18 auto-surface, suppression, tab cycl
 venv/bin/python verify_retire.py     # 17/17 the retirement observable and threshold
 venv/bin/python verify_handoff.py    # 21/21 retire and hand off with continuity intact
 venv/bin/python verify_cold.py       # 21/21 the COLD-START reconcile, via serve + attach
+venv/bin/python verify_retire_350k.py# 25/25 retirement at the SHIPPED 350K default.
+                                     #       ~5M cumulative input tokens; run it deliberately
 ```
 
 **Paths derive from `__file__` and fixtures generate themselves.** They did not until Phase 5:
@@ -74,6 +78,12 @@ Labels are uppercase and header phrasing is lowercase; case is the only separato
 legs check a sentinel inside the objective section and a filename inside the file section, and
 then re-run each predicate against a document with that material stripped and require it to
 fail. Checking the whole document passed via the objective echo, which names the same files.
+
+**The project directory needs its own git repo.** `rig.git_baseline()` provides it, and it is
+not optional for anything asserting on changed files: `GET /session/{id}/diff` serves
+`summary.diffs`, which `SessionSummary.summarize` computes with git, and this directory is
+gitignored by the parent repo. Without an inner repo every file a session creates here is
+invisible to the diff machinery — silently, with no error. That cost a 350K run.
 
 **`Api` must send `x-opencode-directory`.** `workspace-routing.ts:87` resolves the instance as
 `?directory || x-opencode-directory || process.cwd()`. Omit it under `serve()` and you address

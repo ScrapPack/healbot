@@ -9,8 +9,8 @@ sense, so it no longer gets its own repository.
 | Upstream | `https://github.com/sst/opencode` |
 | Base commit | `7534d23551f665e65080809975b4ca5c7d63807b` — *"chore: update nix node_modules hashes"* |
 | Version at base | **1.18.5** |
-| Overlay recorded at | fork branch `healbot` @ `cb7e4a5` |
-| Exact diff | [`healbot-fork.patch`](healbot-fork.patch) (`git diff 7534d23 cb7e4a5`) — TESTED: applies cleanly to the base, re-checked in a throwaway worktree |
+| Overlay recorded at | fork branch `healbot` @ `7e802c6` |
+| Exact diff | [`healbot-fork.patch`](healbot-fork.patch) (`git diff 7534d23 7e802c6`) — TESTED: applies cleanly to the base, re-checked in a throwaway worktree |
 
 ## What is here
 

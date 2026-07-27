@@ -161,8 +161,17 @@ Corrected; the earlier rule here was wrong for its own stated purpose.
   `input + output + cache.read + cache.write` — the same expression `isOverflow` uses
   (`session/overflow.ts:21-33`). **`cache.read` is included**: it is the cached prompt prefix,
   and it is part of the window.
-- *Headroom*: `gpt-5.6-sol` is context 1,050,000 / `limit.input` 922,000. A 350K threshold
-  leaves ~570K before the hard ceiling.
+- *Headroom* — **this row was wrong and the correction is the most important number in this
+  file.** It used to read: "`gpt-5.6-sol` is context 1,050,000 / `limit.input` 922,000. A 350K
+  threshold leaves ~570K before the hard ceiling." **MEASURED at the shipped default: the real
+  ceiling is ~360K.** A session driven up took its last successful turn at occupancy **359,829**
+  and then failed **25 consecutive turns** with the provider's `ContextOverflowError` ("Your
+  input exceeds the context window of this model"). The registry's 922,000 does not describe
+  this provider path. Actual margin at a 350K threshold: **~10K, under 3%** — roughly one large
+  tool result. Since `compaction.auto:false` disables opencode's own overflow check
+  (`overflow.ts:28`), nothing catches it before the provider does, and by then the turn is lost.
+  **The 350K default fires too late to be a guard; lowering it is a live recommendation.**
+  (`docs/HARDEN.md` §7)
 - *`session.tokens` is still useful* — for cost, and it is genuinely cumulative and monotonic
   through compaction (VERIFIED + TESTED, 40/40 sessions match `SUM(step-finish)` exactly). Just
   not for retirement.
@@ -319,7 +328,7 @@ multi-step turns.
 | **Step 5 — the control agent — is not built.** | The last non-optional step of `PLAN.md`'s Phase 4 build order: a session of its own with tools to spawn / prompt / abort / retire the others. Two of the three endpoints are already exercised inside `retire()`, and `/abort` landed in Phase 5, so what is missing is the agent shell and its tool definitions. It is **not** in the exit gate | medium |
 | **Focus (`enter` → the session route) has never been tested.** | Build-order step 4. The code is three lines and the gate is about *not* focusing, so nothing ever exercised it. `.carryover/verify_nav.py` is in the void set | ~20 min |
 | Does the grid handle the **remaining** traps? | Sessions created while the grid is open **do** appear (TESTED, VERIFY §5) — but that does not isolate the grid's `session.created → reload()` from the store's `session.updated` path, so the trap is mitigated in behaviour, not proven closed. Still unexercised: RED silent under `--auto`, and archived sessions never leaving the list. *(The project-scoped `session.list()` is now exercised on both the hosted and attached paths.)* | review |
-| Does retirement work at the **shipped 350K default**? | Every retirement result was measured at `HEALBOT_RETIRE_AT=20000` on a short session. The Phase 5 objective fix specifically targets sessions past 100 messages, which is the regime the default fires in and the one never run | small in code, **expensive in credits** |
+| **Should the 350K default be lowered?** | **Open, and it is a decision rather than a measurement.** The measurement is done: the ceiling is ~360K, so 350K leaves under 3% margin and one large tool result can cross it. The threshold's whole purpose is to fire *before* the hard error. A value in the 200–250K range would restore real headroom. Left at 350,000 because the number is the owner's to choose | decision |
 | Is the `question.rejected` half of the cold reconcile exercised? | The permission half is TESTED (`verify_cold.py`). No rig rejects a *question* that predates the client | ~20 min |
 | **Phase 3's exit gate is still unmet** — `/code-review ultra` on the `harness/` diff | `PLAN.md:339` makes "code-review ultra findings triaged" an explicit clause. It is user-triggered and billed; it cannot be launched from an agent session. Run it from `~/Desktop/healbot` | user action |
 

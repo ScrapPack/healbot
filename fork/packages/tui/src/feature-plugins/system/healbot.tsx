@@ -22,20 +22,41 @@ const CELL_HEIGHT = 6
  * retirement threshold", and `REVIEW.md` §4.3 records that clause as unadjudicable precisely
  * because no threshold was configurable anywhere in the deliverable.
  *
- * 350K against `gpt-5.6-sol`'s 922,000 `limit.input` leaves ~570K of headroom. That margin is
- * load-bearing rather than generous: the harness sets `compaction.auto: false`, `overflow.ts:28`
- * then disables the overflow check outright, and `processor.ts:607-613` turns a real overflow
- * into `finish: "error"` + status idle. Filling the window is a HARD ERROR, not a compaction,
- * so retirement is the only thing standing between a long session and that error.
+ * **The ceiling is ~360K, NOT the 922,000 `limit.input` the model registry advertises.** This
+ * file used to claim "350K leaves ~570K of headroom". MEASURED, and it is false: a session
+ * driven up at the shipped default took its last successful turn at occupancy **359,829** and
+ * then failed **25 consecutive turns** with the provider's `ContextOverflowError` — "Your input
+ * exceeds the context window of this model". So the real margin between this threshold and a
+ * dead session is about **10K, under 3%**, not 570K.
+ *
+ * That margin is not enough. A single large tool result is ~10K, so one read can carry a
+ * session from "should be retired" to "cannot run another turn". The harness sets
+ * `compaction.auto: false`, which makes `overflow.ts:28` disable opencode's own overflow check
+ * entirely, so nothing upstream catches this first — the provider does, and by then the turn is
+ * lost. **Retirement is the only guard, and at 350K it fires too late to be one.** Lowering
+ * this default is a live recommendation; it is left at 350,000 because the number is the
+ * project owner's to choose, not because the measurement supports it.
  *
  * Floor, measured: a freshly spawned and seeded session reads ~4.8K on its very first turn,
  * almost all of it `cache.read` — the standing-context prefix. A threshold at or below that
- * fires on turn one and proves nothing.
+ * fires on turn one and proves nothing. So the usable band is roughly 5K–360K.
  */
 const RETIRE_AT = Math.max(1, Number(process.env["HEALBOT_RETIRE_AT"]) || 350_000)
 
-/** How many recent user messages a handoff fans out over to collect changed files. */
-const DIFF_LOOKBACK = 20
+/**
+ * How many user messages a handoff fans out over to collect changed files.
+ *
+ * Applied to the SERVER's full history, not to the store's window, and not biased toward
+ * recent. Both of those were wrong and for the same reason the objective was: TESTED at the
+ * shipped 350K threshold, a 103-message session produced an EMPTY file list and no
+ * "## Files already changed" section at all, because the last 20 user messages were all pure
+ * reads and the one file the session actually created was made on turn one — outside the
+ * 20-message window and outside the store's 100-message cap besides.
+ *
+ * Scaffolding happens early. A handoff that only looks at recent turns systematically misses
+ * exactly the files worth handing over.
+ */
+const DIFF_FANOUT = 60
 
 /**
  * Border state, highest precedence first. RED/YELLOW outrank everything because they are the
@@ -117,7 +138,18 @@ type GridClient = {
      * Without one you get `session.messages`, which pages the whole history backwards and
      * `session.ts:852` `.reverse()`s it, so `[0]` is genuinely the session's first message.
      */
-    messages(input: { sessionID: string }): Promise<Envelope<{ info?: { role?: string }; role?: string; parts?: { type: string; text?: string }[] }[]>>
+    messages(input: {
+      sessionID: string
+    }): Promise<
+      Envelope<
+        {
+          info?: { role?: string; id?: string }
+          role?: string
+          id?: string
+          parts?: { type: string; text?: string }[]
+        }[]
+      >
+    >
     create(input: { directory?: string }): Promise<{ data?: { id?: string }; id?: string; error?: unknown } | undefined>
     promptAsync(input: { sessionID: string; parts: { type: "text"; text: string }[] }): Promise<Envelope<unknown>>
     abort(input: { sessionID: string }): Promise<Envelope<unknown>>
@@ -288,6 +320,40 @@ function errorReason(error: { name?: string; data?: unknown } | undefined): stri
   return error?.name ?? "error"
 }
 
+/**
+ * The error state DERIVED FROM STORED MESSAGES, not from having witnessed `session.error`.
+ *
+ * The event subscription alone is not enough and the 350K run proved it the expensive way: a
+ * session that had failed **25 consecutive turns** with `ContextOverflowError` rendered a
+ * cheerful `RETIRE`, because every one of those failures happened before the grid route was
+ * mounted and the subscription lives inside the component. That is the same cold-start hole
+ * `reconcile()` exists to plug for permissions and questions — a control terminal cannot only
+ * know what happened while it was looking.
+ *
+ * Scanning BACKWARDS for the most recent assistant message also gives the clear-on-recovery
+ * behaviour for free: if the latest turn succeeded, this returns undefined and the cell leaves
+ * the error state with no event required.
+ */
+function storedErrorOf(sync: ReturnType<typeof useSync>, sessionID: string): string | undefined {
+  const messages = sync.data.message[sessionID] ?? []
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
+    if (message.role !== "assistant") continue
+    // An in-flight assistant row exists ~20ms before it fills; it is neither finished nor
+    // failed, so it must not be read as either. Same race `occupancyOf` guards against.
+    if (!message.time?.completed && !message.finish && !message.error) continue
+    if (message.error) return errorReason(message.error as { name?: string; data?: unknown })
+    if (message.finish === "error") return "error"
+    return undefined
+  }
+  return undefined
+}
+
+/** Live event first (it arrives with a reason immediately), stored state as the durable floor. */
+function errorOf(sync: ReturnType<typeof useSync>, errors: Errors, sessionID: string): string | undefined {
+  return errors.get(sessionID) ?? storedErrorOf(sync, sessionID)
+}
+
 function stateOf(sync: ReturnType<typeof useSync>, cold: Cold, errors: Errors, sessionID: string): CellState {
   if (pendingPermission(sync, cold, sessionID).length > 0) return "blocked-permission"
   if (pendingQuestion(sync, cold, sessionID).length > 0) return "blocked-question"
@@ -295,7 +361,7 @@ function stateOf(sync: ReturnType<typeof useSync>, cold: Cold, errors: Errors, s
   // dead session hands its successor a document built from a turn that failed. The header's
   // `to retire` count is computed off occupancy rather than off this function (see `retirable`),
   // so nothing is lost by ranking the error first.
-  if (errors.has(sessionID)) return "errored"
+  if (errorOf(sync, errors, sessionID)) return "errored"
   if (occupancyOf(sync, sessionID) >= RETIRE_AT) return "needs-retire"
   const status = sync.data.session_status[sessionID]
   // Absent is meaningful: the server deletes the key on idle (session/status.ts:42-45), so
@@ -413,7 +479,7 @@ function Cell(props: {
       <box flexDirection="row">
         <text fg={borderColor(props.api, state(), props.selected)}>{label(state())}</text>
         <Show when={state() === "errored"}>
-          <text fg={theme().textMuted}> · {props.errors.get(props.sessionID)}</text>
+          <text fg={theme().textMuted}>{" · "}{errorOf(sync, props.errors, props.sessionID)}</text>
         </Show>
         {/*
           An errored session that is ALSO over the threshold still needs retiring once looked at,
@@ -421,10 +487,10 @@ function Cell(props: {
           Same bargain the `· working` suffix below makes for RETIRE over `busy`.
         */}
         <Show when={state() === "errored" && occupancy() >= RETIRE_AT}>
-          <text fg={theme().secondary}> · retire</text>
+          <text fg={theme().secondary}>{" · retire"}</text>
         </Show>
         <Show when={state() === "needs-retire" && sync.data.session_status[props.sessionID]?.type === "busy"}>
-          <text fg={theme().accent}> · working</text>
+          <text fg={theme().accent}>{" · working"}</text>
         </Show>
         <Show when={props.parentID}>
           <text fg={theme().textMuted}> · subagent</text>
@@ -683,21 +749,42 @@ function Healbot(props: { api: TuiPluginApi; selected: () => number; setSelected
       const todos = (todoResult?.data ?? []).filter(Boolean)
       const open = todos.filter((todo) => todo.status !== "completed")
 
+      // ONE unlimited fetch, serving both the objective and the changed-file list. Omitting
+      // `limit` is what makes it the whole history, oldest-first — see the type on `messages`.
+      // Everything downstream that used to read `sync.data.message` was reading a window of
+      // the newest 100, which is wrong in both directions on exactly the sessions retirement
+      // targets. Best-effort: on failure we fall back to the store, which is worse but not
+      // nothing.
+      const history = await client.session
+        .messages({ sessionID })
+        .then((result) => result?.data ?? [])
+        .catch(() => [])
+      const historyUsers = history
+        .filter((entry) => (entry?.info?.role ?? entry?.role) === "user")
+        .map((entry) => ({ id: entry?.info?.id ?? entry?.id, parts: entry?.parts ?? [] }))
+        .filter((entry): entry is { id: string; parts: { type: string; text?: string }[] } => Boolean(entry.id))
+
       // `GET /session/{id}/diff` is a PER-USER-MESSAGE endpoint, not a session-wide one:
       // `summary.ts:130` returns [] outright when no messageID is given, and `:133` returns []
       // again unless that message is a USER message — the git diffs are written onto the user
       // message's `summary.diffs` by `SessionSummary.summarize` (`prompt.ts:1253`, forked).
-      // PLAN.md:371 says "its /diff" as though one call covered the session; it does not.
+      // PLAN.md:383 says "its /diff" as though one call covered the session; it does not.
       // So: fan out over the session's user messages and union the file list.
-      const userMessages = (sync.data.message[sessionID] ?? []).filter((message) => message.role === "user")
-      // Bounded on purpose. The store caps at 100 messages anyway (CONTEXT.MAP.md), and a
-      // handoff wants the files touched recently, not an archaeological record.
-      const recent = userMessages.slice(-DIFF_LOOKBACK)
+      const fallbackUsers = (sync.data.message[sessionID] ?? [])
+        .filter((message) => message.role === "user")
+        .map((message) => ({ id: message.id }))
+      const allUsers: { id: string }[] = historyUsers.length > 0 ? historyUsers : fallbackUsers
+      // Head AND tail when the history is long, never just the tail. The files a successor
+      // needs are disproportionately the ones created while the session was setting up.
+      const candidates =
+        allUsers.length <= DIFF_FANOUT
+          ? allUsers
+          : [...allUsers.slice(0, DIFF_FANOUT / 2), ...allUsers.slice(-DIFF_FANOUT / 2)]
       const files = [
         ...new Set(
           (
             await Promise.all(
-              recent.map((message) =>
+              candidates.map((message) =>
                 client.session
                   .diff({ sessionID, messageID: message.id })
                   .then((result) => result?.data ?? [])
@@ -744,24 +831,19 @@ function Healbot(props: { api: TuiPluginApi; selected: () => number; setSelected
       // because that ran at `HEALBOT_RETIRE_AT=20000` against an 8-message session, i.e. the one
       // regime where the store still holds message one.
       //
-      // `messages()` without a `limit` returns the whole history oldest-first; see the type.
-      // Best-effort: a failure here costs the objective line, not the handoff.
-      const firstUserText = await client.session
-        .messages({ sessionID })
-        .then((result) => {
-          for (const entry of result?.data ?? []) {
-            const role = entry?.info?.role ?? entry?.role
-            if (role !== "user") continue
-            const text = (entry.parts ?? [])
-              .filter((part) => part.type === "text")
-              .map((part) => part.text ?? "")
-              .join("\n")
-              .trim()
-            if (text) return text
-          }
-          return undefined
-        })
-        .catch(() => undefined)
+      // Reuses `historyUsers` from the single unlimited fetch above — oldest-first, so the
+      // first one with text is genuinely message one. Best-effort: if that fetch failed,
+      // `historyUsers` is empty and this falls through to the store, which costs accuracy on
+      // the objective line but does not cost the handoff.
+      const firstUserText = historyUsers
+        .map((entry) =>
+          entry.parts
+            .filter((part) => part.type === "text")
+            .map((part) => part.text ?? "")
+            .join("\n")
+            .trim(),
+        )
+        .find(Boolean)
       const objective =
         firstUserText ?? messages.filter((message) => message.role === "user").map((m) => textOf(m.id)).find(Boolean)
       const lastMessage = [...messages]
@@ -956,7 +1038,7 @@ function Healbot(props: { api: TuiPluginApi; selected: () => number; setSelected
   // Same reasoning as `retirable`: counted off the raw fact rather than off `stateOf`, so a
   // session that is blocked AND errored is still counted here after the block collapses it to
   // PERMISSION. A count that disappears because another state outranked it is not a count.
-  const failed = createMemo(() => sessions().filter((item) => errors().has(item.id)).length)
+  const failed = createMemo(() => sessions().filter((item) => errorOf(sync, errors(), item.id)).length)
 
   return (
     <box

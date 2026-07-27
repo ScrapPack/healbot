@@ -76,6 +76,38 @@ def fixtures():
     return PROJECT
 
 
+def git_baseline():
+    """Make PROJECT its own git repo with the fixtures committed. Call AFTER creating fixtures
+    and BEFORE the session runs.
+
+    Not optional for anything that asserts on changed files. `GET /session/{id}/diff` serves
+    `summary.diffs`, which `SessionSummary.summarize` (`summary.ts:102-127`) computes with git
+    — so a file git cannot see produces no diff, silently and with no error anywhere.
+
+    This directory lives inside the healbot repo and is gitignored there (`.gitignore`:
+    `.carryover/verified/hb/`), which means without an inner repo of its own EVERY file a
+    session creates here is invisible to the diff machinery. TESTED, the expensive way: a
+    350K-token run reported an empty file list and no "## Files already changed" section, and
+    the cause was the ignore rule rather than anything in the code under test.
+
+    A nested repo is the fix rather than moving the directory: it keeps the rig self-contained
+    and makes the baseline explicit, so a session's creations are diffs against a known tree.
+    """
+    import subprocess
+
+    def git(*args, check=True):
+        return subprocess.run(["git", "-C", PROJECT, *args], capture_output=True, text=True, check=check)
+
+    if not os.path.isdir(f"{PROJECT}/.git"):
+        git("init", "-q")
+        git("config", "user.email", "rig@healbot.local")
+        git("config", "user.name", "healbot rig")
+    git("add", "-A")
+    # Nothing to commit is fine and normal on a re-run.
+    git("commit", "-q", "-m", "rig baseline", check=False)
+    return git("rev-parse", "--short", "HEAD", check=False).stdout.strip()
+
+
 def boot(port, db, cols=170, rows=48, settle=25):
     """TUI from source, harness sourced, DB isolated. The TUI hosts its own server on `port`
     — `--port` is 'port to listen on' (`cli/network.ts:9`), so this mode cannot meet a block
