@@ -16,6 +16,7 @@ Phase docs, newest first:
 
 | Doc | Phase | Read it for |
 |---|---|---|
+| [docs/VERIFY.md](docs/VERIFY.md) | 4 | The control terminal, verified on `gpt-5.6-sol`: answering a blocked session from the grid. What is TESTED, what is unreachable, and why the first attempt was void |
 | [docs/REVIEW.md](docs/REVIEW.md) | audit | **Read this before trusting any figure below.** Adversarial audit of every phase-0–3 assumption; what held, what did not |
 | [docs/STRIP.md](docs/STRIP.md) | 3 | The strip: what was cut, what it measures, how to run the harness |
 | [HARNESS.md](HARNESS.md) | 2 | This file |
@@ -115,6 +116,20 @@ a separate app (`tui/plugin`). Focus is `api.route.navigate("session", {sessionI
 no Ink, no suspend/resume. Proven by a running spike (PROBE F7), and now **built**:
 `feature-plugins/system/healbot.tsx` (12.8 KB) landed at fork `26c9316` and retired the spike.
 
+**Answering from the grid works — TESTED, and it is the feature the project exists for.** Four
+sessions on one server, three finishing real tool-using turns in 6.1 s wall while the fourth sat
+blocked; `a` docks the session route's own `PermissionPrompt` / `QuestionPrompt` **below** the
+grid, which keeps rendering; the reply clears the block server-side *and* the answer reaches the
+model, which resumes and acts on it. The route never changes. Same result for a `question` the
+model chose to ask unforced. See `docs/VERIFY.md`.
+
+**Grid keybindings must be `OPENCODE_BASE_MODE` + `enabled: !answering()` — both, not either.**
+`mode` is a *require*-condition (`keymap.tsx:56-60`), so a mode-less binding set is live in
+**every** mode. `QuestionPrompt` pushes its own mode and binds `tab/h/l/j/k/return/escape` plus
+digits (`question.tsx:129-134, :227-264`); `PermissionPrompt` pushes no mode and binds
+`h/l/return/escape` in base mode (`permission.tsx:568-608`). Base mode handles the first,
+`enabled` handles the second. TESTED under both prompts: `j/k/l/h` leave the grid cursor still.
+
 **Concurrency — TESTED, the founding premise holds.** Four sessions fired simultaneously at one
 `opencode serve` finished in 5.72s wall, exactly the slowest single turn, vs 10.45s serially.
 The server does not serialize. Per-turn latency degrades under load (2.4–2.7s solo → 2.8–5.7s
@@ -206,6 +221,9 @@ Things that will silently cost correctness. All cited in the maps.
 | **`store.message[sid]` caps at 100 and drops evicted parts**, grid-wide | `tui/context/CONTEXT.MAP.md` |
 | **There is no `api.state.session.list()`** — the grid must direct-import `useSync`; it cannot be patched at the host layer | `tui/plugin/PLUGIN.MAP.md` |
 | **`route.navigate("session", …)` discards every param but `sessionID`** | `tui/plugin/PLUGIN.MAP.md` |
+| **The grid's roster renders OLDEST first, and its comment claims the opposite.** `healbot.tsx:203-204` says "ids are monotonic-ascending … newest first" and sorts `b.id.localeCompare(a.id)`. Session ids are **descending** identifiers (`schema/src/session-id.ts:8` → `identifier.ts:22`, `descending ? ~current : current`), so they already sort newest-first ascending and that comparator reverses them. TESTED both ways. Cosmetic, but cell order is what an operator builds muscle memory on | `docs/VERIFY.md` §7 |
+| **`escape` is destructive on both prompts and there is no back-out key** — `escapeKey="reject"` (`permission.tsx:406`) and question's escape calls `reject()` (`question.tsx:280`). TESTED: escape rejected, the tool never ran. Worse, the labels disagree on screen — the grid footer says `esc reject`, the question panel it docks says `esc dismiss` (`question.tsx:508`, upstream) | `docs/VERIFY.md` §5, §7 |
+| **The TUI cannot attach to an external server** — `--port` is "port to listen on" (`cli/network.ts:9`), so it always hosts its own. The cold-start reconcile is therefore unreachable, and two shipped defect fixes sit on that path untested | `docs/VERIFY.md` §6 |
 | **Scoped denies do NOT remove a tool schema** — only blanket `*` denies do, and a later narrow allow un-hides a blanket-denied tool | `permission/PERMISSION.MAP.md` |
 | **`tool/read.ts` attaches nearby `AGENTS.md` on every file read** — unbounded cost, invisible to standing-context measurement | `session/SESSION.MAP.md` |
 | **`bash`'s description is generated at runtime**, not stored — editing `shell.txt` looks like the fix and does almost nothing | `tool/TOOL.MAP.md` |
@@ -227,7 +245,10 @@ Things that will silently cost correctness. All cited in the maps.
 | Does `$XDG_CONFIG_HOME` fully redirect global config? | **Yes**, TESTED. It is the harness's isolation mechanism (`docs/STRIP.md`) |
 | Re-measure standing context under `gpt-5.6-sol` | **Done** (`docs/STRIP.md`), corrected in `docs/REVIEW.md` |
 | Do N sessions actually run concurrently on one server? | **Yes**, TESTED. And a blocked permission does not stall the others |
-| Is the yellow border gated behind `OPENCODE_ENABLE_QUESTION_TOOL`? | **No** (SCAN C3). But confirm `flags.client` for a non-CLI client — the gate is an allowlist |
+| Is the yellow border gated behind `OPENCODE_ENABLE_QUESTION_TOOL`? | **No** (SCAN C3) |
+| Does `flags.client` land in the `["app","cli","desktop"]` allowlist? | **Yes**, TESTED. `OPENCODE_CLIENT` defaults to `"cli"` (`core/src/flag/flag.ts:75-76`) and `tool/registry.ts:202` admits it. A real `question` fired unforced on `gpt-5.6-sol` and was answered from the grid. YELLOW fires (`docs/VERIFY.md` §4) |
+| Has `healbot.tsx` actually been **run**? | **Yes**, TESTED on `gpt-5.6-sol` — rendering, live session state, keyboard ownership, and clearing both a permission and a question block from the grid without focusing. 90/91 assertions (`docs/VERIFY.md`) |
+| Does a session need `permission: {question: "allow"}` to ask? | **No.** `question` is `"deny"` in the shared default block (`agent/agent.ts:127`), but `build` and `plan` each merge `question: "allow"` on top (`agent/agent.ts:141-152`). Only `general` and `explore` subagents inherit the deny |
 
 ### The v2 token question — settled
 
@@ -258,9 +279,8 @@ multi-step turns.
 
 | Question | Why it matters | Cost |
 |---|---|---|
-| Does `flags.client` land in the `["app","cli","desktop"]` allowlist when the grid drives sessions? | If not, the `question` tool is never registered and YELLOW never fires — for exactly the use case this project exists for | ~10 min |
 | Can an **external** plugin register a route, or only a builtin? | F7 proved a builtin can and that `route.register` is on the public API. The external case is untested, and it decides whether the grid must live inside the fork | ~20 min |
-| Has `healbot.tsx` actually been **run**? | It replaced the spike at fork `26c9316` and is 2.5x its size. F7's TESTED evidence covers the spike at `0fdcfb6`, not this. Nothing in the tree records the grid rendering, owning the keyboard, or reading live session state | ~15 min |
-| Does the grid handle the traps above? | Especially: `session.created` unhandled, RED silent under `--auto`, the project-scoped `session.list()`, and archived sessions never leaving the list | review |
+| Does the grid handle the **remaining** traps? | Sessions created while the grid is open **do** appear (TESTED, VERIFY §5) — but that does not isolate the grid's `session.created → reload()` from the store's `session.updated` path, so the trap is mitigated in behaviour, not proven closed. Still unexercised: RED silent under `--auto`, the project-scoped `session.list()`, and archived sessions never leaving the list | review |
+| Can the **cold-start reconcile** ever be tested? | Not today: `--port` is "port to listen on" (`cli/network.ts:9`), so the TUI always hosts its own server and no client can meet a block that predates it. Needs the long-lived `opencode serve` of `PLAN.md:335`. Two shipped defect fixes sit on that unreachable path | blocked |
 | What exactly counts as "continuity intact" for a handoff? | It is a Phase 4 exit-gate clause with no definition and no check | design |
 | Make the retirement threshold configurable | The gate says "driven past the retirement threshold"; at 350K on a frontier model that is expensive to exercise. A config key lets it be tested at 5K | small |

@@ -2681,10 +2681,10 @@ index 000000000..17d75b28a
 +| — | **New:** none of the 21 `index.ts` hooks fire on the v2 core path — zero `plugin.trigger` sites in `packages/core/src` or `packages/server/src`. The v2 core has a separate plugin system at `packages/plugin/src/v2/`. |
 diff --git a/packages/tui/TUI.MAP.md b/packages/tui/TUI.MAP.md
 new file mode 100644
-index 000000000..38b46b004
+index 000000000..ac3281541
 --- /dev/null
 +++ b/packages/tui/TUI.MAP.md
-@@ -0,0 +1,286 @@
+@@ -0,0 +1,314 @@
 +# TUI.MAP.md — `packages/tui`
 +
 +Structural map of the opencode terminal UI package (v1.18.5, branch `healbot`).
@@ -2734,6 +2734,34 @@ index 000000000..38b46b004
 +| Plugin host boot | `src/app.tsx:408-420` | `props.pluginHost.start({ api, config, runtime, dispose })`; sets `ready()` in `.finally` |
 +| Plugin host impl | `packages/opencode/src/plugin/tui/runtime.ts:1124-1129` | `createLegacyTuiPluginHost()` — **lives outside this package** |
 +| Builtin plugin list feed | `packages/opencode/src/plugin/tui/internal.ts:6-10` | `internalTuiPlugins(flags)` → `createBuiltinPlugins(...)` |
++
++### ⚠️ Running from source sees an EMPTY session list — by design
++
++The database filename is **channel-scoped**, and a from-source run is not on a release channel:
++
++| Step | Site | Result |
++|---|---|---|
++| `OPENCODE_CHANNEL` is a build-time define, absent from source | `packages/core/src/installation/version.ts:7` | `InstallationChannel = "local"` |
++| `"local"` is not in `["latest","beta","prod"]` | `packages/core/src/database/database.ts:48-54` | db path = **`opencode-local.db`**, not `opencode.db` |
++
++So `bun run dev` opens a *different, usually empty* database and the home screen, session
++switcher and Healbot grid all correctly show **0 sessions** — your installed opencode's history
++lives in `opencode.db`. This is deliberate isolation, not a bug. The `local` token in the boot
++footer is this channel indicator.
++
++**To develop against real sessions, never point a source build at `opencode.db` directly** — it
++will run migrations on your real history. Snapshot it and use the absolute-path override
++(`database.ts:44-46`):
++
++```bash
++sqlite3 -readonly ~/.local/share/opencode/opencode.db "VACUUM INTO '/tmp/snap.db';"
++OPENCODE_DB=/tmp/snap.db bun run --cwd packages/opencode --conditions=browser src/index.ts <project-dir>
++```
++
++`OPENCODE_DISABLE_CHANNEL_DB=1` (`database.ts:50-51`) also forces `opencode.db`, but writes to
++the real file. Pass the project directory as the positional `project` arg (`cli/cmd/tui.ts:77-80`)
++— `bun --cwd` sets module resolution, not the instance directory, and running bun from the repo
++root instead fails with `Cannot find module 'react/jsx-dev-runtime'`.
 +
 +---
 +
@@ -3566,16 +3594,19 @@ index b67923f3c..9003fb84a 100644
  }
 diff --git a/packages/tui/src/feature-plugins/system/healbot.tsx b/packages/tui/src/feature-plugins/system/healbot.tsx
 new file mode 100644
-index 000000000..43692ccd8
+index 000000000..e3807b58d
 --- /dev/null
 +++ b/packages/tui/src/feature-plugins/system/healbot.tsx
-@@ -0,0 +1,339 @@
+@@ -0,0 +1,566 @@
 +/** @jsxImportSource @opentui/solid */
 +import type { TuiPlugin, TuiPluginApi, TuiRouteCurrent } from "@opencode-ai/plugin/tui"
++import type { PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2"
 +import { useTerminalDimensions } from "@opentui/solid"
-+import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
++import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 +import { useSync } from "../../context/sync"
-+import { useBindings } from "../../keymap"
++import { OPENCODE_BASE_MODE, useBindings } from "../../keymap"
++import { PermissionPrompt } from "../../routes/session/permission"
++import { QuestionPrompt } from "../../routes/session/question"
 +
 +// The Healbot control terminal: every session in the instance as one grid of bordered
 +// cells, border colour carrying live state. Architecture settled by healbot-spike.tsx
@@ -3591,9 +3622,54 @@ index 000000000..43692ccd8
 + */
 +type CellState = "blocked-permission" | "blocked-question" | "busy" | "done" | "idle"
 +
-+function stateOf(sync: ReturnType<typeof useSync>, sessionID: string): CellState {
-+  if ((sync.data.permission[sessionID] ?? []).length > 0) return "blocked-permission"
-+  if ((sync.data.question[sessionID] ?? []).length > 0) return "blocked-question"
++/**
++ * Pending requests recovered by the cold-start reconcile, grouped by session — see
++ * `reconcile()`. These are the full request bodies, not just the ids that were enough to
++ * colour a border: answering a block from the grid needs the request itself (its prompt and
++ * its options), and for a block that predates this client the live store holds nothing.
++ */
++type Cold = { permission: Map<string, PermissionRequest[]>; question: Map<string, QuestionRequest[]> }
++
++/** A grid cell's session, from either roster source. */
++type Roster = { id: string; title?: string; parentID?: string; directory?: string }
++
++// Store first (live SSE), then the cold-start reconcile. The store's `permission` /
++// `question` maps are populated ONLY by events observed in this process, so a client that
++// attaches to an already-running server sees none of the blocks that predate it — those
++// cells render dim, which is precisely the state a control terminal must not miss.
++//
++// Scope of the reconcile, measured: pending requests live in `InstanceState`
++// (`permission/index.ts:24,50` — an in-memory Map; the `permission` table has 0 rows), so
++// they die WITH the server. When the TUI hosts its own server, as it does today, a restart
++// loses the request on both sides and nothing can recover it — VERIFIED: sessions left
++// blocked on a permission and on a question both came back reading `idle`. The reconcile
++// pays off under the intended architecture instead — one long-lived `opencode serve` with
++// the control terminal as a client (PLAN.md:335) — where the server outlives the TUI.
++
++function pendingPermission(sync: ReturnType<typeof useSync>, cold: Cold, sessionID: string): PermissionRequest[] {
++  const live = sync.data.permission[sessionID] ?? []
++  return live.length > 0 ? live : (cold.permission.get(sessionID) ?? [])
++}
++
++function pendingQuestion(sync: ReturnType<typeof useSync>, cold: Cold, sessionID: string): QuestionRequest[] {
++  const live = sync.data.question[sessionID] ?? []
++  return live.length > 0 ? live : (cold.question.get(sessionID) ?? [])
++}
++
++/** Copy of `map` with one request removed, dropping the session key when it empties. */
++function without<T extends { id: string }>(map: Map<string, T[]>, sessionID: string, requestID: string) {
++  const bucket = map.get(sessionID)
++  if (!bucket) return map
++  const next = bucket.filter((item) => item.id !== requestID)
++  const out = new Map(map)
++  if (next.length > 0) out.set(sessionID, next)
++  else out.delete(sessionID)
++  return out
++}
++
++function stateOf(sync: ReturnType<typeof useSync>, cold: Cold, sessionID: string): CellState {
++  if (pendingPermission(sync, cold, sessionID).length > 0) return "blocked-permission"
++  if (pendingQuestion(sync, cold, sessionID).length > 0) return "blocked-question"
 +  const status = sync.data.session_status[sessionID]
 +  // Absent is meaningful: the server deletes the key on idle (session/status.ts:42-45), so
 +  // the HTTP seed only ever carries busy/retry. Key present + idle ⇒ it ran and finished in
@@ -3646,6 +3722,7 @@ index 000000000..43692ccd8
 +  parentID?: string
 +  selected: boolean
 +  width: number
++  cold: Cold
 +}) {
 +  const sync = useSync()
 +  const theme = () => props.api.theme.current
@@ -3658,7 +3735,7 @@ index 000000000..43692ccd8
 +    if (!sync.data.message[props.sessionID]?.length) void sync.session.sync(props.sessionID)
 +  })
 +
-+  const state = createMemo(() => stateOf(sync, props.sessionID))
++  const state = createMemo(() => stateOf(sync, props.cold, props.sessionID))
 +  const todos = createMemo(() => (sync.data.todo[props.sessionID] ?? []).filter((item) => item.status !== "completed"))
 +  const last = createMemo(() => {
 +    const messages = sync.data.message[props.sessionID] ?? []
@@ -3716,27 +3793,113 @@ index 000000000..43692ccd8
 +  // `question`, `todo` and `message` are keyed by sessionID and fed by the *global* SSE
 +  // feed, which is not directory-scoped (sdk.tsx:82-117), so cells stay live and
 +  // reactive regardless of where the session lives.
-+  const [roster, setRoster] = createSignal<{ id: string; title?: string; parentID?: string }[]>([])
++  // `directory` rides along because the reply endpoints are directory-scoped: the session
++  // route sources it from `sync.session.get(id)?.directory` (routes/session/index.tsx:1286),
++  // and the grid deliberately shows sessions that store cannot see.
++  const [roster, setRoster] = createSignal<Roster[]>([])
 +  const reload = async () => {
 +    const result: any = await props.api.client.session.list({ scope: "project" })
-+    const list = (result?.data ?? result ?? []) as { id: string; title?: string; parentID?: string }[]
++    const list = (result?.data ?? result ?? []) as Roster[]
 +    // Ids are monotonic-ascending, so id order is creation order — newest first.
 +    setRoster([...list].sort((a, b) => b.id.localeCompare(a.id)))
 +  }
-+  onMount(() => void reload())
++  // Cold-start reconcile of RED/YELLOW. `permission.list` / `question.list` return every
++  // pending request across all sessions, which is the only way to see blocks that predate
++  // this process. CONTEXT.MAP.md names both as the reconcile path.
++  const [cold, setCold] = createSignal({
++    permission: new Map<string, PermissionRequest[]>(),
++    question: new Map<string, QuestionRequest[]>(),
++  })
++  const reconcile = async () => {
++    const group = async <T extends { sessionID?: string }>(fetcher: () => Promise<any>) => {
++      const out = new Map<string, T[]>()
++      try {
++        const result = await fetcher()
++        for (const item of (result?.data ?? result ?? []) as T[]) {
++          if (!item?.sessionID) continue
++          const bucket = out.get(item.sessionID)
++          if (bucket) bucket.push(item)
++          else out.set(item.sessionID, [item])
++        }
++      } catch {
++        // Best-effort: without the list endpoints the grid still sees every block that
++        // arrives over live SSE, just none that predate it.
++      }
++      return out
++    }
++    const client = props.api.client as any
++    setCold({
++      permission: await group<PermissionRequest>(() => client.permission.list()),
++      question: await group<QuestionRequest>(() => client.question.list()),
++    })
++  }
++
++  onMount(() => {
++    void reload()
++    void reconcile()
++  })
++  // A resolved request clears the block, in two steps that both matter.
++  //
++  // Synchronously: drop it from `cold`. `reconcile()` is async, and the store's live list is
++  // spliced empty the INSTANT a reply is seen (sync.tsx:175-187, 221-235) — so for the whole
++  // window until the refetch lands, `pendingPermission`'s fallback would read the stale cold
++  // copy and re-render a request that is already answered. Then re-reconcile, which is what
++  // catches drift this client never saw: requests resolved for other sessions, or by another
++  // client entirely.
++  //
++  // `question.rejected` is a distinct event from `question.replied` and also clears the
++  // block — miss it and a rejected pre-attach question pins its cell yellow forever.
++  onCleanup(
++    props.api.event.on("permission.replied", (event) => {
++      const { sessionID, requestID } = event.properties
++      setCold((prev) => ({ ...prev, permission: without(prev.permission, sessionID, requestID) }))
++      void reconcile()
++    }),
++  )
++  const questionResolved = (event: { properties: { sessionID: string; requestID: string } }) => {
++    const { sessionID, requestID } = event.properties
++    setCold((prev) => ({ ...prev, question: without(prev.question, sessionID, requestID) }))
++    void reconcile()
++  }
++  onCleanup(props.api.event.on("question.replied", questionResolved))
++  onCleanup(props.api.event.on("question.rejected", questionResolved))
 +
 +  // Union of both sources, deduped by id. The store may be ahead (live inserts via
 +  // `session.updated`) while the fetch is authoritative on scope; a control terminal wants
 +  // whatever either can see, and neither is a superset of the other.
 +  const sessions = createMemo(() => {
 +    const seen = new Set<string>()
-+    const out: { id: string; title?: string; parentID?: string }[] = []
++    const out: Roster[] = []
 +    for (const item of [...roster(), ...[...sync.data.session].reverse()]) {
 +      if (seen.has(item.id)) continue
 +      seen.add(item.id)
 +      out.push(item)
 +    }
 +    return out
++  })
++
++  const isBlocked = (sessionID: string) => stateOf(sync, cold(), sessionID).startsWith("blocked")
++  const directoryOf = (sessionID: string) => sessions().find((item) => item.id === sessionID)?.directory
++
++  // The answer panel. It holds a sessionID rather than a request so that it stays correct
++  // across the reply: `answerTarget` re-reads pending state, so a block that clears — by this
++  // panel, by the session's own view, or by another client — collapses the panel on its own.
++  const [answering, setAnswering] = createSignal<string | null>(null)
++  const answerTarget = createMemo(() => {
++    const sessionID = answering()
++    if (!sessionID) return undefined
++    // Permission outranks question, matching both `stateOf`'s precedence and the session
++    // route's (routes/session/index.tsx:1283-1292): a permission blocks the tool call itself.
++    const permission = pendingPermission(sync, cold(), sessionID)[0]
++    if (permission) return { sessionID, permission, question: undefined }
++    const question = pendingQuestion(sync, cold(), sessionID)[0]
++    if (question) return { sessionID, permission: undefined, question }
++    return undefined
++  })
++  // Answering re-enables the grid's own keys; without this the panel's disappearance would
++  // leave the grid inert, since `enabled` below reads `answering()` and not the target.
++  createEffect(() => {
++    if (answering() && !answerTarget()) setAnswering(null)
 +  })
 +
 +  const columns = createMemo(() => Math.max(1, Math.floor((dimensions().width - 2) / MIN_CELL_WIDTH)))
@@ -3773,6 +3936,22 @@ index 000000000..43692ccd8
 +  onCleanup(props.api.event.on("session.created", () => void reload()))
 +  onCleanup(props.api.event.on("session.deleted", () => void reload()))
 +
++  // Surfacing. A block that arrives while the grid is open moves the selection onto it, so the
++  // session that wants a human is the one already under the cursor and `a` answers it — that
++  // is the whole point of a control terminal. Two cases where it must NOT steal the cursor:
++  // while an answer panel is open, and when the current cell is itself blocked (you are
++  // probably mid-decision on that one). Both leave the header count as the signal instead.
++  const surface = (sessionID?: string) => {
++    if (!sessionID || answering()) return
++    const list = sessions()
++    const current = list[props.selected()]
++    if (current && isBlocked(current.id)) return
++    const index = list.findIndex((item) => item.id === sessionID)
++    if (index !== -1) props.setSelected(index)
++  }
++  onCleanup(props.api.event.on("permission.asked", (event) => surface(event.properties.sessionID)))
++  onCleanup(props.api.event.on("question.asked", (event) => surface(event.properties.sessionID)))
++
 +  const commands = [
 +    { name: "healbot.close", title: "Close Healbot", category: "Healbot", run: leave },
 +    { name: "healbot.left", title: "Select left", category: "Healbot", run: () => move(-1) },
@@ -3793,9 +3972,45 @@ index 000000000..43692ccd8
 +        props.api.route.navigate("session", { sessionID: session.id })
 +      },
 +    },
++    {
++      name: "healbot.answer",
++      title: "Answer selected session",
++      category: "Healbot",
++      run() {
++        const session = sessions()[props.selected()]
++        // Answering an unblocked session would open an empty panel and swallow the keyboard.
++        if (!session || !isBlocked(session.id)) return
++        setAnswering(session.id)
++      },
++    },
++    {
++      name: "healbot.next-blocked",
++      title: "Select next blocked session",
++      category: "Healbot",
++      run() {
++        const list = sessions()
++        // From the cell AFTER the current one, wrapping, so repeated presses cycle the queue
++        // rather than sticking on a cell that is already blocked.
++        for (let step = 1; step <= list.length; step++) {
++          const index = (props.selected() + step) % list.length
++          if (isBlocked(list[index].id)) {
++            props.setSelected(index)
++            return
++          }
++        }
++      },
++    },
 +  ]
 +
 +  useBindings(() => ({
++    // Base mode + `enabled`, together, are what let the answer panel own the keyboard. The
++    // prompts collide with this grid on almost every key (j/k/h/l, 1-9, return, escape):
++    // `QuestionPrompt` pushes its own mode, which a mode-less binding set would ignore
++    // entirely (`mode()` is a require-condition — keymap.tsx:57-59 — so declaring no mode
++    // means "every mode"), while `PermissionPrompt` binds in base mode and pushes nothing.
++    // Base mode handles the first, `enabled` handles the second.
++    mode: OPENCODE_BASE_MODE,
++    enabled: !answering(),
 +    commands,
 +    bindings: [
 +      { key: "escape,q", cmd: "healbot.close", desc: "Close Healbot" },
@@ -3803,6 +4018,8 @@ index 000000000..43692ccd8
 +      { key: "l,right", cmd: "healbot.right", desc: "Select right" },
 +      { key: "k,up", cmd: "healbot.up", desc: "Select up" },
 +      { key: "j,down", cmd: "healbot.down", desc: "Select down" },
++      { key: "a", cmd: "healbot.answer", desc: "Answer blocked session" },
++      { key: "tab", cmd: "healbot.next-blocked", desc: "Select next blocked session" },
 +      { key: "return", cmd: "healbot.focus", desc: "Focus selected session" },
 +      { key: "r", cmd: "healbot.refresh", desc: "Refresh session list" },
 +      ...props.api.tuiConfig.keybinds.gather(
@@ -3812,9 +4029,7 @@ index 000000000..43692ccd8
 +    ],
 +  }))
 +
-+  const blocked = createMemo(
-+    () => sessions().filter((item) => stateOf(sync, item.id).startsWith("blocked")).length,
-+  )
++  const blocked = createMemo(() => sessions().filter((item) => isBlocked(item.id)).length)
 +
 +  return (
 +    <box
@@ -3839,7 +4054,15 @@ index 000000000..43692ccd8
 +          </text>
 +        </Show>
 +        <box flexGrow={1} />
-+        <text fg={theme().textMuted}>enter focus · r refresh · q close</text>
++        <text fg={theme().textMuted}>
++          {/*
++            "esc reject", not "esc dismiss": escape is DESTRUCTIVE on both prompts — the
++            permission prompt passes escapeKey="reject" (permission.tsx:406) and the question
++            prompt's escape calls reject() (question.tsx:281). There is no back-out key, which
++            is the same bargain the session route makes; naming it honestly is the guard.
++          */}
++          {answering() ? "answering · esc reject" : "a answer · tab next blocked · enter focus · r refresh · q close"}
++        </text>
 +      </box>
 +
 +      <Show
@@ -3863,6 +4086,7 @@ index 000000000..43692ccd8
 +                      parentID={session.parentID}
 +                      selected={rowIndex() * columns() + columnIndex() === props.selected()}
 +                      width={cellWidth()}
++                      cold={cold()}
 +                    />
 +                  )}
 +                </For>
@@ -3870,6 +4094,37 @@ index 000000000..43692ccd8
 +            )}
 +          </For>
 +        </box>
++      </Show>
++
++      {/*
++        Answer-in-place. The grid keeps rendering above this panel — the point of a control
++        terminal is that clearing one block never costs you sight of the other sessions, which
++        is exactly what `route.navigate("session")` does cost. Both prompts are the session
++        route's own components (routes/session/{permission,question}.tsx), not reimplementations:
++        they carry multi-question walking, custom answers, always/reject and the reply calls
++        themselves, and every context they consume — theme, sdk, sync, project, config, keymap —
++        is app-level, so they mount anywhere inside the app tree.
++      */}
++      <Show when={answerTarget()}>
++        {(target) => (
++          <box flexShrink={0} flexDirection="column">
++            <box flexDirection="row" paddingLeft={1} paddingRight={1}>
++              <text fg={theme().textMuted}>answering </text>
++              <text fg={theme().text}>
++                {truncate(
++                  sessions().find((item) => item.id === target().sessionID)?.title ?? target().sessionID,
++                  Math.max(1, dimensions().width - 12),
++                )}
++              </text>
++            </box>
++            <Show when={target().permission}>
++              {(request) => <PermissionPrompt request={request()} directory={directoryOf(target().sessionID)} />}
++            </Show>
++            <Show when={target().question}>
++              {(request) => <QuestionPrompt request={request()} directory={directoryOf(target().sessionID)} />}
++            </Show>
++          </box>
++        )}
 +      </Show>
 +    </box>
 +  )

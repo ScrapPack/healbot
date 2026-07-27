@@ -48,6 +48,34 @@ Scope: what owns what, and where the Healbot grid plugs in. Sub-maps:
 | Plugin host impl | `packages/opencode/src/plugin/tui/runtime.ts:1124-1129` | `createLegacyTuiPluginHost()` — **lives outside this package** |
 | Builtin plugin list feed | `packages/opencode/src/plugin/tui/internal.ts:6-10` | `internalTuiPlugins(flags)` → `createBuiltinPlugins(...)` |
 
+### ⚠️ Running from source sees an EMPTY session list — by design
+
+The database filename is **channel-scoped**, and a from-source run is not on a release channel:
+
+| Step | Site | Result |
+|---|---|---|
+| `OPENCODE_CHANNEL` is a build-time define, absent from source | `packages/core/src/installation/version.ts:7` | `InstallationChannel = "local"` |
+| `"local"` is not in `["latest","beta","prod"]` | `packages/core/src/database/database.ts:48-54` | db path = **`opencode-local.db`**, not `opencode.db` |
+
+So `bun run dev` opens a *different, usually empty* database and the home screen, session
+switcher and Healbot grid all correctly show **0 sessions** — your installed opencode's history
+lives in `opencode.db`. This is deliberate isolation, not a bug. The `local` token in the boot
+footer is this channel indicator.
+
+**To develop against real sessions, never point a source build at `opencode.db` directly** — it
+will run migrations on your real history. Snapshot it and use the absolute-path override
+(`database.ts:44-46`):
+
+```bash
+sqlite3 -readonly ~/.local/share/opencode/opencode.db "VACUUM INTO '/tmp/snap.db';"
+OPENCODE_DB=/tmp/snap.db bun run --cwd packages/opencode --conditions=browser src/index.ts <project-dir>
+```
+
+`OPENCODE_DISABLE_CHANNEL_DB=1` (`database.ts:50-51`) also forces `opencode.db`, but writes to
+the real file. Pass the project directory as the positional `project` arg (`cli/cmd/tui.ts:77-80`)
+— `bun --cwd` sets module resolution, not the instance directory, and running bun from the repo
+root instead fails with `Cannot find module 'react/jsx-dev-runtime'`.
+
 ---
 
 ## `src/app.tsx` (1134 lines) — anatomy

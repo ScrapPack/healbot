@@ -430,14 +430,16 @@ Items 1–8 of the original order are done (see Status above). What remains:
 2. **Push the fork somewhere.** Branch `healbot` holds all 14 maps and the spike, its only
    remote is `sst/opencode`, and it therefore has no valid push destination. The work exists on
    one disk.
-3. **Confirm `flags.client` for the grid.** The `question` tool is gated on an allowlist of
-   `["app","cli","desktop"]`. If the control terminal's client value is not in it, YELLOW never
-   fires — for exactly the use case the project exists for. ~10 min.
+3. ~~**Confirm `flags.client` for the grid.**~~ **DONE**, TESTED — `OPENCODE_CLIENT` defaults to
+   `"cli"` (`core/src/flag/flag.ts:75-76`), which `tool/registry.ts:202` admits, and a real
+   `question` fired unforced on `gpt-5.6-sol` and was answered from the grid. YELLOW fires.
+   `docs/VERIFY.md` §4.
 4. **Confirm an *external* plugin can register a route.** F7 proved a builtin can. That decides
    whether the grid must live inside the fork or can ship separately. ~20 min.
-5. **Run `healbot.tsx`.** Superseded in scope: the spike was replaced by the real grid at fork
-   `26c9316`. F7's TESTED evidence covers the 133-line spike at `0fdcfb6`; the grid is 339
-   lines and nothing yet records it rendering or reading live state.
+5. ~~**Run `healbot.tsx`.**~~ **DONE**, TESTED on `openai/gpt-5.6-sol` — rendering, live session
+   state, keyboard ownership, and clearing both a permission and a question block from the grid
+   without focusing the session. 90/91 assertions across four runs; the exit gate's
+   blocked-permission clause is met. `docs/VERIFY.md`.
 6. **Diagnose `prompt_async`** (see above) before building the spawn path on it.
 7. **Make the retirement threshold configurable** so the Phase 4 exit gate can be exercised at
    5K instead of 350K, and write down what "continuity intact" actually means.
