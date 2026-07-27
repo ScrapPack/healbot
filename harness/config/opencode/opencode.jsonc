@@ -28,15 +28,28 @@
   // (`if (input.cfg.compaction?.auto === false) return false`) disables the overflow check
   // entirely, and processor.ts:607-613 turns a real context overflow into
   // finish:"error" + status idle. So the ceiling is a HARD ERROR, not a compaction.
-  // Retirement must fire well before it. With a 922,000-token input limit and a 350K
-  // retirement threshold there is ~570K of headroom, so this is a safety net rather than a
-  // path anything should reach — but the control terminal must render that error state,
-  // because to the grid it looks like an ordinary idle-after-error.
+  //
+  // THE CEILING IS ~360K, NOT 922,000. This comment used to read "with a 922,000-token input
+  // limit and a 350K retirement threshold there is ~570K of headroom, so this is a safety net
+  // rather than a path anything should reach". MEASURED in Phase 5, and it is false: a session
+  // driven up at the then-default 350K took its last successful turn at occupancy 359,829 and
+  // then failed 25 CONSECUTIVE turns with the provider's ContextOverflowError. The registry's
+  // 922,000 does not describe this provider path. The retirement default came down to 256,000
+  // as a result, with a hard gate at 330,000. See docs/HARDEN.md §6 and docs/HEADLESS.md.
+  //
+  // The control terminal must still render that error state, because to the grid a hard
+  // overflow looks like an ordinary idle-after-error.
   "compaction": {
     "auto": false
   },
 
-  // Trims generic prose out of tool descriptions via the tool.definition hook.
+  // trim-tools: trims generic prose out of tool descriptions via the tool.definition hook.
   // OFF by default — set HARNESS_TRIM_TOOLS=1 to enable. See docs/STRIP.md.
-  "plugin": ["./plugin/trim-tools.ts"]
+  //
+  // auto-retire: HEADLESS automatic retirement. This is the guard that keeps a session from
+  // reaching the ceiling above, and it lives here rather than in the TUI because a fleet left
+  // running with no client attached must still retire. Server plugins load in `opencode serve`
+  // AND in the server the TUI hosts in-process, so one registration covers both topologies.
+  // Kill switch: HEALBOT_AUTO_RETIRE=0. See docs/HEADLESS.md.
+  "plugin": ["./plugin/trim-tools.ts", "./plugin/auto-retire.ts"]
 }

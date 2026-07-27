@@ -125,13 +125,25 @@ def boot(port, db, cols=170, rows=48, settle=25):
     return t
 
 
-def serve(port, db, timeout=90):
+def serve(port, db, timeout=90, log=None, env_extra=None):
     """A long-lived headless server, separate from any TUI — PLAN.md:335's architecture.
 
     Returns the Popen. This is what makes the cold-start reconcile reachable: pending
     permission and question requests live in an in-memory Map inside the SERVER
     (`permission/index.ts:24,50`), so as long as the server outlives the client, a block can
     predate the client and `healbot.tsx`'s `reconcile()` has something to recover.
+
+    `log` redirects the server's merged stdout/stderr to a file the caller can read WHILE the
+    server runs. The default `subprocess.PIPE` cannot be read incrementally without either a
+    reader thread or risking a deadlock when the pipe buffer fills, and since Phase 6 the server
+    is where automatic retirement actually happens — `harness/config/opencode/plugin/
+    auto-retire.ts` reports arming and every retirement there. A headless test that cannot read
+    the server's log cannot see the thing it is testing.
+
+    `env_extra` sets variables for the SERVER process specifically. That distinction became
+    load-bearing in Phase 6: the retirement thresholds are read by the server plugin, not by the
+    client, so a rig that only exports them into its own environment before `attach()` is
+    configuring the wrong process.
     """
     import subprocess
 
@@ -140,11 +152,13 @@ def serve(port, db, timeout=90):
     env = dict(os.environ)
     env["OPENCODE_DB"] = db
     env.setdefault("OPENCODE_CLIENT", "cli")
+    env.update(env_extra or {})
+    sink = open(log, "w", encoding="utf-8") if log else subprocess.PIPE
     proc = subprocess.Popen(
         ["/bin/zsh", "-c", inner],
         cwd=PROJECT,
         env=env,
-        stdout=subprocess.PIPE,
+        stdout=sink,
         stderr=subprocess.STDOUT,
         text=True,
     )
