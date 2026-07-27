@@ -17,10 +17,30 @@ const MIN_CELL_WIDTH = 30
 const CELL_HEIGHT = 6
 
 /**
- * Border state, highest precedence first. RED/YELLOW outrank activity because they are
- * the states that need a human: the session is blocked until someone answers.
+ * Context occupancy at which a session should be retired, in tokens. Env-overridable so the
+ * exit gate can actually be exercised: `PLAN.md:379-381` requires a session "driven past the
+ * retirement threshold", and `REVIEW.md` §4.3 records that clause as unadjudicable precisely
+ * because no threshold was configurable anywhere in the deliverable.
+ *
+ * 350K against `gpt-5.6-sol`'s 922,000 `limit.input` leaves ~570K of headroom. That margin is
+ * load-bearing rather than generous: the harness sets `compaction.auto: false`, `overflow.ts:28`
+ * then disables the overflow check outright, and `processor.ts:607-613` turns a real overflow
+ * into `finish: "error"` + status idle. Filling the window is a HARD ERROR, not a compaction,
+ * so retirement is the only thing standing between a long session and that error.
+ *
+ * Floor, measured: a freshly spawned and seeded session reads ~4.8K on its very first turn,
+ * almost all of it `cache.read` — the standing-context prefix. A threshold at or below that
+ * fires on turn one and proves nothing.
  */
-type CellState = "blocked-permission" | "blocked-question" | "busy" | "done" | "idle"
+const RETIRE_AT = Math.max(1, Number(process.env["HEALBOT_RETIRE_AT"]) || 350_000)
+
+/**
+ * Border state, highest precedence first. RED/YELLOW outrank everything because they are the
+ * states that need a human *now*: the session is blocked until someone answers. RETIRE
+ * outranks activity because a session over the threshold keeps spending toward a hard error
+ * while it works, and the cell still carries its occupancy so "working" is not lost.
+ */
+type CellState = "blocked-permission" | "blocked-question" | "needs-retire" | "busy" | "done" | "idle"
 
 /**
  * Pending requests recovered by the cold-start reconcile, grouped by session — see
@@ -67,9 +87,38 @@ function without<T extends { id: string }>(map: Map<string, T[]>, sessionID: str
   return out
 }
 
+/**
+ * Live context OCCUPANCY for a session, in tokens — how full the window is right now.
+ *
+ * Deliberately not `session.tokens`: that is lifetime spend and answers a different question.
+ * The reference 101-turn session shows 652K input against 8.7M `cache.read`, which says nothing
+ * about how full its window is. The quantity a retirement trigger needs is the one
+ * `isOverflow` itself reads (`session/overflow.ts:21-33`) — the assistant message's own
+ * `tokens`, delivered on every `message.updated` — with **`cache.read` included**, because the
+ * cached prompt prefix is part of the window.
+ *
+ * Scans backwards for the most recent populated reading rather than taking the last message.
+ * An assistant row is created ~20ms before its turn actually runs and carries all-zero tokens
+ * until then (the same race that produced a false `prompt_async` defect report), so reading
+ * `messages.at(-1)` blindly reports 0 for every session that is mid-turn.
+ */
+function occupancyOf(sync: ReturnType<typeof useSync>, sessionID: string): number {
+  const messages = sync.data.message[sessionID] ?? []
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
+    if (message.role !== "assistant") continue
+    const tokens = message.tokens
+    if (!tokens) continue
+    const total = tokens.total || tokens.input + tokens.output + tokens.cache.read + tokens.cache.write
+    if (total > 0) return total
+  }
+  return 0
+}
+
 function stateOf(sync: ReturnType<typeof useSync>, cold: Cold, sessionID: string): CellState {
   if (pendingPermission(sync, cold, sessionID).length > 0) return "blocked-permission"
   if (pendingQuestion(sync, cold, sessionID).length > 0) return "blocked-question"
+  if (occupancyOf(sync, sessionID) >= RETIRE_AT) return "needs-retire"
   const status = sync.data.session_status[sessionID]
   // Absent is meaningful: the server deletes the key on idle (session/status.ts:42-45), so
   // the HTTP seed only ever carries busy/retry. Key present + idle ⇒ it ran and finished in
@@ -86,6 +135,11 @@ function borderColor(api: TuiPluginApi, state: CellState, selected: boolean) {
       return theme.error
     case "blocked-question":
       return theme.warning
+    case "needs-retire":
+      // PLAN.md reserved purple for `session.next.compaction.started`, which REVIEW R3 proved
+      // cannot fire on the v1 path under any flag — so the colour is free, and retirement is
+      // what compaction was going to signal anyway.
+      return theme.secondary
     case "busy":
       return theme.accent
     case "done":
@@ -101,6 +155,8 @@ function label(state: CellState) {
       return "PERMISSION"
     case "blocked-question":
       return "QUESTION"
+    case "needs-retire":
+      return "RETIRE"
     case "busy":
       return "working"
     case "done":
@@ -141,6 +197,12 @@ function Cell(props: {
     const messages = sync.data.message[props.sessionID] ?? []
     return messages[messages.length - 1]
   })
+  // Occupancy as a share of the retirement threshold, because "how close am I to being
+  // retired" is the question the operator is actually asking. Kept on the meta line rather
+  // than the state line so that a cell whose border has gone RETIRE still shows what it is
+  // doing — RETIRE outranks `working`, and without this the activity would just vanish.
+  const occupancy = createMemo(() => occupancyOf(sync, props.sessionID))
+  const share = createMemo(() => (occupancy() > 0 ? `${Math.round((occupancy() / RETIRE_AT) * 100)}%` : undefined))
 
   return (
     <box
@@ -158,6 +220,9 @@ function Cell(props: {
       </box>
       <box flexDirection="row">
         <text fg={borderColor(props.api, state(), props.selected)}>{label(state())}</text>
+        <Show when={state() === "needs-retire" && sync.data.session_status[props.sessionID]?.type === "busy"}>
+          <text fg={theme().accent}> · working</text>
+        </Show>
         <Show when={props.parentID}>
           <text fg={theme().textMuted}> · subagent</text>
         </Show>
@@ -167,6 +232,7 @@ function Cell(props: {
           [
             todos().length > 0 ? `${todos().length} todo` : undefined,
             last() ? `${(sync.data.message[props.sessionID] ?? []).length} msg` : "no history",
+            share(),
           ]
             .filter(Boolean)
             .join(" · "),
@@ -430,6 +496,11 @@ function Healbot(props: { api: TuiPluginApi; selected: () => number; setSelected
   }))
 
   const blocked = createMemo(() => sessions().filter((item) => isBlocked(item.id)).length)
+  // Counted independently of `blocked`, and off occupancy rather than off `stateOf`: a session
+  // that is over the threshold AND blocked renders as PERMISSION — blocked outranks retire —
+  // but it still needs retiring once answered, and the header is the only place that survives
+  // the precedence collapse.
+  const retirable = createMemo(() => sessions().filter((item) => occupancyOf(sync, item.id) >= RETIRE_AT).length)
 
   return (
     <box
@@ -451,6 +522,12 @@ function Healbot(props: { api: TuiPluginApi; selected: () => number; setSelected
           <text fg={theme().error}>
             {"  "}
             {blocked()} blocked
+          </text>
+        </Show>
+        <Show when={retirable() > 0}>
+          <text fg={theme().secondary}>
+            {"  "}
+            {retirable()} to retire
           </text>
         </Show>
         <box flexGrow={1} />

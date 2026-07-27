@@ -263,7 +263,80 @@ All four surviving warnings are `typescript-eslint(no-unsafe-type-assertion)` on
 
 ---
 
-## 9. What this changes elsewhere
+## 9. Step 6a — the retirement observable (added 2026-07-27)
+
+Continuing the build order. Two things had to be settled before the handoff protocol could be
+built on them.
+
+### `prompt_async` was never broken — REFUTED, TESTED
+
+`REVIEW.md` flagged *"`POST /session/{id}/prompt_async` accepts a prompt and executes nothing"*
+as a live defect and told Phase 4 to find a workaround, because `PLAN.md:335`/`:341` build the
+spawn-and-seed path on it. Both paths run side by side on one server:
+
+| | ack | turn |
+|---|---:|---|
+| `POST /session/{id}/message` | 5.1 s (blocking) | `finish: "stop"`, text `PONG` |
+| `POST /session/{id}/prompt_async` | **0.01 s** | completes **2.0 s after the ack**, `finish: "stop"`, text `PONG` |
+
+Same model, tokens accrued normally, no `Session.Event.Error`. Spawn-and-seed works: a fresh
+session seeded through it replied and started at its own occupancy.
+
+**Why it looked broken.** `prompt_async` creates the assistant message row within ~20 ms of the
+ack, and that row is **empty** until the turn runs. Poll for "an assistant message exists" and
+it is true almost immediately with no content. The completion signal is the message's own
+`time.completed` / `finish`. This session made the identical mistake on its first attempt and
+caught it only because the run also asserted the text matched the synchronous control. Source
+agreed all along: `handlers/session.ts:311-328` calls the same `promptSvc.prompt()` wrapped in
+`Effect.forkIn(scope, …)`, and `scope` is bound at `:62` in the `HttpApiBuilder.group()`
+construction generator — the layer scope, which outlives any request.
+
+### A threshold that can actually be reached — 17/17
+
+`RETIRE_AT` now reads `HEALBOT_RETIRE_AT`, default 350,000. Occupancy comes from the assistant
+message's own `tokens` — the same expression `isOverflow` uses (`overflow.ts:21-33`), with
+`cache.read` included — not from `session.tokens`, which is lifetime spend.
+
+| | |
+|---|---|
+| grower, after reading three 130 KB ledger files | occupancy **37,179** |
+| two quiet sessions | 4,969 each |
+| grid | cell `RETIRE`, header `1 to retire`, meta line `186%` |
+
+37,179 is far below the 350K default, so `RETIRE` can only be explained by the override
+reaching the TUI worker. Precedence checked both ways: blocking the over-threshold session
+flipped its cell to `PERMISSION` while the header carried **both** `1 blocked` and
+`1 to retire`; answering from the grid reverted it to `RETIRE` rather than to `done`.
+
+**A number that constrains the design.** A freshly spawned and seeded session reads ~**4.8 K**
+on its first turn, almost all `cache.read` — the standing-context prefix. That is the occupancy
+floor, and it rules out the 5 K threshold `HARNESS.md` suggested for cheap testing: it would
+fire on turn one.
+
+`occupancyOf` scans backwards for the most recent *populated* reading rather than taking
+`messages.at(-1)`, for the same reason the `prompt_async` report was wrong — an in-flight
+assistant row reads all-zero, and mid-turn sessions are exactly the ones you want a number for.
+
+### Two more test-harness bugs, same class as §6's
+
+Both were mine, both found by the assertions disagreeing with the screen dump:
+`Term.find()` lowercases, so `find("RETIRE")` also matches the header's `1 to retire`. The
+fix is a case-sensitive `exact()` helper — cell labels are uppercase, header phrasing is
+lowercase, and only case tells them apart. Worth recording because three of the four failures
+across this whole effort have been substring collisions in assertions, not defects.
+
+### Still not built
+
+The handoff itself — `summarize` + `/todo` + `/diff`, spawn, seed, archive the old session,
+re-point the grid slot. It needs **"continuity intact"** defined; the term appears in the exit
+gate with no definition and no check anywhere in the tree, and it determines what goes into the
+handoff document and what the check asserts. The mechanism around it is now unblocked:
+`prompt_async` works, the threshold is reachable, and `PATCH time.archived` is known to hide a
+session from nothing, so the grid must filter retired sessions itself.
+
+---
+
+## 10. What this changes elsewhere
 
 Per the process rule adopted in `docs/REVIEW.md` — every phase revises the artifacts it
 contradicts — this pass edits `HARNESS.md`:

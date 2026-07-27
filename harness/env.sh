@@ -67,6 +67,16 @@ export OPENCODE_DISABLE_CLAUDE_CODE
 # config/opencode/plugin/trim-tools.ts for why it is not a default.
 # HARNESS_TRIM_TOOLS=1; export HARNESS_TRIM_TOOLS
 
+# Healbot retirement threshold, in tokens of live context OCCUPANCY (not lifetime spend).
+# Defaults to 350000 inside the grid; set this only to exercise retirement cheaply, since
+# reaching 350K on a frontier model on purpose is expensive. TESTED at 20000.
+#
+# Do NOT set it below ~5000: a freshly spawned and seeded session measures ~4,800 on its very
+# first turn, almost all of it cache.read (the standing-context prefix), so anything at or
+# under that fires immediately and proves nothing. The 5K figure HARNESS.md once suggested is
+# below the floor.
+# HEALBOT_RETIRE_AT=20000; export HEALBOT_RETIRE_AT
+
 # NOT SET, on purpose:
 #   OPENCODE_DISABLE_DEFAULT_PLUGINS -- BREAKS THE HARNESS. The "default plugins" are the 10
 #                                 built-in provider AUTH plugins. With OpenAI on oauth, this

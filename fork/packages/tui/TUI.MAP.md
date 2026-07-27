@@ -305,7 +305,7 @@ Not exported: `./context/data`, `./context/local`, `./context/route`, `./context
 | Full-screen box to fill | `src/app.tsx:1111` | `flexGrow={1} minHeight={0} flexDirection="column"` — mirror this in the grid root |
 | Focus a session | `src/context/route.tsx:37-39` via `plugin/adapters.tsx:47-52` | `api.route.navigate("session", { sessionID })` |
 | Return path | `src/app.tsx:1122` ← `route.navigate({type:"home"})` | stash `returnRoute: api.route.current` on entry (pattern: `diff-viewer.tsx:1065`) |
-| Border colors | `src/theme/index.ts:36-53` | `api.theme.current.{error,warning,success,primary,textMuted,border,borderActive}` |
+| Border colors | `src/theme/index.ts:36-53` | `api.theme.current.{error,warning,secondary,accent,success,primary,text,textMuted,border,borderActive}`. The grid maps them: `error`=PERMISSION, `warning`=QUESTION, `secondary`=RETIRE (magenta — PLAN's purple was reserved for `session.next.compaction.started`, which REVIEW R3 proved cannot fire on v1, so it was free), `accent`=working, `success`=done |
 | Frame chars | `src/ui/border.ts:1-21` | `EmptyBorder`/`SplitBorder` for non-default frames |
 | In-route keybindings | `src/keymap.tsx:29` | `useBindings(() => ({ commands, bindings }))` inside the route component |
 | Seed the grid cell list/sort | `src/component/dialog-session-list.tsx:80-81,195,237-238` | already merges `sync.data.session` + `session_status` and derives "working" |
