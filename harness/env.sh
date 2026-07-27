@@ -73,22 +73,35 @@ export OPENCODE_DISABLE_CLAUDE_CODE
 # HARNESS_TRIM_TOOLS=1; export HARNESS_TRIM_TOOLS
 
 # Healbot retirement threshold, in tokens of live context OCCUPANCY (not lifetime spend).
-# Defaults to 256000. This line used to say "inside the grid"; the number is right and the place
-# was wrong. Since Phase 6 the ENFORCING default lives in the SERVER plugin --
-# config/opencode/plugin/healbot.ts:110 -- which is the only thing that retires anything. The grid
-# reads the same variable at fork/.../healbot.tsx:53 purely to paint: the RETIRE border, the
-# `N to retire` count, the share-of-gate figure. Both default to 256000, so they agree until you
-# set this for one process and not the other, and the process that matters is the server's.
+# Defaults to 180000, and it is the ONLY gate -- there is no second one any more.
+#
+# The ENFORCING default lives in the SERVER plugin, config/opencode/plugin/healbot.ts, which since
+# Phase 7 is the only thing that retires anything at all: the automatic gate, the operator's `x`
+# (relayed as a metadata request) and healbot_retire all run the same code in that one process.
+# The grid reads the same variable purely to paint -- the RETIRE border, the `N to retire` count,
+# the share-of-gate figure. Both default to the same number, so they agree until you set this for
+# one process and not the other, and the process that matters is the server's.
 #
 # Set this only to exercise retirement cheaply, since reaching the real gate on a frontier model
 # on purpose is expensive. TESTED at 20000.
 #
-# WHY 256000 AND NOT 350000. The ceiling is ~360K, NOT the 922,000 limit.input the model
-# registry advertises: a session driven up took its last good turn at occupancy 359,829 and
-# then failed 25 turns in a row with the provider's ContextOverflowError. Nothing is truncated
-# on the way -- opencode sends the whole history every turn until the provider refuses it -- so
-# the failure is a cliff, not a slope, and the threshold needs real headroom rather than the
-# ~10K that 350K left. See docs/HARDEN.md §6.
+# WHY 180000. Two corrections stacked, and the second is the reason for this number.
+#
+#   1. The ceiling is ~360K, NOT the 922,000 limit.input the model registry advertises: a session
+#      driven up took its last good turn at occupancy 359,829 and then failed 25 turns in a row
+#      with the provider's ContextOverflowError. Nothing is truncated on the way -- opencode sends
+#      the whole history every turn until the provider refuses it -- so the failure is a cliff, not
+#      a slope. That took the default from 350000 to 256000 in Phase 5. See docs/HARDEN.md §6.
+#   2. The gate WAITS FOR THE TURN TO END, and Phase 7 deleted the second gate that used to bound
+#      how far a turn could carry a session past the line. Waiting means accepting whatever that
+#      turn adds, MEASURED at up to ~170K on one turn. With one gate the arithmetic is
+#      RETIRE_AT + worst_turn < ceiling, so anything at or above ~190000 can be carried off the
+#      cliff by one ordinary read-heavy turn. 180000 + ~170K = ~350K, just inside. See
+#      docs/RELAY.md.
+#
+# So: lower it freely, raise it only with a new measurement of worst-case single-turn growth.
+# Raising it to 256000 without restoring a second gate is the one change that silently
+# reintroduces the failure this whole threshold exists to prevent.
 #
 # Do NOT set it below ~5000: a freshly spawned and seeded session measures ~4,800 on its very
 # first turn, almost all of it cache.read (the standing-context prefix), so anything at or
@@ -96,26 +109,25 @@ export OPENCODE_DISABLE_CLAUDE_CODE
 # below the floor.
 # HEALBOT_RETIRE_AT=20000; export HEALBOT_RETIRE_AT
 
-# NO EFFECT UNDER THE SHIPPED PREDICATE. Setting this changes nothing. The variable and its
-# 330000 default are kept in the code rather than deleted, and are logged at arm time, but they
-# cannot decide an outcome.
+# HEALBOT_RETIRE_HARD IS GONE. Deleted in Phase 7, not merely disabled -- if you have it in a
+# shell profile or a script, remove it; nothing reads it.
 #
-# This block used to read: "the HARD gate, default 330000. Crossing HEALBOT_RETIRE_AT lets the
-# turn in flight finish; crossing this one retires mid-turn, aborting it" -- justified by a
-# measured turn that took occupancy 5,216 -> 175,090 on its own. The measurement is real; the
-# semantics were not. HEALBOT_RETIRE_AT already fires at a STEP boundary and already aborts the
-# turn in flight, so this gate's only consumer -- healbot.ts's `if (!stepOver && !hard) return`
-# -- is dominated and never runs. VERIFIED in the code, MEASURED on 733 real assistant messages
-# (733/733 arrive at a step boundary). It becomes live again the day the predicate is made
-# per-turn, which is the reason it is kept.
+# It was a second gate at 330000 that would retire mid-turn, aborting it, to bound the overshoot
+# the first gate's finish-the-turn rule allows. The justification was a real measurement (one turn
+# taking occupancy 5,216 -> 175,090 on its own). But it never once fired: the predicate that was
+# supposed to hold the soft gate back read `finish` directly, and that field is set at every step,
+# so the soft gate was already firing mid-turn and the hard gate's only consumer was dominated on
+# 733/733 measured messages.
 #
-# See HARNESS.md, "The gate fires at a STEP boundary, not at the end of a turn" -- the
-# load-bearing-facts block, which names the one function that would resurrect this knob.
-# HEALBOT_RETIRE_HARD=330000; export HEALBOT_RETIRE_HARD
+# Phase 7 made the predicate per-turn (opencode's own, prompt.ts:1295) and deleted this knob rather
+# than resurrect it. The margin it was meant to provide now comes from HEALBOT_RETIRE_AT being low
+# enough to absorb a worst-case turn -- see above. One gate, one number, no knob that reads as
+# load-bearing and is not.
 
-# Automatic retirement is ON by default: cross the gate, and at that step boundary the turn in
-# flight is ABORTED, a handoff goes to a fresh session, the old one is archived, and the successor
-# picks the work up immediately. This line used to say "finish the turn" -- see the corrected
+# Automatic retirement is ON by default: cross the gate, the turn in flight is allowed to FINISH,
+# then a handoff goes to a fresh session, the old one is archived, and the successor picks the work
+# up immediately. Nothing is aborted on this path. (For one commit in Phase 7 that was not true and
+# this line said so; the predicate is per-turn now.) See the corrected
 # description above the hard gate. Set to 0 for the old operator-initiated behaviour where the
 # cell goes RETIRE and `x` performs the handoff.
 # HEALBOT_AUTO_RETIRE=0; export HEALBOT_AUTO_RETIRE

@@ -5,12 +5,17 @@ without a client, close the two open questions that had been deferred since Phas
 last non-optional step of `PLAN.md`'s build order.
 
 > **Phase 7 erratum — read before trusting this document's account of the gate.** A review of this
-> phase established that the gate fires at a **step** boundary, not at the end of a turn, and that
-> `RETIRE_HARD` is therefore inert. Every statement below that says the turn in flight is allowed
-> to finish is wrong; the turn is aborted. The behaviour is *better* than what this document
-> claims — overshoot is bounded by one step (~65K) rather than one turn (~170K) — but it is not
-> what was written. Corrections are marked inline. The full account is in `HARNESS.md`'s
-> load-bearing facts. This document is otherwise left as the Phase 6 record.
+> phase found that the gate fired at a **step** boundary, not at the end of a turn, and that
+> `RETIRE_HARD` had been inert since it was written. So every statement below about the turn in
+> flight finishing was true of the *design* and false of the *code*.
+>
+> It is true again. Phase 7 replaced the predicate with opencode's own (`prompt.ts:1295`, which
+> excludes `"tool-calls"`), so the turn does now run to completion and nothing is aborted on the
+> gate path — and it **deleted** `RETIRE_HARD` rather than resurrect it, which forced the threshold
+> down from 256,000 to **180,000**: with one gate, `RETIRE_AT` must absorb a worst-case turn
+> (~170K measured) under the ~360K ceiling. Wherever this document says "soft gate" and "hard
+> gate", there is now one gate. `docs/RELAY.md` has the arc and the arithmetic; corrections to
+> specific claims are marked inline below. This document is otherwise left as the Phase 6 record.
 
 ---
 
@@ -356,8 +361,8 @@ Added by this phase:
 - **Cold start on the gate.** The trigger is purely event-driven, so a server that restarts with a
   session already over the threshold does nothing until that session's next turn. In practice the
   next turn's first `message.updated` carries the occupancy and ~~the hard gate catches it
-  mid-turn~~ — **Phase 7: the SOFT gate catches it, at that turn's first step boundary. The hard
-  gate is inert and could not have caught anything** — but a startup sweep would close it properly.
+  mid-turn~~ — **Phase 7: the gate catches it at the END of that turn. The hard gate never could
+  have: it was inert, and it has since been deleted** — but a startup sweep would close it properly.
   Deliberately not built: a server restart causing mass retirement is a policy decision, not a bug
   fix.
 - **The manual/automatic double-retire window is ~~narrowed, not closed~~ neither narrowed nor

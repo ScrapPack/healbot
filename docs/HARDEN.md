@@ -331,15 +331,17 @@ The same run measured the cost of "let it finish", and it is much larger than it
 | 4 — one tool result | **70,898** |
 | 6 — `stop` | **175,090** |
 
-> **The data is right; the reasoning built on it was not.** Note the column header: this is
-> **per-STEP** occupancy, and it was read as though it were per-turn. Phase 7 measured that the
-> *shipped* gate is evaluated at every step boundary rather than at the end of a turn (see the
-> note below §7's two-gate paragraph), so the row that matters for sizing it is the step-to-step
-> delta — **5,216 → 70,898 is ~65K of single-step growth** —
-> not the 5,216 → 175,090 span of the whole turn. That is the measurement which, read correctly,
-> shows the per-step gate has adequate margin: crossing at 256,000 exposes one more step, ~65K,
-> and lands near 321,000, inside the ~360K ceiling. See `HARNESS.md`, "The gate fires at a STEP
-> boundary".
+> **The data is right, and it is the single most load-bearing measurement in this repo — it now
+> sets the shipped threshold.** Note the column header: this is **per-STEP** occupancy. Phase 7
+> found the shipped gate was firing per step while every document claimed per turn, briefly kept
+> that behaviour (in which case only the ~65K step-to-step delta mattered), and then reversed:
+> the predicate is now per-TURN and the second gate is deleted. So the number that sizes the gate
+> is the **whole-turn span, 5,216 → 175,090, ~170K** — the figure this table was originally read
+> as giving, which turned out to be the right reading for the wrong code.
+>
+> With one per-turn gate the requirement is `RETIRE_AT + worst_turn < ceiling`, so `RETIRE_AT` came
+> down to **180,000**: 180,000 + ~170K = ~350K, inside the ~360K ceiling. Anything at or above
+> ~190,000 can be carried off the cliff by one turn like this one. See `docs/RELAY.md`.
 
 **One turn added ~170K.** Apply that to a 256,000 soft gate: a session sitting just under it
 that starts one more read-heavy turn finishes near **426,000** — past the ~360K ceiling, dead,
@@ -363,13 +365,17 @@ and produces no handoff.
 > `finish` and `tokens` in one mutation at every `step-finish`, with `:445` the only site in the
 > session tree writing a non-zero `tokens`. So every event carrying occupancy also carries a set
 > `finish`, usually `"tool-calls"`. MEASURED in Phase 7 on 733 real assistant messages with
-> occupancy > 0: **zero** had a null `finish`. The gate now fires at the first STEP boundary past
-> `RETIRE_AT` and aborts the turn in flight, and `RETIRE_HARD` is **inert** — its only consumer is
-> dominated by a condition true on 733/733, and no rig has executed the branch.
+> occupancy > 0: **zero** had a null `finish`. So for two phases the gate fired at the first STEP
+> boundary past `RETIRE_AT`, aborting the turn in flight, and `RETIRE_HARD` was **inert** — its
+> only consumer dominated by a condition true on 733/733, with no rig ever executing the branch.
 >
-> The outcome is better than the design, not worse, and it was arrived at by accident: exposure is
-> one step (~65K) rather than one turn (~170K). The hard-gate constant is kept in the code and
-> documented as dead, because the hinge is a single function — swap the plugin's `stepFinished()`
+> **Both halves of this section's design are now real for the first time, except there is only one
+> gate.** Phase 7 replaced the predicate with opencode's own (`prompt.ts:1295`, which excludes
+> `"tool-calls"`), so the turn in flight does finish and nothing is aborted — and it DELETED
+> `RETIRE_HARD` rather than resurrect it, moving the margin onto `RETIRE_AT`, which came down to
+> 180,000. Read this section's two-gate design as history: the finish-first half describes the
+> shipped behaviour, the hard-gate half describes a constant that no longer exists. The former
+> hinge — swap the plugin's predicate
 > for opencode's own per-turn predicate and both the finish-first semantics above and this hard
 > gate come back the same day. `HARNESS.md` carries the load-bearing facts.
 
@@ -415,11 +421,13 @@ Added by this phase:
 - **The soft gate is workload-dependent.** 256,000 is right if turns add ~50K; a turn that adds
   ~170K needs the hard gate to catch it. If `RETIRE_HARD` fires routinely for a given workload,
   the soft gate is too high for that workload rather than the hard gate being too low.
-  > **Corrected in Phase 7.** The dependence is real but the unit is wrong, and so is the
-  > remedy. The gate fires per STEP, so what has to fit in the margin is one **step**, not one
-  > turn — ~65K measured, against ~104K of headroom below the ~360K ceiling. `RETIRE_HARD` can
-  > never catch anything; it is inert. Re-tune 256,000 only if a single step is ever measured
-  > above ~100K. `HARNESS.md`.
+  > **This bullet was right about the unit and wrong about the remedy — and Phase 7 corrected it
+  > twice, so ignore any version but this one.** There is no hard gate any more; it was deleted
+  > after being measured inert since it was written. The dependence is real and the unit is the
+  > **turn**, ~170K measured, which is exactly why the single gate is 180,000 rather than 256,000:
+  > `RETIRE_AT + worst_turn < ceiling`. Re-tune only against a new measurement of worst-case
+  > single-TURN growth — and note ~170K is one data point, which `NEXT.md` carries as open work.
+  > `docs/RELAY.md`.
 - **The 256K gate has not been exercised end to end at its real value.** Automatic retirement is
   TESTED at 20,000 and the threshold comparison is a single `>=`, so the risk is low — but the
   full-scale run at 256,000 has not been paid for.

@@ -67,9 +67,9 @@ def read(path):
 
 
 def default_of(source, name):
-    """The numeric default in `const NAME = Math.max(1, Number(process.env[...]) || 256_000)`.
+    """The numeric default in `const NAME = Math.max(1, Number(process.env[...]) || 180_000)`.
 
-    Matches the literal with underscores intact, then strips them — `256_000` and `256000` are
+    Matches the literal with underscores intact, then strips them — `180_000` and `180000` are
     the same number to TypeScript and must be the same number here, or the check would report a
     difference in formatting as a difference in behaviour.
     """
@@ -110,7 +110,7 @@ r.check(
 # MUTATION CHECK. If the extractor silently returned None twice, the equality above would still
 # be False-y in a way that looks like a real comparison; and if it returned a constant, the
 # comparison could never fail. Corrupt one side and require a difference.
-mutated_at = default_of(grid.replace("|| 256_000", "|| 999_000", 1), "RETIRE_AT")
+mutated_at = default_of(grid.replace("|| 180_000", "|| 999_000", 1), "RETIRE_AT")
 r.check(
     "mutation check: a changed RETIRE_AT default IS detected",
     mutated_at is not None and mutated_at != plugin_at,
@@ -130,9 +130,9 @@ for var in ("HEALBOT_RETIRE_AT",):
 # The hard gate and the kill switch now live ONLY in the plugin — the grid no longer fires, so it
 # has no use for either. Asserted so that re-adding a stale copy to the grid is a test failure.
 r.check(
-    "HEALBOT_RETIRE_HARD is the plugin's alone",
-    "HEALBOT_RETIRE_HARD" in plugin and "HEALBOT_RETIRE_HARD" not in grid,
-    "a second copy in the grid would be a threshold nothing reads",
+    "HEALBOT_RETIRE_HARD is GONE from both — Phase 7 deleted the second gate",
+    "HEALBOT_RETIRE_HARD" not in plugin and "HEALBOT_RETIRE_HARD" not in grid,
+    "it was inert for two phases; a knob that reads as load-bearing and is not must not grow back",
 )
 r.check(
     "HEALBOT_AUTO_RETIRE is the plugin's alone",

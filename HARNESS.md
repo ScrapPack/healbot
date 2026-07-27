@@ -17,7 +17,7 @@ Phase docs, newest first:
 | Doc | Phase | Read it for |
 |---|---|---|
 | [NEXT.md](NEXT.md) | 8 | **Start here if you are a fresh session.** The prompt to continue the build, and the traps that silently produce wrong results instead of errors |
-| [docs/RELAY.md](docs/RELAY.md) | 7 | **The gate was never per-turn.** `finished()` read a per-step field, so the soft gate aborts the turn in flight and `RETIRE_HARD` is inert — five load-bearing sentences corrected. Plus the double-retire race closed by deleting the grid's copy of `retire()`: `x` now relays a request and the server plugin is the only implementation |
+| [docs/RELAY.md](docs/RELAY.md) | 7 | **The gate was never per-turn — so it was made per-turn.** `finished()` read a per-step field, so the gate fired mid-turn and the second gate `RETIRE_HARD` was inert. The predicate is now opencode's own (`prompt.ts:1295`), the hard gate is **deleted**, and `RETIRE_AT` came down to **180,000** to carry the margin the deleted gate used to. Plus the double-retire race closed by deleting the grid's copy of `retire()`: `x` now relays a request and the server plugin is the only implementation |
 | [docs/HEADLESS.md](docs/HEADLESS.md) | 6 | Automatic retirement moved to a **server** plugin so it runs with no client attached — and why "move it to plugin scope" was the wrong mechanism for the right goal. Plus focus and `question.rejected` closed, and the control agent built |
 | [docs/HARDEN.md](docs/HARDEN.md) | 5 | The Phase 4 audit and what it forced: six defects fixed, the rig's vacuous assertions replaced, and `serve` + `attach` built — which closed the cold-start reconcile that was recorded here as *blocked* |
 | [docs/VERIFY.md](docs/VERIFY.md) | 4 | The control terminal, verified on `gpt-5.6-sol`: answering a blocked session from the grid. What is TESTED, what is unreachable, and why the first attempt was void |
@@ -47,7 +47,7 @@ the terminal — use `fleet.sh` instead. It is the architecture `PLAN.md` assume
 
 | File | Owns |
 |---|---|
-| `harness/env.sh` | The switch set. `XDG_CONFIG_HOME` isolation + the skill switch + the claude-code switch, each with its measured justification and a NOT-SET list of the switches that break things |
+| `harness/env.sh` | The switch set. `XDG_CONFIG_HOME` isolation + the skill switch + the claude-code switch, each with its measured justification and a NOT-SET list of the switches that break things. Also the retirement knob: `HEALBOT_RETIRE_AT`, **default 180,000 and the only gate**, with the derivation written out. `HEALBOT_RETIRE_HARD` was deleted in Phase 7 and the file says so — if it is still in a shell profile it reads nothing |
 | `harness/fleet.sh` | `opencode serve` + `opencode attach`: sessions survive the terminal, and the cold-start reconcile becomes reachable. TESTED 10/10 end to end, plus 21/21 on the reconcile itself (`docs/HARDEN.md`). Resolves the fork checkout automatically — the released binary has no grid |
 | `harness/config/opencode/opencode.jsonc` | Model pin, `compaction.auto=false` and why, plugin registration, and the global `healbot_*: deny` that keeps the control tools out of every other session's prompt |
 | `harness/config/opencode/agent/build.md` | The 1,715 B prompt that *replaces* `gpt.txt` |
@@ -175,8 +175,10 @@ Corrected; the earlier rule here was wrong for its own stated purpose.
   this provider path. Actual margin at a 350K threshold: **~10K, under 3%** — roughly one large
   tool result. Since `compaction.auto:false` disables opencode's own overflow check
   (`overflow.ts:28`), nothing catches it before the provider does, and by then the turn is lost.
-  **The 350K default fired too late to be a guard. Lowered to 256,000**, with a second HARD gate
-  at 330,000 — see the retirement rows below. (`docs/HARDEN.md` §6, §8)
+  **The 350K default fired too late to be a guard.** Phase 5 lowered it to 256,000 and added a
+  second HARD gate at 330,000; Phase 7 deleted that second gate and brought the one remaining gate
+  down to **180,000**, which is the shipped default. The arithmetic is in the block below.
+  (`docs/HARDEN.md` §6, §8; `docs/RELAY.md` §1)
 - *`session.tokens` is still useful* — for cost, and it is genuinely cumulative and monotonic
   through compaction (VERIFIED + TESTED, 40/40 sessions match `SUM(step-finish)` exactly). Just
   not for retirement.
@@ -198,28 +200,51 @@ plugin surface is hooks only and `event` is receive-only. Consequence, and it is
 the border still goes purple, `x` still writes its request, and nothing is listening.
 `docs/RELAY.md`.
 
-**The gate fires at a STEP boundary, not at the end of a turn — and there is only ONE live gate.**
-Corrected in Phase 7 after a review; every artifact in this repo asserted the opposite, including
-the two rows in *Still open* below. `processor.ts:443-445` writes `finish` and `tokens` in the same
-mutation at every `step-finish`, and `:445` is the ONLY site in the session tree that writes a
-non-zero `tokens`. So every `message.updated` that carries occupancy also carries a set `finish` —
-usually `"tool-calls"`, i.e. mid-turn. MEASURED on 733 real assistant messages with occupancy > 0:
-**zero** had a null `finish` (677 `tool-calls`, 56 `stop`).
+**The gate fires at the end of a TURN, at 180,000, and it is the ONLY gate. It took three states to
+get here and the middle one was committed.** Every artifact in this repo asserted per-turn while
+the code did something else; a Phase 7 review found it; the first decision was to keep the shipped
+per-STEP behaviour and correct the prose, which is what commit `5bcdeab` and its message say; the
+owner then reversed it. If you are reading anything written before that reversal — including
+`5bcdeab` itself — it describes a per-step gate and a kept-but-inert hard gate, and both are wrong
+now.
 
-- *What actually happens*: the gate fires at the first step boundary above `RETIRE_AT` and
-  `retire()` aborts the turn in flight. Overshoot is bounded by one STEP (~65K) rather than one
-  turn (~170K) — **better** than the behaviour that was designed and documented, arrived at by
-  accident.
-- *`RETIRE_HARD` is INERT.* Its only consumer is `consider()`'s `if (!stepOver && !hard) return`,
-  and `stepOver` is true on 733/733, so `hard` is dominated and never decides anything. No rig has
-  executed the branch. `HEALBOT_RETIRE_HARD` is a knob with no effect. It is kept, and documented
-  as dead, because it becomes load-bearing again the day `stepFinished()` is made per-turn.
-- *The hinge is one function.* `stepFinished()` (`healbot.ts`) vs opencode's own `prompt.ts:1295`,
-  which excludes `["tool-calls","unknown"]`. Swapping them switches the whole harness to per-turn
-  retirement and resurrects the hard gate. Nothing else changes.
-- *What this does NOT change*: the ~360K ceiling, the 256,000 default, or the handoff. The abort
-  discards the in-flight step, so everything handed over comes from what is already persisted —
-  todos, diffs, last completed text. It does.
+*What was actually wrong.* `processor.ts:443-445` writes `finish` and `tokens` in the same mutation
+at every `step-finish`, and `:445` is the ONLY site in the session tree that writes a non-zero
+`tokens`. So every `message.updated` that carries occupancy also carries a set `finish` — usually
+`"tool-calls"`, i.e. mid-turn. `:595-596` sets `time.completed` per step too, in `cleanup()`.
+MEASURED on 733 real assistant messages with occupancy > 0: **zero** had a null `finish` (677
+`tool-calls`, 56 `stop`). The old predicate read `time.completed || finish` and was therefore true
+on 733/733. That measurement is what proved it wrong and it is the case table
+`probe_turn_predicate.py` now runs against the shipped source text (18/18, free).
+
+- *The predicate now.* `turnFinished()` in `harness/config/opencode/plugin/healbot.ts:346-349` is
+  opencode's own, copied from `prompt.ts:1295`: `if (info.error) return true; return
+  Boolean(info.finish && !["tool-calls","unknown"].includes(info.finish))`. It deliberately does
+  **not** read `time.completed`. `consider()`'s guard is a plain `if (!turnOver) return`
+  (`healbot.ts:622`).
+- *Nothing is aborted on the gate path.* The turn is allowed to run to completion and the gate acts
+  in the gap between turns — what `PLAN.md` specified all along. `retire()` still opens with
+  `POST /abort` (`healbot.ts:473`), but there it is a no-op: `turnFinished()` is what got us there.
+  It exists for the race (a new turn starting between the check and the call) and for
+  `healbot_retire`, which the control agent may call on a session that is working right now.
+- *`RETIRE_HARD` is DELETED, and that is why 180,000.* Not disabled — the constant, the `hard`
+  variable, the `if (!stepOver && !hard) return` guard, the env var and its half of the arming log
+  line are all gone from both files. `HEALBOT_RETIRE_HARD` reads nothing. It was a second gate at
+  330,000 that aborted mid-turn to bound the first gate's overshoot, and Phase 7 measured it to
+  have been inert since it was written (its consumer was dominated on 733/733). Deleting it while
+  making the predicate per-turn reintroduced the exact failure it was built for: per-turn means
+  accepting whatever the turn adds, MEASURED at up to ~170K (`docs/HARDEN.md` §6 — occupancy 5,216
+  → 70,898 on one tool result, that turn finishing at 175,090), and against a ~360K ceiling a gate
+  at 256,000 lets a session finish near 426,000 and die. So the threshold came down with the gate.
+  With one gate the requirement is `RETIRE_AT + worst_turn < ceiling`: **180,000 + ~170K = ~350K,
+  just inside.** Anything at or above ~190,000 can be carried off the cliff by one ordinary
+  read-heavy turn.
+- *The arming line names one gate.* `headless retirement armed — gate 180,000 (per-turn, single
+  gate), directory …` (`healbot.ts:903-904`). It used to read `soft N, hard N`;
+  `probe_headless_arm.py` asserts the current spelling and the 180,000 default, 14/14.
+- *What this does NOT change*: the ~360K ceiling, the ~4.8K floor, or the handoff. Nothing is cut
+  off, so everything handed over — todos, diffs, last completed text — comes from a turn that
+  finished.
 
 **Compaction is off, so overflow is a HARD ERROR — and the grid now renders it. Built in Phase
 5; before that it painted GREEN.** `overflow.ts:28` returns `false` outright when
@@ -281,9 +306,9 @@ Things that will silently cost correctness. All cited in the maps.
 | Trap | Where |
 |---|---|
 | **TUI plugin scope has NO Solid owner.** `plugin/tui/runtime.ts`'s `load()` crosses an `await` before `activatePluginEntry` invokes `tui(api)` at `:529`, so the synchronous `createRoot` window has closed. TESTED: `getOwner()` is `null` there. `createSignal`/`createMemo` work (they never touch the owner), but a `createEffect` is **never disposed** and a bare `onCleanup` is a **silent no-op**. This is why "move the retirement trigger to plugin scope" was rejected — and it would not have made it headless anyway, since a TUI plugin needs a TUI | `docs/HEADLESS.md` |
-| **The retirement gate fires per STEP and aborts the turn in flight; `RETIRE_HARD` is INERT.** Anything reasoning about "the turn is allowed to finish" is reasoning about a design that was never built. `processor.ts:443-445` writes `finish` and `tokens` in one mutation at every `step-finish`, and `:445` is the only non-zero `tokens` write in the tree, so `stepFinished()` is true on 733/733 real messages carrying occupancy and the hard gate is dominated. The hinge back to per-turn is one function — opencode's own `prompt.ts:1295` | `docs/RELAY.md` §1 |
+| **Every field that looks like "the turn is over" on an assistant message is set per STEP.** `finish` (`processor.ts:443`), `tokens` (`:445`) and `time.completed` (`:595-596`, in `cleanup()`, which runs per `process()` call) all fire at each `step-finish`, and `prompt.ts:1186-1201` creates a new assistant message per step. MEASURED: 733 real messages carrying occupancy, **zero** with a null `finish` — 677 `"tool-calls"`, 56 `"stop"`. So any NEW code that reads those fields to detect a turn boundary re-creates the defect Phase 7 spent a phase on, and it fails silently, in the direction of acting too early. `turnFinished()` (`healbot.ts:346-349`) — opencode's own predicate from `prompt.ts:1295`, excluding `["tool-calls","unknown"]` and deliberately ignoring `time.completed` — is the only correct reader in this tree; `probe_turn_predicate.py` evaluates its shipped source text against that measured distribution, and re-runs the same table against the old predicate to require it to fail | `docs/RELAY.md` §1 |
 | **Retirement happens in exactly ONE process, and the grid's `x` is only a request.** It writes `metadata.healbot.retireRequested` and returns; if the harness config is not loaded, `x` looks like it worked and nothing retires. Before Phase 7 `x` worked without the harness. The coupling is untyped in both directions — a rename on either side silently stops manual retirement, with no error and no log — which is why `probe_twin.py` mutates both ends | `docs/RELAY.md` §2 |
-| **`verify_headless_retire.py` cannot be pointed at the shipped threshold.** It hardcodes `THRESHOLD = 20_000` at `:52` and forces it into the SERVER's env at `:96-103`, and `rig.py:159` applies `env_extra` last — there is no override to remove. Its one prompt reads ≤50 KB (`read.ts:16`) and it asserts `len(user_turns) == 1`, so editing the constant just times out after 15 minutes. The arming half is covered free by `probe_headless_arm.py` instead | `docs/RELAY.md` §4 |
+| **`verify_headless_retire.py` cannot be pointed at the shipped threshold.** It hardcodes `THRESHOLD = 20_000` at `:52` and forces it into the SERVER's env at `:96-103`, and `rig.py:159` applies `env_extra` last — there is no override to remove. Its one prompt reads ≤50 KB (`read.ts:16`) and it asserts `len(user_turns) == 1`, so editing the constant just times out after 15 minutes. The two halves that can be checked without paying for it are covered free instead: `probe_headless_arm.py` on the arming (that the shipped 180,000 default arms, and that the log line names ONE gate), `probe_turn_predicate.py` on the predicate. What it DOES buy, at 20,000, is the wiring and the per-turn ordering — TESTED 22/22 with the gate crossed mid-turn at step 1 and the turn running on to `stop` at step 5 | `docs/RELAY.md` §4 |
 | **A server plugin gets the v1 SDK client; the TUI gets the v2 one, and they diverge silently.** The v1 client has **no `permission` and no `question` sub-client at all**; its `SessionUpdateData["body"]` is `{title?}` with no `time.archived`; its `SessionCreateData["body"]` has no `directory`. The SERVER accepts all three (`groups/session.ts:53-57`, `handlers/session.ts:200-201`) — the generated v1 types are narrower than the routes. `healbot.ts` writes the requests out with `fetch` rather than casting past the types three times | `docs/HEADLESS.md` |
 | **The session-route sidebar is gated on `width > 120`** (`routes/session/index.tsx:264`), and it is the only thing that renders a session's id. The navigation rigs use exactly 120 so cells cannot fit one row — so a focus assertion written at that width measures terminal geometry, not behaviour. TESTED, it reported a failure that way | `docs/HEADLESS.md` §2 |
 | **There is no key that returns from a session to the grid.** `healbot.open` is namespace `palette` / slashName `healbot` with no binding anywhere; the routes back are `ctrl+p` or typing `/healbot`. `returnRoute` cannot help — `adapters.tsx:47-52` drops every param but `sessionID`. The selection index does survive, in the plugin closure | `docs/HEADLESS.md` §2 |
@@ -339,7 +364,7 @@ Things that will silently cost correctness. All cited in the maps.
 | Has `healbot.tsx` actually been **run**? | **Yes**, TESTED on `gpt-5.6-sol` — rendering, live session state, keyboard ownership, and clearing both a permission and a question block from the grid without focusing. 90/91 assertions (`docs/VERIFY.md`) |
 | Does a session need `permission: {question: "allow"}` to ask? | **No.** `question` is `"deny"` in the shared default block (`agent/agent.ts:127`), but `build` and `plan` each merge `question: "allow"` on top (`agent/agent.ts:141-152`). Only `general` and `explore` subagents inherit the deny |
 | Is `prompt_async` broken? | **No** — REFUTED, TESTED. Acks in 0.01s, turn completes ~2s later, same answer/model/tokens as the sync path. The audit polled a row that exists ~20ms before it fills. Build the spawn-and-seed path on it (`docs/VERIFY.md` §9) |
-| Make the retirement threshold configurable | **Done.** `HEALBOT_RETIRE_AT`, default **256,000** (was 350,000); the grid renders `RETIRE` + `N to retire` + a share-of-threshold figure. TESTED at 20,000 against a session grown to 37,179 while quiet ones sat at 4,969. **Not 5K** — a fresh session's floor is ~4.8K, so 5K fires on turn one |
+| Make the retirement threshold configurable | **Done.** `HEALBOT_RETIRE_AT`, default **180,000** — 350,000 in Phase 4, 256,000 in Phase 5, 180,000 in Phase 7 when the second gate was deleted. `HEALBOT_RETIRE_HARD` is gone and reads nothing. The grid renders `RETIRE` + `N to retire` + a share-of-gate figure off the same variable. TESTED at 20,000 against a session grown to 37,179 while quiet ones sat at 4,969. **Not 5K** — a fresh session's floor is ~4.8K, so 5K fires on turn one |
 | What counts as "continuity intact" for a handoff? | **Defined and TESTED.** The successor must be handed the objective, carry the predecessor's **open** todos in its own list, and be handed a file the predecessor changed — all asserted on artefacts, never on the successor's prose. Retirement is **automatic on the gate**, with `x` as the manual override (`docs/HARDEN.md` §8). 21/21, occupancy 90,310 → 5,649 (`docs/VERIFY.md` §10) |
 | Is the Phase 4 exit gate met? | **Yes**, both clauses, TESTED on `gpt-5.6-sol`. Four concurrent with one answered from the grid without focusing (§2–§5); one driven past the threshold and handed off with continuity intact (§10) |
 | Does auto-retirement work headless? | **Yes**, TESTED 20/20 with no TUI in the process table. It is a **server** plugin, not a TUI one — "move it to plugin scope" would not have achieved it, because a TUI plugin needs a TUI. `docs/HEADLESS.md` |
@@ -378,13 +403,13 @@ multi-step turns.
 |---|---|---|
 | Can an **external** plugin register a route, or only a builtin? | F7 proved a builtin can and that `route.register` is on the public API. The external case is untested, and it decides whether the grid must live inside the fork | ~20 min |
 | Can an external plugin's route survive a real workload? | The grid is a builtin. Everything TESTED here was measured on the builtin path | ~20 min |
-| **Cold start on the retirement gate.** | The trigger is purely event-driven — `consider()` has exactly one call site and there is no polling and no startup sweep — so a server that restarts with a session already over the threshold does nothing until that session's next event. It is then caught at that turn's FIRST step boundary, by the soft gate (**not** by `RETIRE_HARD`, which this row used to credit and which is inert). A startup sweep would close it properly. Deliberately not built: a restart causing mass retirement is a policy decision | policy |
+| **Cold start on the retirement gate.** | The trigger is purely event-driven — `consider()` has exactly one call site and there is no polling and no startup sweep — so a server that restarts with a session already over the threshold does nothing until that session's next event. It is then caught at the END of that turn — one whole turn of consumption later, since Phase 7 made the predicate per-turn. This row has been wrong twice about which gate catches it: it once credited `RETIRE_HARD` (deleted), then the first step boundary (the predicate is per-turn now). A startup sweep would close it properly. Deliberately not built: a restart causing mass retirement is a policy decision | policy |
 | ~~The double-retire window~~ | **CLOSED in Phase 7, by subtraction.** Both halves are gone: the grid no longer runs `retire()` at all (`x` writes `metadata.healbot.retireRequested` and the server plugin serves it), and `consider()` now claims `busy` synchronously before its first await instead of four awaits later. One writer, one document, one flag that means something. TESTED 9/9 free (`probe_request_channel.py`), and TESTED to fail — renaming the key drops it to 5/9. See `docs/RELAY.md` §2 | closed |
 | `verify_control_agent.py` has not been re-executed since its one assertion was corrected | It reported 15/16; the failure was a mis-specified assertion counting the build agent's `task` subagent. The corrected predicate was evaluated against the run's persisted DB and is True, but the file has not been re-run end to end | ~4 turns |
 | The session route does not surface a **dismissed question** on screen | The text is in the session's parts over HTTP (asserted, passing) but not on the visible viewport. Scroll position, how an errored tool part renders, or both — unexamined. A property of the session route, not of the reconcile | ~20 min |
 | Does the grid handle the **remaining** traps? | Sessions created while the grid is open **do** appear (TESTED, VERIFY §5) — but that does not isolate the grid's `session.created → reload()` from the store's `session.updated` path, so the trap is mitigated in behaviour, not proven closed. Still unexercised: RED silent under `--auto`, and archived sessions never leaving the list. *(The project-scoped `session.list()` is now exercised on both the hosted and attached paths.)* | review |
-| Is 256,000 the right gate for *heavy-read* workloads? | **Decided at 256,000 by the owner, and the margin is much better than this row used to claim.** The worry was that one turn measured ~170K of growth, so a session just under the gate could finish near 426K — past the ~360K ceiling — and this row credited `RETIRE_HARD` (330,000) with stopping it. It does not; it is inert. What actually stops it is that the gate fires per STEP, so the exposure is one step (~65K), not one turn (~170K): a session crossing at 256,000 is retired by ~321,000 worst case, inside the ceiling. Re-tune only if a single step is ever measured above ~100K | tune |
-| The **256K gate** has never been exercised at its real value | Automatic retirement is TESTED at 20,000 and the comparison is a single `>=`, so the risk is low — but the full-scale run at 256,000 has not been paid for | ~$ |
+| ~~Is 256,000 the right gate for *heavy-read* workloads?~~ | **Not a tuning question any more. 180,000 is DERIVED, and the derivation is the constraint.** With one gate the requirement is `RETIRE_AT + worst_turn < ceiling`. Worst measured turn growth is **~170K** (`docs/HARDEN.md` §6: occupancy 5,216 → 70,898 on a single tool result, that turn finishing at 175,090). The ceiling is **~360K** MEASURED (last good turn at 359,829, then 25 consecutive `ContextOverflowError`s). So `180,000 + ~170K = ~350K`, just inside; anything at or above ~190,000 can be carried off the cliff by one ordinary read-heavy turn. This row twice claimed a margin it did not have — first crediting `RETIRE_HARD` (330,000, inert, now deleted), then crediting per-STEP firing (~65K exposure, true only for the one commit that shipped it). **Rule for changing it: lower freely; raise only with a new measurement of worst-case single-turn growth** | constraint |
+| The **180K gate** has never been exercised at its real value | Automatic retirement is TESTED at 20,000 and the comparison is a single `>=`, so the risk is low — but the full-scale run at 180,000 has not been paid for. What *is* covered free is the arming (`probe_headless_arm.py`, 14/14) and the turn predicate the gate depends on (`probe_turn_predicate.py`, 18/18) | ~$ |
 | **Phase 3's exit gate is still unmet** — `/code-review ultra` on the `harness/` diff | `PLAN.md:354` makes "code-review ultra findings triaged" an explicit clause. It is user-triggered and billed; it cannot be launched from an agent session. Run it from `~/Desktop/healbot` | user action |
 
 ~~Can the **cold-start reconcile** ever be tested?~~ **Closed, TESTED 21/21** — see the refuted

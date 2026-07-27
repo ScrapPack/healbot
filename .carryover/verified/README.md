@@ -17,9 +17,15 @@ venv/bin/python probe_twin.py        # 23/23 is there still exactly ONE implemen
                                      #       retirement, and does the untyped request channel
                                      #       agree at both ends? (NOT a document comparison any
                                      #       more — see below)
-venv/bin/python probe_headless_arm.py# 15/15 does the retirement guard arm with NOTHING rendering
-                                     #       — including at the SHIPPED 256,000 default, with no
-                                     #       override anywhere?
+venv/bin/python probe_headless_arm.py# 14/14 does the retirement guard arm with NOTHING rendering
+                                     #       — at the SHIPPED 180,000 default, with no override
+                                     #       anywhere, and does the arming line name ONE gate?
+                                     #       (was 15/15; the hard-gate assertions went with the
+                                     #       constant)
+venv/bin/python probe_turn_predicate.py # 18/18 does `turnFinished()` actually distinguish a TURN
+                                     #       from a step? Brace-matches the function out of the
+                                     #       shipped plugin and runs THAT TEXT in node against the
+                                     #       measured message distribution
 venv/bin/python probe_request_channel.py # 9/9 does `x`'s metadata write actually reach the server
                                      #       and retire THAT session and no other? (real server,
                                      #       no model turn — an empty session has no todos, so
@@ -38,15 +44,17 @@ venv/bin/python verify_cold_question.py # 22/22 the question.rejected half of th
 venv/bin/python verify_auto_retire.py # 13/13 automatic retirement WITH THE GRID OPEN. Superseded
                                      #       by the one below; kept because it is the record of
                                      #       the Phase 5 behaviour
-venv/bin/python verify_headless_retire.py # 20/20 automatic retirement with NO TUI ANYWHERE.
+venv/bin/python verify_headless_retire.py # 22/22 automatic retirement with NO TUI ANYWHERE,
+                                     #       and the gate crossed MID-TURN so it discriminates
                                      #       Runs at a HARDCODED 20,000 and cannot be pointed at
-                                     #       256,000 — there is no override to remove; see below
+                                     #       180,000 — there is no override to remove; see below
 venv/bin/python verify_control_agent.py   # 15/16 the control agent's tools, and the scoping that
                                      #       keeps them out of every other session's prompt
 venv/bin/python verify_retire_350k.py# 25/25 retirement at a full-scale threshold.
                                      #       ~5M cumulative input tokens; run it deliberately —
                                      #       and read its docstring first, the 25/25 predates
-                                     #       both the 256,000 default and server-side retirement
+                                     #       server-side retirement AND every threshold since
+                                     #       350,000 (350,000 -> 256,000 -> 180,000)
 ```
 
 **Since Phase 6 the SERVER enforces the retirement thresholds, not the client.** Automatic
@@ -58,7 +66,7 @@ evidence that the thing under test actually happened. Under `boot()` the TUI hos
 in-process, so the ambient environment still reaches it — which is why `probe_error_state.py` and
 `probe_focus.py` can still disarm the gate with `os.environ["HEALBOT_AUTO_RETIRE"] = "0"`.
 
-**`verify_headless_retire.py` cannot be pointed at 256,000, and "just remove the override" is not
+**`verify_headless_retire.py` cannot be pointed at 180,000, and "just remove the override" is not
 an operation you can perform on it.** `THRESHOLD = 20_000` is a bare literal (`:52`) that the rig
 forces into the SERVER's environment itself (`:96-103`, the `env_extra={"HEALBOT_RETIRE_AT":
 str(THRESHOLD), "HEALBOT_AUTO_RETIRE": "1"}` at `:102`), and `rig.py`'s `serve()` applies
@@ -72,23 +80,37 @@ enforced at `:164`, announced to the model at `:345`). Recorded peak occupancy f
 out, and it exits 1. Its docstring says it runs low ON PURPOSE. Wrong vehicle, and it was named as
 the full-scale one for a while.
 
-**What is unbought at 256,000 is narrower than "the 256K gate has never been exercised".** Split it
-in two and only one half costs money. (a) WHICH CONSTANT ARMS is a fact about config resolution and
-it is now TESTED, free, in `probe_headless_arm.py:180-195` — a third server started with
-`env_extra={}` and no `HEALBOT_RETIRE_AT` anywhere, asserted to log `soft 256,000` and
-`hard 330,000`. It is deliberately paired with the pre-existing negative at `:120-124`, which
-requires that same string to be ABSENT when an override IS supplied: one string asserted both ways
-in one run, so neither can be passing for a trivial reason. (b) WHETHER A SESSION DRIVEN TO 256,000
-RETIRES is still TESTED at 20,000 only, and threshold-independent by inspection — the gate is one
-`>=` against a variable. The vehicle that would buy (b) is `verify_retire_350k.py`'s growth loop
-(`MAX_TURNS = 70` at `:82`, `CHUNK_BYTES = 35_000` at `:83`, and it already
-`os.environ.pop("HEALBOT_RETIRE_AT", None)` at `:90`) retargeted to 256,000. Costing, preserved:
-**~$4.50, range $3-9, ~8-15 min wall** — ~27 turns at the recorded 9.46K/turn, cumulative context
-scaling N(N+1)/2, so (27×28)/(37×38) = 0.538 of the 350K run's ~5M tokens ≈ 2.7M: 0.27M cache_write
-at $6.25/M = $1.69, 2.43M cache_read at $0.50/M = $1.22, 54K output at $30/M = $1.62. Load-bearing
-to that number: 256,000 stays UNDER the provider's 272,000 context tier, which DOUBLES every rate,
-so base rates hold throughout — the 350K run crossed into the 2× tier for its last ~8 turns. NOT
-BOUGHT.
+**What is unbought at 180,000 is narrower than "the shipped gate has never been exercised".** Split
+it in two and only one half costs money. (a) WHICH CONSTANT ARMS is a fact about config resolution
+and it is TESTED, free, in `probe_headless_arm.py:170-189` — a third server started with
+`env_extra={}` and no `HEALBOT_RETIRE_AT` anywhere, asserted to log `gate 180,000`, and asserted
+separately (`:180-184`) that the arming line names ONE gate. It is deliberately paired with the
+pre-existing negative at `:114-118`, which requires that same string to be ABSENT when an override
+IS supplied: one string asserted both ways in one run, so neither can be passing for a trivial
+reason. (b) WHETHER A SESSION DRIVEN TO 180,000 RETIRES is still TESTED at 20,000 only, and
+threshold-independent by inspection — the gate is one `>=` against a variable. The vehicle that
+would buy (b) is `verify_retire_350k.py`'s growth loop (`MAX_TURNS = 70` at `:82`,
+`CHUNK_BYTES = 35_000` at `:83`, and it already `os.environ.pop("HEALBOT_RETIRE_AT", None)` at
+`:90`) retargeted to 180,000.
+
+Costing, REDONE for the 180,000 target — the previous version of this paragraph costed a 256,000
+target at ~$4.50 and is superseded, not merely rescaled, because the tier argument under it changed
+sign. **~$2.60, range $1.75-5, ~6-11 min wall.** Turns: 180,000 ÷ the recorded 9.46K/turn = 19.0,
+call it ~19, against 37 turns to reach 350,000. Cumulative context is quadratic — every turn
+re-sends everything before it — so it scales N(N+1)/2 and the ratio to the 350K run is
+(19×20)/(37×38) = 380/1406 = 0.270. Against that run's ~5M cumulative input tokens: 0.270 × 5M =
+1.35M. Split the way the 350K run's was, a tenth of input written to cache and nine tenths read
+back, with ~2K of output per turn: 0.135M cache_write at $6.25/M = $0.84, 1.215M cache_read at
+$0.50/M = $0.61, 38K output at $30/M = $1.14. Sum $2.59. Wall clock scales with turns, 19/27 = 0.70
+of the 8-15 min the 256,000 target would have taken.
+
+The provider-tier point gets STRONGER at 180,000, and this is the part that is not a rescaling. The
+272,000 context tier DOUBLES every rate above it, so the estimate only holds while the largest
+single request stays under it. At 256,000 the margin was 16,000 tokens — under two turns of growth
+at 9.46K/turn, so one long tool result could have tipped the last turns into the 2× tier and the
+estimate with them. At 180,000 the margin is 92,000, about ten turns, and base rates hold for the
+whole run with room to spare. (The 350K run itself crossed into the 2× tier for its last ~8 turns,
+which is why its recorded cost is not simply 5M at base rates.) NOT BOUGHT.
 
 **`verify_control_agent.py` reports 15/16 and that is the recorded result.** The one failure was a
 mis-specified assertion — it counted the build agent's `@general` subagent, which `task`
@@ -99,23 +121,55 @@ top-level session* — and made non-exercise print itself (`:226-236`; see the b
 discipline**). The predicate was evaluated against the run's persisted database and is True where
 the original was False, but the file has NOT been re-executed end to end since either correction.
 
-**The gate fires per STEP, not per turn, and that changes what a retirement rig is observing.**
-`processor.ts:443-445` assigns `finish` and `tokens` in the SAME mutation at every `step-finish`,
-and `:445` is the only site in the session tree that writes a non-zero `tokens` — so every
-`message.updated` that carries occupancy at all also carries a set `finish`, usually
-`"tool-calls"`, i.e. mid-turn. MEASURED across 733 real assistant messages with occupancy > 0:
-zero had a null `finish` (677 `tool-calls`, 56 `stop`). The consequence for these rigs is that
-"the turn finished, then it retired" is not what happens — the turn in flight IS aborted, and
-overshoot past the gate is bounded by one STEP (~65K measured) rather than one whole turn (~170K
-measured). Better than what was designed, arrived at by accident. An assertion written on the
-turn-boundary belief is measuring the wrong thing. Two knock-ons worth knowing before writing
-another retirement rig: `RETIRE_HARD` (330,000) is INERT, because its only consumer is
-`consider()`'s `if (!stepOver && !hard) return` and `stepOver` was true on 733/733, so
-`HEALBOT_RETIRE_HARD` is a knob with no effect — kept in the code, and load-bearing again the day
-the predicate becomes per-turn. And the hinge is one function: the plugin's `stepFinished()`
-versus opencode's own per-turn predicate at `prompt.ts:1295`
-(`finish && !["tool-calls","unknown"].includes(finish)`). Unchanged by any of this: the ~360K
-ceiling, the 256,000 default, and the handoff document.
+**The gate waits for the TURN, and the version of this paragraph written a few hours ago said the
+opposite.** It said *the gate fires per STEP, not per turn*, that *the turn in flight IS aborted*,
+that overshoot was *bounded by one STEP (~65K measured) rather than one whole turn (~170K
+measured)*, and it called that *better than what was designed, arrived at by accident*. All of that
+described the code as it then stood and none of it describes the code that ships now.
+
+The finding underneath it was correct and is worth keeping, because it is why a rig can be fooled
+here. `processor.ts:443-445` assigns `finish` and `tokens` in the SAME mutation at every
+`step-finish`, and `:445` is the only site in the session tree that writes a non-zero `tokens` — so
+every `message.updated` that carries occupancy at all also carries a set `finish`, usually
+`"tool-calls"`, i.e. mid-turn. MEASURED across 733 real assistant messages with occupancy > 0: zero
+had a null `finish` (677 `tool-calls`, 56 `stop`). A predicate that reads `finish` — or
+`time.completed`, which `cleanup()` sets per step at `processor.ts:595-596` — is therefore true
+mid-turn on essentially every event the gate ever sees. That is the defect that survived two
+phases.
+
+Phase 7 fixed the predicate rather than the prose. `turnFinished()`
+(`harness/config/opencode/plugin/healbot.ts:346-349`) is now opencode's own, from `prompt.ts:1295`:
+`if (info.error) return true; return Boolean(info.finish && !["tool-calls","unknown"].includes(info.finish))`.
+It deliberately does not read `time.completed`. `consider()`'s parameter is `turnOver` and its
+guard is a plain `if (!turnOver) return` (`:612`, `:622`). **Nothing is aborted on the gate path** —
+`retire()` still calls `POST /abort` (`:473`, under the comment at `:458-472`), but on this path it
+is a no-op by construction, because `turnFinished()` is what got the call there. It exists for the
+race where a turn starts between the check and the call, and for `healbot_retire` arriving from the
+control agent on a session that is working.
+
+**`RETIRE_HARD` is DELETED, and this file used to record it as merely INERT.** The finding stands
+as history: at 330,000 its only consumer was `consider()`'s `if (!stepOver && !hard) return`, and
+`stepOver` was true on 733/733, so it never once fired and `HEALBOT_RETIRE_HARD` was a knob with no
+effect. The previous paragraph kept it on the grounds that it would become *load-bearing again the
+day the predicate becomes per-turn*. That day arrived and the owner deleted it instead — the
+constant, the `hard` variable, the guard, the env var and its half of the arming log line are all
+gone from `healbot.ts` and `healbot.tsx`, and `HEALBOT_RETIRE_HARD` now reads nothing. VERIFIED by
+grep over both files, and asserted twice in the suite: `probe_twin.py:132-136` and
+`probe_turn_predicate.py:162-166`. The margin the hard gate was supposed to provide now comes from
+the THRESHOLD being low enough to absorb a worst-case turn, which is why the default moved.
+
+**`RETIRE_AT` defaults to 180,000, down from 256,000, and the number is a consequence of the
+semantics above.** With one gate the requirement is `RETIRE_AT + worst_turn < ceiling`. Waiting for
+the turn means accepting whatever that turn adds, and worst measured single-turn growth is ~170K
+(`docs/HARDEN.md` §6: occupancy 5,216 → 70,898 on a single tool result, that turn finishing at
+175,090). The ceiling is ~360K MEASURED — last good turn at 359,829, then 25 consecutive
+`ContextOverflowError`s. So 180,000 + ~170K = ~350K, just inside, and anything at or above ~190,000
+can be carried off the cliff by one ordinary read-heavy turn. 256,000 was correct for the design it
+was chosen against — a second gate at 330,000 aborting mid-turn — and is the one value that must
+not be paired with a per-turn predicate and no hard gate. The arming line now reads
+`headless retirement armed — gate 180,000 (per-turn, single gate), directory …`; it used to read
+`soft N, hard N`. Unchanged by any of this: the ~360K ceiling, the ~4.8K floor,
+`compaction.auto: false`, and the handoff document.
 
 **Paths derive from `__file__` and fixtures generate themselves.** They did not until Phase 5:
 every `verify_*.py` hardcoded an absolute scratchpad path belonging to the session that wrote
@@ -174,20 +228,29 @@ on_grid` somewhere it must be false.
 substring failures came through it — `find("RETIRE")` also matches the header's `1 to retire`.
 Labels are uppercase and header phrasing is lowercase; case is the only separator.
 
-**`verify_headless_retire.py:201-205` is an assertion that has never discriminated.** It asserts
-`finishes[-1] == "stop"` under the label *the turn was allowed to FINISH before the handoff*. It
-passes, but not for that reason: the rig's prompt puts the single large token jump — the 130 KB
-`ledger0.txt` read — on the final model call, so the gate crossing lands on the last step **by
-construction**. Move the jump earlier and the last finish is `"tool-calls"` and it fails, with
-nothing about the gate having changed. It has never been able to tell per-turn firing from
-per-step firing, which is the only thing its label claims. Left in place with the reasoning
-recorded above it; the count is unchanged and the printed label is stale.
+**`verify_headless_retire.py` now discriminates per-turn from per-step — it did not until Phase 7.**
+Its `finishes[-1] == "stop"` check was necessary but never sufficient: it is satisfied by a gate
+firing at ANY step boundary provided the crossing happened to be the last one, and this rig's
+prompt guaranteed exactly that by putting the single large token jump (the 130 KB `ledger0.txt`
+read) on the FINAL model call. MEASURED on that version: steps at 4,999 / 5,165 / 5,236 and then
+`stop` at 36,612 against a 20,000 gate — the only step over the line was the last, so the per-step
+and per-turn predicates were indistinguishable and 20/20 said nothing about which one shipped.
+
+The prompt now reads the ledger FIRST, so its result sits in the input of every later step and the
+crossing lands mid-turn. Two assertions were added on top: that a NON-FINAL step was over the gate,
+and that the turn ran on past it. TESTED at 22/22 — crossing at step 1 (36,361 vs a 20,000 gate),
+steps 2 and 3 at 89,850 and 90,011, and the turn still running to `stop` at step 5 before the
+handoff. Under the predicate that shipped before Phase 7 this would have aborted at step 1.
+
+**The lesson generalises and belongs in this section: an assertion about ORDERING needs a workload
+that could have violated it.** "The turn finished first" over a workload whose only threshold
+crossing is on the last step is not a test, it is a restatement of the fixture.
 
 **`probe_twin.py` no longer compares two handoff documents, because there are no longer two.**
 Phase 7 deleted the grid's copy along with the grid's whole `retire()`; the server plugin is the
 only implementation of retirement anywhere. The probe's job changed with it: it now asserts the
-ABSENCE (`the grid has NO handoffDocument`, `:189-193`; no spawn/seed/archive of its own,
-`:203-207`) and guards the two couplings that survive.
+ABSENCE (`the grid has NO handoffDocument`, `:154-158`; no spawn/seed/archive of its own,
+`:168-172`) and guards the two couplings that survive.
 
 The finding that made deletion the right fix, kept because it is the reason: **the duplication was
 never safely guarded.** `document_strings()` was `re.findall(r'"((?:[^"\\]|\\.)*)"', body)` —
@@ -201,22 +264,30 @@ heading — the one class of thing the extractor already saw — so they demonst
 without exercising the gap. Eight seeded divergences through a guard reported as green. That was a
 coverage hole, not a live divergence (the two bodies did agree), and the structural fix on the
 table was a normalised whole-body diff OR collapsing the copies; the collapse is what shipped,
-and it makes the whole class unreachable. `document_strings()` itself still exists at
-`probe_twin.py:79-112` with that history in its docstring, but nothing calls it — it is dead code
-now, not a running check, and a green from this probe no longer means anything about prose.
+and it makes the whole class unreachable. `document_strings()` itself is now GONE — an earlier
+version of this paragraph said it "still exists at `probe_twin.py:79-112` … dead code now, not a
+running check", and it was deleted along with the comparison it served. The history survives in the
+probe's module docstring (`probe_twin.py:14-24`), which is the right place for it: the extractor
+was the defect, and a defect kept as dead code is a defect waiting to be called again.
 
 **What it guards instead.** `RETIRE_AT` is still duplicated, deliberately — the grid needs the
 number to paint `RETIRE`, `N to retire` and the per-cell share, and cannot import it. That is a
-NUMBER, so it compares exactly (`:136-153`): the duplication that was always safe to test, and the
-only one left. The new risk is the REQUEST CHANNEL — the grid writes
-`metadata: {healbot: {retireRequested: <ms>}}` and the plugin reads it, with no shared type, no
-import and no compiler in between (`:220-265`). Same failure shape as the old divergence, so it
-gets the same treatment, from both ends. TESTED against the current sources: 23/23.
+NUMBER, so it compares exactly (`:101-118`, with a mutation check at `:113-118` that rewrites
+`|| 180_000` to `|| 999_000` in the grid and requires the comparison to notice): the duplication
+that was always safe to test, and the only one left. `HEALBOT_RETIRE_HARD` is asserted here too,
+and that assertion INVERTED in Phase 7 — it used to require the variable to be the plugin's alone,
+matching the grid's deletion of its own gate, and it now requires it to be ABSENT FROM BOTH
+(`:132-136`), because the constant was deleted outright. Its stated reason is the point: *a knob
+that reads as load-bearing and is not must not grow back*. The new risk is the REQUEST CHANNEL —
+the grid writes `metadata: {healbot: {retireRequested: <ms>}}` and the plugin reads it, with no
+shared type, no import and no compiler in between (`:185-230`). Same failure shape as the old
+divergence, so it gets the same treatment, from both ends. TESTED against the current sources:
+23/23.
 
 **An absence assertion needs an INVERTED mutation check.** "The grid has no `handoffDocument`" is
 satisfied by the symbol being gone and equally by your extractor reading the wrong text — a
 comment-stripping regex that ate the file returns the same green. So the same predicate is re-run
-against a copy that DOES contain the symbol and is REQUIRED to trip: `probe_twin.py:197-202`
+against a copy that DOES contain the symbol and is REQUIRED to trip: `probe_twin.py:162-167`
 appends `function handoffDocument() {}` to the grid source, pushes it through the identical
 comment-stripping, and asserts the substring is found. Presence checks get a mutation that breaks
 them; absence checks get one that satisfies them.
@@ -224,16 +295,47 @@ them; absence checks get one that satisfies them.
 **An untyped cross-process coupling gets asserted from BOTH ends.** The metadata request key is
 written by the TUI and read by the server plugin with no shared type, no import and no compiler
 between the two. Rename it on either side and `x` stops retiring anything — no error, no log, the
-cell simply stays put. One-sided assertions cover half of that, so `probe_twin.py:256-265` mutates
+cell simply stays put. One-sided assertions cover half of that, so `probe_twin.py:221-230` mutates
 each side in turn: `retireRequested` → `retireWanted` in the grid, then the same rename in the
 plugin, each required to fail the agreement predicate.
 
 **A predicate that a mutation check corrupts must be the predicate that ACTUALLY RUNS.** If the
 mutation check re-implements the comparison inline against a doctored string, it proves that the
 inline copy discriminates and says nothing about the code under test — the two drift and the
-mutation check keeps passing. `probe_twin.py:242-248` factors the channel comparison into
+mutation check keeps passing. `probe_twin.py:207-220` factors the channel comparison into
 `channel_agrees(writer, reader)`, the live check calls it, and the two mutation checks call the
 same function with corrupted inputs. One definition, three call sites.
+
+**And the same rule one level up: TEST THE SHIPPED SOURCE TEXT, NOT A COPY OF IT.** A probe that
+re-implements the function it is checking proves that the re-implementation is correct. That is a
+harder failure to see than the inline-mutation one above, because the copy is usually right on the
+day it is written and only becomes a lie later, silently, when the shipped code moves and the copy
+does not. `probe_turn_predicate.py` is the case where it mattered most — `turnFinished()` is the
+single point where per-turn semantics live, and getting it wrong means aborting turns mid-flight
+again or, now that `RETIRE_HARD` is gone, never firing at all. It **cannot import** the function:
+the plugin must export ONLY its plugin function, because `getLegacyPlugins`
+(`plugin/index.ts:95-108`) iterates `Object.values(mod)` and calls each as a plugin, so exporting a
+helper to make it testable would disable the whole guard at load time, in a log line nobody reads.
+(`probe_twin.py:253-260` asserts that export constraint separately, which is what makes "cannot
+import" a tested fact rather than an excuse.) So the probe brace-matches `function turnFinished(`
+out of `harness/config/opencode/plugin/healbot.ts` (`extract()`, `:44-67`), strips the two
+TypeScript annotations with a pair of regexes (`:65-66`), and evaluates THAT TEXT in `node -e`
+against the cases (`run()`, `:70-76`). A rename returns `None` rather than raising, so it surfaces
+as one named failure in the summary instead of a traceback the summary would never reach
+(`:103-109`).
+
+The cases are the measured distribution rather than invented ones: 11 message shapes drawn from the
+733 real assistant messages with occupancy > 0 — 677 mid-turn `tool-calls` that must be FALSE, 56
+`stop` that must be TRUE, the `unknown` finish opencode also excludes, both error paths, and the
+empty in-flight row that exists ~20 ms after `prompt_async` acks. Two of them carry `time.completed`
+alongside a mid-turn `finish`, which is the shape that made the old predicate wrong, and there is a
+separate source-text assertion that the function does not mention `time` at all (`:111-115`). The
+table is itself mutation-checked: `:137-153` re-runs the identical cases against the OLD per-step
+predicate, `Boolean(info.time?.completed || info.finish || info.error)`, and REQUIRES it to fail. It
+gets 4 wrong, including the mid-turn tool call that 677 of 733 real messages look like. Without that
+leg the probe could be green because the extracted function happens to be right for a reason
+unrelated to the claim — this suite's characteristic failure, and the exact way the original defect
+survived two phases.
 
 **`all()` over a possibly-empty list is not an assertion.** `verify_control_agent.py` asserted
 `all(s.get("parentID") for s in extras)` under the label *every session the build agent created is

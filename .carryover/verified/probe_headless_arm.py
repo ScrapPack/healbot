@@ -35,7 +35,6 @@ PORT_ON = 4141
 PORT_OFF = 4142
 PORT_DEFAULT = 4143
 SOFT = "37000"
-HARD = "41000"
 
 ARMED = r"\[healbot\] headless retirement armed"
 
@@ -85,7 +84,7 @@ try:
             PORT_ON,
             rig.db("armon"),
             log=log_of(PORT_ON),
-            env_extra={"HEALBOT_RETIRE_AT": SOFT, "HEALBOT_RETIRE_HARD": HARD},
+            env_extra={"HEALBOT_RETIRE_AT": SOFT},
         )
     )
     # The plugin instance is created lazily, per directory, on the first request that names it —
@@ -100,14 +99,9 @@ try:
         "no client, no terminal, no grid — and the retirement trigger is live",
     )
     r.check(
-        "it reports the SOFT gate it was actually given",
-        f"soft {int(SOFT):,}" in on,
-        f"expected 'soft {int(SOFT):,}'",
-    )
-    r.check(
-        "it reports the HARD gate it was actually given",
-        f"hard {int(HARD):,}" in on,
-        f"expected 'hard {int(HARD):,}' — proves env reaches the SERVER, not just the rig",
+        "it reports the gate it was actually given",
+        f"gate {int(SOFT):,}" in on,
+        f"expected 'gate {int(SOFT):,}'",
     )
     r.check(
         "it armed for the PROJECT directory, not the server's cwd",
@@ -118,8 +112,8 @@ try:
     # The default must NOT leak through when an override is present — otherwise this probe would
     # pass on a plugin that ignored its environment entirely.
     r.check(
-        "the shipped 256,000 default is NOT what armed here",
-        "soft 256,000" not in on,
+        "the shipped 180,000 default is NOT what armed here",
+        "gate 180,000" not in on,
         "an override that is silently ignored would read as armed",
     )
 
@@ -158,18 +152,18 @@ try:
     # item, and `NEXT.md` proposed closing it by running `verify_headless_retire.py` with no
     # override. That does not work: that rig hardcodes `THRESHOLD = 20_000` and forces it into the
     # server's environment, so there is no override to remove, and its single ~50KB-capped read
-    # cannot reach 256,000 anyway.
+    # cannot reach 180,000 anyway.
     #
     # Separate the question into its two halves and only one of them costs money:
-    #   (a) does the shipped constant actually arm at 256,000 — a fact about config resolution,
+    #   (a) does the shipped constant actually arm at 180,000 — a fact about config resolution,
     #       answered here, free, in two seconds;
-    #   (b) does a session driven to 256,000 retire — a fact about a single `>=`, already TESTED
+    #   (b) does a session driven to 180,000 retire — a fact about a single `>=`, already TESTED
     #       at 20,000 by `verify_headless_retire.py` (20/20) and threshold-independent by
     #       inspection.
     # This closes (a). (b) remains bought-or-not, and `.carryover/verified/README.md` carries the
     # costing.
     #
-    # NOTE the pairing with the assertion above: that one requires "soft 256,000" to be ABSENT when
+    # NOTE the pairing with the assertion above: that one requires "gate 180,000" to be ABSENT when
     # an override is supplied, this one requires it to be PRESENT when none is. The same string,
     # asserted both ways in one run, so neither can be passing for a trivial reason.
     # -----------------------------------------------------------------------------------------
@@ -179,18 +173,18 @@ try:
 
     r.check("a server with NO threshold override came up", bool(default), f"{len(default)} bytes of log")
     r.check(
-        "THE SHIPPED DEFAULT ARMS AT 256,000 — the number that actually ships, exercised",
-        "soft 256,000" in default,
+        "THE SHIPPED DEFAULT ARMS AT 180,000 — the number that actually ships, exercised",
+        "gate 180,000" in default,
         "no HEALBOT_RETIRE_AT anywhere: not in the rig, not in the server's environment",
     )
     r.check(
-        "…and the shipped HARD default is 330,000",
-        "hard 330,000" in default,
-        "inert under the shipped per-step predicate, but it is what would arm — see HARNESS.md",
+        "the arming line names ONE gate — RETIRE_HARD was deleted in Phase 7",
+        "hard" not in default.lower().split("directory")[0] and "per-turn, single gate" in default,
+        "a second threshold in this line would mean the constant grew back",
     )
     r.check(
         "the override server and the default server disagree, as they must",
-        (f"soft {int(SOFT):,}" in on) and ("soft 256,000" in default) and (f"soft {int(SOFT):,}" not in default),
+        (f"gate {int(SOFT):,}" in on) and ("gate 180,000" in default) and (f"gate {int(SOFT):,}" not in default),
         "proves the env var is read per-process rather than baked in",
     )
 

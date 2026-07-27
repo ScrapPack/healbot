@@ -5,10 +5,10 @@ tree. **17 files against 6,330 upstream ones** — 15 new, 2 modified upstream f
 never a fork in any meaningful sense, so it no longer gets its own repository.
 
 VERIFIED, and the count above was corrected here: it used to read "against **6,345** upstream
-ones". 6,345 is `git ls-tree -r --name-only 6794bd581 | wc -l` — the tree size *with the overlay
+ones". 6,345 is `git ls-tree -r --name-only 509f4c0b1 | wc -l` — the tree size *with the overlay
 already in it*. The base tree is 6,330 (`… 7534d23 | wc -l`), and 6,330 + 15 added = 6,345, which
 is why the wrong number looked plausible. The **17** is right, from three independent counts:
-`git diff --name-status 7534d23 6794bd581` lists 17 (15 `A`, 2 `M`), the patch contains 17
+`git diff --name-status 7534d23 509f4c0b1` lists 17 (15 `A`, 2 `M`), the patch contains 17
 `diff --git` headers, and `find fork/packages fork/.opencode -type f` returns 17.
 
 | | |
@@ -16,22 +16,22 @@ is why the wrong number looked plausible. The **17** is right, from three indepe
 | Upstream | `https://github.com/sst/opencode` |
 | Base commit | `7534d23551f665e65080809975b4ca5c7d63807b` — *"chore: update nix node_modules hashes"* |
 | Version at base | **1.18.5** |
-| Overlay recorded at | fork branch `healbot` @ `6794bd581` — *"phase 7: the grid stops retiring and starts relaying"* |
-| Exact diff | [`healbot-fork.patch`](healbot-fork.patch) (`git diff 7534d23 6794bd581`) — TESTED: applies cleanly to the base, re-checked in a throwaway worktree |
+| Overlay recorded at | fork branch `healbot` @ `509f4c0b1` — *"phase 7: per-turn gate, RETIRE_HARD deleted, threshold 180,000"* (the relay landed one commit earlier) |
+| Exact diff | [`healbot-fork.patch`](healbot-fork.patch) (`git diff 7534d23 509f4c0b1`) — TESTED: applies cleanly to the base, re-checked in a throwaway worktree |
 
 ## What is here
 
 | Path | What |
 |---|---|
 | `packages/**/*.MAP.md` (14) | The subsystem maps. Phase 2 output, corrected by Phase 3, the audit, and Phase 7. Indexed from [../HARNESS.md](../HARNESS.md). Phase 7's correction was to `feature-plugins/FEATURE-PLUGINS.MAP.md`, which had described the grid as **unbuilt** ("*To add the grid:* import it and append to the array") and the long-deleted `system/healbot-spike.tsx` as the registered plugin. Both were true when the map was written at `c9323db` and false from fork `26c9316` onward; the map now records that `Healbot` is imported at `builtins.ts:11` and is the last array entry, and it retracts the spike section by name rather than deleting it |
-| `packages/tui/src/feature-plugins/system/healbot.tsx` | The control-terminal grid itself. Replaced `healbot-spike.tsx` at `26c9316`; the spike had proved a plugin can register a full-screen route and own the keyboard (PROBE F7) and was retired once the real route landed. Answering a block **from** the grid landed at `25f6f14`, TESTED on `gpt-5.6-sol` ([../docs/VERIFY.md](../docs/VERIFY.md)); retirement and handoff at `392493c`/`b53e0ec`; the error state and the hardening pass in Phase 5 ([../docs/HARDEN.md](../docs/HARDEN.md)). Then it gave retirement up in two steps. At `88f7ce8` it **stopped owning the automatic gate** — that moved to a server plugin so it can run headless ([../docs/HEADLESS.md](../docs/HEADLESS.md)) — and this row used to stop there, saying "the grid keeps manual `x`". At `6794bd581` it **stopped owning retirement at all**: `x` no longer retires anything, it writes `metadata: {healbot: {retireRequested: <ms>}}` through `session.update` and the server plugin, now the only implementation of retirement anywhere, performs it. The grid still paints the `RETIRE` border off its own `RETIRE_AT` (`healbot.tsx:53`, `:371`, `:422`), which is a threshold copy, not an implementation. Consequence worth knowing before you run the fork bare: without the harness plugin loaded, **neither** automatic nor manual retirement works — previously `x` still did. The file got substantially smaller in that change; the duplicate `retire()` and the `handoffDocument` twin are gone. **No byte or line count is quoted** — this row said "24.1 KB, 566 lines" for a file that was already 878 lines, and `HARNESS.md` said 12.8 KB for the same file. `wc` it |
+| `packages/tui/src/feature-plugins/system/healbot.tsx` | The control-terminal grid itself. Replaced `healbot-spike.tsx` at `26c9316`; the spike had proved a plugin can register a full-screen route and own the keyboard (PROBE F7) and was retired once the real route landed. Answering a block **from** the grid landed at `25f6f14`, TESTED on `gpt-5.6-sol` ([../docs/VERIFY.md](../docs/VERIFY.md)); retirement and handoff at `392493c`/`b53e0ec`; the error state and the hardening pass in Phase 5 ([../docs/HARDEN.md](../docs/HARDEN.md)). Then it gave retirement up in two steps. At `88f7ce8` it **stopped owning the automatic gate** — that moved to a server plugin so it can run headless ([../docs/HEADLESS.md](../docs/HEADLESS.md)) — and this row used to stop there, saying "the grid keeps manual `x`". At `509f4c0b1` it **stopped owning retirement at all**: `x` no longer retires anything, it writes `metadata: {healbot: {retireRequested: <ms>}}` through `session.update` and the server plugin, now the only implementation of retirement anywhere, performs it. The grid still paints the `RETIRE` border off its own `RETIRE_AT` (`healbot.tsx:57` `RETIRE_AT`, and its three readers `stateOf`, `share`, `retirable`), which is a threshold copy, not an implementation. Consequence worth knowing before you run the fork bare: without the harness plugin loaded, **neither** automatic nor manual retirement works — previously `x` still did. The file got substantially smaller in that change; the duplicate `retire()` and the `handoffDocument` twin are gone. **No byte or line count is quoted** — this row said "24.1 KB, 566 lines" for a file that was already 878 lines, and `HARNESS.md` said 12.8 KB for the same file. `wc` it |
 | `packages/tui/src/feature-plugins/builtins.ts` | Upstream file, **two** lines added to register the grid: the import at `:11` and the array entry at `:36`, which is last, so the grid activates last and wins any route-id collision. This row said "one line"; the diff is `+2/-0` |
 | `.opencode/opencode.jsonc` | Project config for the fork — the model pin, references, disabled tools |
 
 `builtins.ts` **and** `.opencode/opencode.jsonc` are **modified upstream files** — both exist at
 `7534d23` and the overlay edits them; the other 15 paths are new. So neither copy here is
 meaningful except against the base commit. That is what the patch is for. (This paragraph used to
-name only `builtins.ts`. VERIFIED by `git diff --name-status 7534d23 6794bd581`, which marks
+name only `builtins.ts`. VERIFIED by `git diff --name-status 7534d23 509f4c0b1`, which marks
 exactly those two `M`.)
 
 ## Reconstituting a working checkout
@@ -50,7 +50,7 @@ bun install          # bun 1.3.14, matches the repo's packageManager pin
 bun dev              # runs the TUI from source
 ```
 
-**Retirement does not work from this checkout alone**, as of `6794bd581`. The only implementation
+**Retirement does not work from this checkout alone**, as of `509f4c0b1`. The only implementation
 lives in the harness's server plugin, which is not in the overlay; without it, the grid's `x`
 writes a request nobody reads and the automatic gate never arms. Load the harness config too —
 see [../docs/HEADLESS.md](../docs/HEADLESS.md).

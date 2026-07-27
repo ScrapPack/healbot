@@ -134,11 +134,19 @@ try:
     fire(
         api,
         worker,
-        "Use the todowrite tool to record exactly three items: 'read the ledger', "
+        # ORDER IS THE TEST. The big read goes FIRST so its result sits in the input of every
+        # step after it — which puts the threshold crossing MID-turn, at a `tool-calls` step,
+        # instead of on the final model call. Until Phase 7 this prompt read the ledger LAST, and
+        # the consequence was that the only step above the gate was the closing `stop`: the
+        # per-step and per-turn predicates behaved identically, and `finishes[-1] == "stop"` below
+        # passed BY CONSTRUCTION. MEASURED on that version — steps at 4,999 / 5,165 / 5,236 then
+        # `stop` at 36,612 against a 20,000 gate. It proved the gate fires; it never proved the
+        # gate waits.
+        "First read ledger0.txt in full with the read tool, with offset=1 and limit=1400. "
+        "Then use the todowrite tool to record exactly three items: 'read the ledger', "
         "'summarise the ledger into notes.txt', and 'reconcile the totals'. Mark only the "
-        "first completed. Then create notes.txt containing the single word STARTED. Then read "
-        "ledger0.txt in full with the read tool, with offset=1 and limit=1400, and reply with "
-        "one sentence about what it contains.",
+        "first completed. Then create notes.txt containing the single word STARTED. Then reply "
+        "with one sentence about what the ledger contains.",
         box=box,
         label="worker",
     )
@@ -186,18 +194,40 @@ try:
 
     # ---------------------------------------------------------------- it finished first
     #
-    # THIS ASSERTION HAS NEVER DISCRIMINATED PER-TURN FROM PER-STEP, and the label below used to
-    # imply it did. The gate fires at a STEP boundary (`processor.ts:443-445`), so the honest
-    # reading of `finishes[-1] == "stop"` here is that the crossing happened to land on the LAST
-    # model call — which it does BY CONSTRUCTION, because this rig's prompt puts the single large
-    # token jump (the 130 KB `ledger0.txt` read) on the final call. Move the jump earlier and the
-    # last finish would be `"tool-calls"` and this would fail, with nothing about the gate having
-    # changed. Kept because "no step ended in error" is still worth asserting; do not read it as
-    # evidence for a turn-boundary predicate. The LABEL below is stale display text and is left
-    # alone deliberately, so the recorded 20/20 output stays comparable — read it against this
-    # comment, not on its own.
+    # An assistant message is a STEP, not a turn — `prompt.ts:1186-1201` creates a new one per
+    # step and `processor.ts:443-445` stamps `finish` and `tokens` on each. So this list is the
+    # shape of ONE turn, and reading it correctly is the whole point of the block below.
     turns = assistants(worker)
     finishes = [a.get("finish") for a in turns if a.get("finish")]
+
+    def occupancy_of(a):
+        t = a.get("tokens") or {}
+        if t.get("total"):
+            return t["total"]
+        cache = t.get("cache") or {}
+        return (t.get("input") or 0) + (t.get("output") or 0) + (cache.get("read") or 0) + (cache.get("write") or 0)
+
+    occupancies = [occupancy_of(a) for a in turns if a.get("finish")]
+    # THE ASSERTION THAT DISCRIMINATES, and the one this rig lacked. `finishes[-1] == "stop"`
+    # below is necessary but not sufficient: it is satisfied by a gate that fires at ANY step
+    # boundary, as long as the crossing happened to be the last one. What separates per-turn from
+    # per-step is whether a NON-FINAL step was already over the gate and the turn ran on anyway.
+    crossed_early = [
+        (i, occ) for i, occ in enumerate(occupancies) if occ >= THRESHOLD and i < len(occupancies) - 1
+    ]
+    r.check(
+        "the gate was crossed MID-TURN — otherwise this file cannot tell per-turn from per-step",
+        bool(crossed_early),
+        f"steps over {THRESHOLD:,} before the last: {crossed_early}"
+        if crossed_early
+        else f"NOT DISCRIMINATING: only the final step crossed. occupancies={occupancies}",
+    )
+    r.check(
+        "…and the turn RAN ON past that crossing instead of being aborted at it",
+        bool(crossed_early) and finishes[-1] == "stop" and len(finishes) > crossed_early[0][0] + 1,
+        f"crossed at step {crossed_early[0][0] if crossed_early else '?'} of {len(finishes)}, "
+        f"finishes={finishes}",
+    )
     r.check(
         "the turn was allowed to FINISH before the handoff",
         bool(finishes) and finishes[-1] == "stop",

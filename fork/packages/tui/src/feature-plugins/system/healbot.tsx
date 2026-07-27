@@ -22,9 +22,13 @@ const CELL_HEIGHT = 6
  * retirement threshold", and `REVIEW.md` §4.3 records that clause as unadjudicable precisely
  * because no threshold was configurable anywhere in the deliverable.
  *
- * Default **256,000**, lowered from 350,000 on the owner's decision after the ceiling below was
- * measured. 256K leaves ~104K of headroom under that ceiling — roughly the 30% reserve the
- * threshold is meant to provide, and enough that no single tool result can cross it.
+ * Default **180,000**, and the number is a consequence of the gate's semantics rather than a
+ * preference. It went 350,000 -> 256,000 in Phase 5 when the ceiling below was measured, then
+ * 256,000 -> 180,000 in Phase 7 when the server's gate was made per-TURN and the second gate that
+ * used to bound overshoot was deleted. Waiting for a turn means accepting whatever that turn adds,
+ * MEASURED at up to ~170K (`docs/HARDEN.md` §6), so a single gate has to sit far enough below the
+ * ~360K ceiling to absorb one: 180,000 + ~170K = ~350K. At 256,000 one ordinary read-heavy turn
+ * could carry a session past the cliff. `docs/RELAY.md` has the derivation.
  *
  * **The ceiling is ~360K, NOT the 922,000 `limit.input` the model registry advertises.** This
  * file used to claim "350K leaves ~570K of headroom". MEASURED, and it is false: a session
@@ -48,9 +52,9 @@ const CELL_HEIGHT = 6
  *
  * Floor, measured: a freshly spawned and seeded session reads ~4.8K on its very first turn,
  * almost all of it `cache.read` — the standing-context prefix. A threshold at or below that
- * fires on turn one and proves nothing. So the usable band is roughly 5K–360K.
+ * fires on turn one and proves nothing. So the usable band is roughly 5K–360K, and the safe band for a single per-turn gate tops out near 190K.
  */
-const RETIRE_AT = Math.max(1, Number(process.env["HEALBOT_RETIRE_AT"]) || 256_000)
+const RETIRE_AT = Math.max(1, Number(process.env["HEALBOT_RETIRE_AT"]) || 180_000)
 
 /**
  * RETIREMENT DOES NOT LIVE IN THIS FILE AT ALL. Automatic retirement moved to the server plugin
@@ -64,13 +68,15 @@ const RETIRE_AT = Math.max(1, Number(process.env["HEALBOT_RETIRE_AT"]) || 256_00
  * header count and the share-of-threshold figure on each cell.
  *
  * The border painted off `RETIRE_AT` and the moment the server acts on it are NOT the same event.
- * That gate fires at a STEP boundary, not at the end of a turn — `processor.ts:443-445` writes
- * `finish` and `tokens` in one mutation at every `step-finish`, so the plugin's `stepFinished()`
- * holds on every message that carries occupancy at all (MEASURED across 733 real assistant
- * messages with occupancy > 0: zero had a null `finish`; 677 were `"tool-calls"`, i.e. mid-turn).
- * So a cell reading `RETIRE · working` can be aborted and handed off mid-turn, one step after it
- * turns purple, and overshoot past the line is bounded by a step rather than a whole turn — the
- * full account is `HARNESS.md`.
+ * A cell goes purple as soon as occupancy crosses the line, but the gate waits for the TURN to end
+ * — the plugin's `turnFinished()` is opencode's own predicate (`prompt.ts:1295`), which excludes
+ * `"tool-calls"`. So a cell can read `RETIRE · working` for a while, and that is correct: nothing
+ * is aborted, the turn runs to completion, and the handoff happens in the gap afterward.
+ *
+ * Do not infer the predicate from the fields on a message. Everything that looks like completion —
+ * `finish`, `time.completed` — is set per STEP (`processor.ts:443-445`, `:595-596`), which is
+ * exactly the trap Phase 7 had to correct: for two phases the plugin read `finish` directly and
+ * fired mid-turn while every document here said it waited. The full account is `HARNESS.md`.
  *
  * Automatic retirement moved because a `createEffect` in this component could only ever run while
  * the grid was mounted. Two consequences, and the second is the one that mattered:
@@ -725,7 +731,9 @@ function Healbot(props: { api: TuiPluginApi; selected: () => number; setSelected
   // anything. This comment read "AUTOMATIC on threshold (PLAN.md:381), with `x` kept as the manual
   // override" for two phases; that described a `createEffect` which no longer exists here. The
   // automatic gate is the server plugin's (`harness/config/opencode/plugin/healbot.ts`) and it
-  // fires per STEP — see the header block at the top of this file. `RETIRE_AT` survives in this
+  // fires at the END OF A TURN — see the header block at the top of this file, and note that this
+  // line briefly said "per STEP", which was true of the code for exactly one commit. `RETIRE_AT`
+  // survives in this
   // file only to paint the `RETIRE` border (`stateOf`), count `N to retire` in the header
   // (`retirable`) and print the share-of-threshold figure on each cell (`share`).
   //

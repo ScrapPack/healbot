@@ -91,53 +91,48 @@
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Context occupancy at which a session should be retired, in tokens. The only gate that fires.
+ * Context occupancy at which a session should be retired, in tokens. The ONLY gate. There is no
+ * second one, and the number below is not independent of that fact — read both paragraphs before
+ * changing either.
  *
- * IT FIRES AT A STEP BOUNDARY, NOT AT THE END OF A TURN, and the difference is not cosmetic —
- * this comment asserted the opposite for two phases. `processor.ts:443-445` assigns `finish` and
- * `tokens` in the SAME mutation at every `step-finish`, and `:445` is the only site in the session
- * tree that ever writes a non-zero `tokens`. So every `message.updated` that carries occupancy at
- * all also carries a set `finish` — usually `"tool-calls"`, i.e. mid-turn — and `stepFinished()`
- * below is true on all of them. MEASURED across 733 real assistant messages with occupancy > 0:
- * zero had a null `finish` (677 `tool-calls`, 56 `stop`).
+ * IT FIRES AT THE END OF A TURN. `turnFinished()` below uses opencode's own predicate
+ * (`prompt.ts:1295`), which excludes `"tool-calls"` and `"unknown"` — so a multi-step turn is
+ * allowed to run to completion and the gate acts in the gap between turns. Nothing in flight is
+ * aborted. This is what `PLAN.md` specified all along, and until Phase 7 it was what every
+ * artifact in this repo *claimed* while the code did something else: the old predicate read
+ * `finish` directly, and `processor.ts:443-445` sets `finish` and `tokens` in one mutation at
+ * every `step-finish`, so it was true mid-turn on 733/733 measured messages.
  *
- * The consequence is good and was arrived at by accident: overshoot past this line is bounded by
- * ONE STEP (~65K, `docs/HARDEN.md` §6's table) rather than one whole turn (~170K measured). The
- * cost is that a turn in flight IS aborted here — see `retire()`'s `POST /abort`.
+ * **180,000, AND THE HEADROOM IS THE WHOLE REASON.** Waiting for the turn means accepting whatever
+ * that turn adds, and MEASURED that is up to ~170K on its own (`docs/HARDEN.md` §6: occupancy
+ * 5,216 -> 70,898 on a single tool result, the turn finishing at 175,090). Against a ~360K ceiling
+ * the arithmetic for one gate is `RETIRE_AT + worst_turn < ceiling`, so anything at or above
+ * ~190,000 can be carried past the ceiling by one ordinary read-heavy turn. 180,000 + ~170K =
+ * ~350K, just inside.
  *
- * **The ceiling is ~360K, NOT the 922,000 `limit.input` the model registry advertises.** MEASURED
- * at the shipped default: a session driven up took its last successful turn at occupancy 359,829
- * and then failed 25 consecutive turns with the provider's `ContextOverflowError`. The harness
- * sets `compaction.auto: false`, which makes `overflow.ts:28` disable opencode's own overflow
- * check entirely, so nothing upstream catches it — the provider does, and by then the turn is
- * lost. Nothing is truncated on the way up either: there is no history slicing on the v1 prompt
- * path and `compaction.prune` is unset, so opencode sends the ENTIRE history every turn until
- * the provider refuses it. It is a cliff, not a slope.
+ * This replaced 256,000, which was correct for a DIFFERENT design — Phase 5 chose it against a
+ * second gate at 330,000 that aborted mid-turn, and Phase 7 measured that second gate to have been
+ * inert since it was written. When the hard gate was deleted and the predicate made per-turn, the
+ * soft threshold had to come down with it. A 256,000 gate with no hard gate and per-turn semantics
+ * is the one combination that can silently drive a session off the cliff.
+ *
+ * If you raise this, you are trading session length for that margin, and the margin is the only
+ * thing standing between a long session and `ContextOverflowError`. Lower it freely; raise it only
+ * with a new measurement of worst-case single-turn growth.
+ *
+ * **The ceiling is ~360K, NOT the 922,000 `limit.input` the model registry advertises.** MEASURED:
+ * a session driven up took its last successful turn at occupancy 359,829 and then failed 25
+ * consecutive turns with the provider's `ContextOverflowError`. The harness sets
+ * `compaction.auto: false`, which makes `overflow.ts:28` disable opencode's own overflow check
+ * entirely, so nothing upstream catches it — the provider does, and by then the turn is lost.
+ * Nothing is truncated on the way up either: there is no history slicing on the v1 prompt path and
+ * `compaction.prune` is unset, so opencode sends the ENTIRE history every turn until the provider
+ * refuses it. It is a cliff, not a slope.
  *
  * Floor, measured: a freshly spawned and seeded session reads ~4.8K on its first turn, almost all
  * `cache.read`. A threshold at or below that fires on turn one and proves nothing.
  */
-const RETIRE_AT = Math.max(1, Number(process.env["HEALBOT_RETIRE_AT"]) || 256_000)
-
-/**
- * INERT. It is kept, declared and logged, and it cannot change an outcome. Read this before
- * tuning `HEALBOT_RETIRE_HARD` and expecting an effect.
- *
- * It was designed as a second gate for the case "the soft gate let the turn finish and the turn
- * added ~170K on its own" — a real measurement (`docs/HARDEN.md` §6: occupancy 5,216 -> 70,898 on
- * one tool result, that turn finishing at 175,090). The design was sound for the semantics its
- * author believed the code had. The code never had them: since `RETIRE_AT` fires per STEP, the
- * only consumer of this constant — `consider()`'s `if (!stepOver && !hard) return` — has
- * `stepOver === true` on every event that can reach it, so `hard` is dominated on 733/733 real
- * messages. No rig has ever executed the branch; `probe_headless_arm.py` and `probe_twin.py` both
- * only assert the constant's presence in a log line and a source file.
- *
- * Kept rather than deleted for one reason: if `stepFinished()` is ever changed to opencode's own
- * per-turn predicate (`prompt.ts:1295` excludes `["tool-calls","unknown"]`), this becomes load-
- * bearing again the same day, and it would need re-deriving from scratch. Deleting it is the
- * other defensible choice; leaving it undocumented is not.
- */
-const RETIRE_HARD = Math.max(RETIRE_AT, Number(process.env["HEALBOT_RETIRE_HARD"]) || 330_000)
+const RETIRE_AT = Math.max(1, Number(process.env["HEALBOT_RETIRE_AT"]) || 180_000)
 
 /** Kill switch. It spawns and archives without asking, so it gets one. */
 const AUTO_RETIRE = process.env["HEALBOT_AUTO_RETIRE"] !== "0"
@@ -323,27 +318,34 @@ function occupancyOf(tokens: Tokens | undefined): number {
 }
 
 /**
- * Has a STEP ended? NOT "has the turn ended" — the name is the correction.
+ * Has the TURN ended? This is opencode's own predicate, and using anything else is what Phase 7
+ * had to correct.
  *
- * An assistant message row exists ~20 ms after a prompt is accepted and is EMPTY until it runs —
- * the same race that produced a false `prompt_async` defect report in the Phase 4 audit. So "an
- * assistant message exists" means nothing; the signal is the message's own `time.completed` /
- * `finish`.
+ * THE TRAP, stated plainly because it cost two phases. Every completion-looking field on an
+ * assistant message is set per STEP, not per turn. `processor.ts:443` sets `finish = value.reason`
+ * and `:445` sets `tokens`, both inside the `step-finish` case that emits the `step-finish` part at
+ * `:452`; `:595-596` sets `time.completed` in `cleanup()`, which `Effect.ensuring` at `:676` runs
+ * per `process()` call — and `prompt.ts:1186-1201` creates a NEW assistant message per step. So
+ * `Boolean(info.time?.completed || info.finish)` — the old implementation — is true several times
+ * inside one turn, with `finish: "tool-calls"` each time, which is precisely the value
+ * `prompt.ts:1111-1114` loops on.
  *
- * WHAT THIS DOES NOT MEAN. Every field read here is set per STEP, not per turn:
- * `processor.ts:443` sets `finish = value.reason` and `:445` sets `tokens`, both inside the
- * `step-finish` case that emits the `step-finish` part at `:452`; `:595-596` sets `time.completed`
- * in `cleanup`, which `Effect.ensuring` at `:676` runs per `process()` call. A multi-step turn
- * therefore satisfies this predicate several times, with `finish: "tool-calls"` each time, and
- * `prompt.ts:1111-1114` keeps looping on exactly that value.
+ * The exclusion list is the entire difference, and it is copied from `prompt.ts:1295`:
  *
- * opencode's own "the turn ended" predicate is `prompt.ts:1295`, and it is strictly narrower:
- * `finish && !["tool-calls","unknown"].includes(finish)`. Swapping this function for that one is
- * the whole difference between per-step and per-turn retirement, and it would resurrect
- * `RETIRE_HARD`. Do not swap it without reading that constant's note.
+ *     const finished = handle.message.finish && !["tool-calls", "unknown"].includes(...)
+ *
+ * `time.completed` is deliberately NOT read here. It looks like the most authoritative signal and
+ * is the least: it is per-step like the rest, and including it re-introduces the whole defect.
+ *
+ * `error` IS read. A turn that died — the `ContextOverflowError` case above, a crashed tool, an
+ * expired credential — is over, and a session sitting at the gate with a dead turn is exactly one
+ * that should be handed off rather than left to fail again. `processor.ts:607-613` sets
+ * `finish: "error"` on that path, so the finish clause would usually catch it anyway; reading the
+ * field directly makes it independent of that spelling.
  */
-function stepFinished(info: MessageInfo): boolean {
-  return Boolean(info.time?.completed || info.finish || info.error)
+function turnFinished(info: MessageInfo): boolean {
+  if (info.error) return true
+  return Boolean(info.finish && !["tool-calls", "unknown"].includes(info.finish))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -458,14 +460,16 @@ export const Healbot = async (input: PluginInput) => {
     // the SAME directory as its successor, with no cell anywhere once archived, possibly parked
     // forever on a permission (`permission/index.ts:96-105` has no timeout).
     //
-    // Unconditional and idempotent: aborting an idle session is a no-op.
+    // Unconditional and idempotent: aborting an idle session is a no-op, and on the gate path it
+    // IS one — `turnFinished()` is what got us here, so the turn is over.
     //
-    // It is USUALLY NOT a no-op, and this comment said the opposite for two phases. The gate fires
-    // at a step boundary (see `stepFinished`), so on a multi-step turn the common case is that the
-    // session is mid-turn right now and this abort cancels it. That is the intended trade under
-    // per-step semantics — one step of overshoot instead of a whole turn's — but it means the work
-    // of the in-flight step is discarded, so everything the handoff hands over has to come from
-    // what is already PERSISTED: the todos, the diffs, and the last completed text. It does.
+    // Its purpose is the two paths where that is not true. (1) The RACE: a new turn can start
+    // between `consider()`'s check and this call, and a turn beginning after the gate was met is
+    // exactly what "no turn consumption after the gate" forbids. (2) `healbot_retire`, which the
+    // control agent may call on a session that is working right now.
+    //
+    // Be careful reading this comment against Phase 7's: for one commit the gate fired per STEP and
+    // this abort was usually live, cancelling a turn in flight. It is not any more.
     await api("POST", `/session/${sessionID}/abort`)
 
     // NOT `.catch(() => [])`. A failed read and a genuinely empty list are the same value, and 60
@@ -511,8 +515,8 @@ export const Healbot = async (input: PluginInput) => {
     // is message one.
     const objective = users.map(textOf).find(Boolean)
 
-    // Newest-first, first assistant message with non-empty text. Skips the in-flight empty row a
-    // hard-gate abort leaves behind.
+    // Newest-first, first assistant message with non-empty text. Skips any in-flight empty row an
+    // abort leaves behind — `healbot_retire` on a working session, or the start-of-turn race above.
     const lastMessage = [...messages]
       .reverse()
       .filter((entry) => entry?.info?.role === "assistant")
@@ -605,20 +609,17 @@ export const Healbot = async (input: PluginInput) => {
     return outcome
   }
 
-  async function consider(sessionID: string, occupancy: number, stepOver: boolean) {
+  async function consider(sessionID: string, occupancy: number, turnOver: boolean) {
     if (busy) return
     if (handled.has(sessionID)) return
 
-    const hard = occupancy >= RETIRE_HARD
-    // DEAD GUARD, kept honest rather than removed. It reads as "let the turn finish unless the
-    // hard gate is also crossed", and it has never once done that: `stepOver` is true on every
-    // event that can reach this function, because occupancy and `finish` are written in the same
-    // mutation (`processor.ts:443-445`). So this line never returns and `hard` never decides
-    // anything. Verified against 733 real assistant messages: 733/733 arrive with `stepOver` true.
-    //
-    // It stays because it is the exact hinge: make `stepFinished` per-turn and this line starts
-    // working as written, on the same day, with no other change.
-    if (!stepOver && !hard) return
+    // Let the turn finish. There is no second gate to override this any more — `RETIRE_HARD`
+    // existed to abort mid-turn when the soft gate's overshoot ran long, and Phase 7 deleted it
+    // after measuring that it had never once fired. The margin it was supposed to provide now
+    // comes from `RETIRE_AT` being low enough to absorb a worst-case turn instead; see that
+    // constant. Cutting a turn off throws away work the successor has to rediscover, which is the
+    // looping-discovery failure this handoff design exists to avoid, so the gate always waits.
+    if (!turnOver) return
 
     // CLAIM THE FLAG HERE, before the first await — not after the eligibility checks, which is
     // where it used to be set and where it did not work.
@@ -746,10 +747,10 @@ export const Healbot = async (input: PluginInput) => {
       const value = occupancyOf(info.tokens)
       if (value > 0 && occupancy === 0) occupancy = value
       if (occupancy > 0) {
-        // "done" here means the newest step ended, which for a multi-step turn still in flight
-        // reads as done between steps. The control agent re-lists before acting, so a one-poll
-        // stale "done" costs nothing; a cell that claimed "working" forever would cost more.
-        state = info.error ? "errored" : stepFinished(info) ? "done" : "working"
+        // "done" means the TURN ended, not a step — so a multi-step turn correctly reads
+        // "working" all the way through. This was wrong for one commit, when the predicate was
+        // per-step and every gap between tool calls reported "done" to the control agent.
+        state = info.error ? "errored" : turnFinished(info) ? "done" : "working"
         break
       }
     }
@@ -899,7 +900,7 @@ export const Healbot = async (input: PluginInput) => {
 
   if (AUTO_RETIRE) {
     log(
-      `headless retirement armed — soft ${RETIRE_AT.toLocaleString()}, hard ${RETIRE_HARD.toLocaleString()}, ` +
+      `headless retirement armed — gate ${RETIRE_AT.toLocaleString()} (per-turn, single gate), ` +
         `directory ${directory}`,
     )
   } else {
@@ -938,7 +939,7 @@ export const Healbot = async (input: PluginInput) => {
         if (!sessionID) return
         const occupancy = occupancyOf(info.tokens)
         if (occupancy < RETIRE_AT) return
-        await consider(sessionID, occupancy, stepFinished(info))
+        await consider(sessionID, occupancy, turnFinished(info))
       } catch (error) {
         log(`event handler error: ${error instanceof Error ? error.message : String(error)}`)
       }
