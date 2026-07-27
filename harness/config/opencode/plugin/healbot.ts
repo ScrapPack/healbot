@@ -5,12 +5,22 @@
  *   B. THE CONTROL AGENT'S TOOLS — `PLAN.md:378`'s build-order step 5: "its own session in the
  *      same server, with tools to spawn / prompt / abort / retire the others".
  *
- * They live in ONE file because `retire()` is the same operation for both, and it builds a
- * handoff document whose exact prose is behaviour. There is already one unavoidable second copy
- * of that document — `healbot.tsx` needs it for the operator's manual `x`, and the harness config
- * directory and the fork checkout cannot import each other (one is not in the other's workspace,
- * the other is derived and gitignored). Two copies are a compromise guarded by a test
- * (`probe_twin.py`). A third would not be.
+ * They live in ONE file because `retire()` is the same operation for both, and it builds a handoff
+ * document whose exact prose is behaviour.
+ *
+ * THIS FILE IS NOW THE ONLY IMPLEMENTATION OF RETIREMENT ANYWHERE — Phase 7. Until then
+ * `healbot.tsx` carried a second complete copy for the operator's manual `x`, because the harness
+ * config directory and the fork checkout cannot import each other (one is not in the other's
+ * workspace, the other is derived and gitignored). Phase 6 called that "a compromise guarded by a
+ * test" and pointed at `probe_twin.py`. A review then found the guard compared only double-quoted
+ * literals, so it could not see either template literal that renders the document's actual bullets
+ * — it missed eight seeded divergences and caught one — and that the two copies were also a live
+ * race, since `x` and the gate could both reach `POST /session` for the same session.
+ *
+ * So `x` no longer retires. It writes a request to session metadata and this file serves it: see
+ * `REQUEST_KEY` and `considerRequest`. One writer, one document, one `busy` flag that now actually
+ * means something. `probe_twin.py` was rewritten to assert the second copy is GONE rather than to
+ * compare it, and `probe_request_channel.py` drives the new channel end to end for free.
  *
  * WHY A SERVER PLUGIN RATHER THAN A TUI ONE.
  *
@@ -81,8 +91,19 @@
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Context occupancy at which a session should be retired, in tokens. The SOFT gate: cross it and
- * the turn in flight is allowed to finish, then the handoff runs.
+ * Context occupancy at which a session should be retired, in tokens. The only gate that fires.
+ *
+ * IT FIRES AT A STEP BOUNDARY, NOT AT THE END OF A TURN, and the difference is not cosmetic —
+ * this comment asserted the opposite for two phases. `processor.ts:443-445` assigns `finish` and
+ * `tokens` in the SAME mutation at every `step-finish`, and `:445` is the only site in the session
+ * tree that ever writes a non-zero `tokens`. So every `message.updated` that carries occupancy at
+ * all also carries a set `finish` — usually `"tool-calls"`, i.e. mid-turn — and `stepFinished()`
+ * below is true on all of them. MEASURED across 733 real assistant messages with occupancy > 0:
+ * zero had a null `finish` (677 `tool-calls`, 56 `stop`).
+ *
+ * The consequence is good and was arrived at by accident: overshoot past this line is bounded by
+ * ONE STEP (~65K, `docs/HARDEN.md` §6's table) rather than one whole turn (~170K measured). The
+ * cost is that a turn in flight IS aborted here — see `retire()`'s `POST /abort`.
  *
  * **The ceiling is ~360K, NOT the 922,000 `limit.input` the model registry advertises.** MEASURED
  * at the shipped default: a session driven up took its last successful turn at occupancy 359,829
@@ -99,17 +120,22 @@
 const RETIRE_AT = Math.max(1, Number(process.env["HEALBOT_RETIRE_AT"]) || 256_000)
 
 /**
- * The HARD gate. Cross it *during* a turn and the session is retired immediately, aborting it.
+ * INERT. It is kept, declared and logged, and it cannot change an outcome. Read this before
+ * tuning `HEALBOT_RETIRE_HARD` and expecting an effect.
  *
- * Two gates are needed because "let the agent finish what it is doing" has an overshoot cost, and
- * the cost is much larger than it looks. MEASURED on one ordinary turn: occupancy went
- * 5,216 -> 70,898 on a single tool result, and that turn finished at 175,090. One turn added
- * ~170K by itself. A session sitting just under the 256,000 soft gate that starts one more
- * read-heavy turn finishes near 426,000 — past the ceiling, dead, having obeyed the finish-first
- * rule the whole way.
+ * It was designed as a second gate for the case "the soft gate let the turn finish and the turn
+ * added ~170K on its own" — a real measurement (`docs/HARDEN.md` §6: occupancy 5,216 -> 70,898 on
+ * one tool result, that turn finishing at 175,090). The design was sound for the semantics its
+ * author believed the code had. The code never had them: since `RETIRE_AT` fires per STEP, the
+ * only consumer of this constant — `consider()`'s `if (!stepOver && !hard) return` — has
+ * `stepOver === true` on every event that can reach it, so `hard` is dominated on 733/733 real
+ * messages. No rig has ever executed the branch; `probe_headless_arm.py` and `probe_twin.py` both
+ * only assert the constant's presence in a log line and a source file.
  *
- * The abort is not weighed against finishing. It is weighed against `ContextOverflowError`, which
- * discards the same work, spends the tokens first, and produces no handoff.
+ * Kept rather than deleted for one reason: if `stepFinished()` is ever changed to opencode's own
+ * per-turn predicate (`prompt.ts:1295` excludes `["tool-calls","unknown"]`), this becomes load-
+ * bearing again the same day, and it would need re-deriving from scratch. Deleting it is the
+ * other defensible choice; leaving it undocumented is not.
  */
 const RETIRE_HARD = Math.max(RETIRE_AT, Number(process.env["HEALBOT_RETIRE_HARD"]) || 330_000)
 
@@ -128,6 +154,36 @@ const DIFF_FANOUT = 60
 
 /** Guard against a pathological history making the startup/steady-state cost unbounded. */
 const MAX_DOCUMENT_TAIL = 2000
+
+/**
+ * The session-metadata key the grid's `x` writes to ask THIS process to retire a session.
+ *
+ * THE POINT IS THAT THERE IS NOW EXACTLY ONE RETIRING PROCESS. Until Phase 7 the grid ran its own
+ * copy of `retire()` in the TUI process while this plugin ran another in the server, with no
+ * shared lock, so `x` landing as the gate fired produced two successors for one session. Phase 6
+ * documented that as "narrowed to one request" by a re-read before archiving; a review showed the
+ * re-read narrows nothing, because it runs AFTER the successor is created and seeded.
+ *
+ * So the grid no longer retires. It relays. `PATCH /session/{id}` with
+ * `metadata: { healbot: { retireRequested: <ms> } }` is accepted at
+ * `httpapi/groups/session.ts:51` and `handlers/session.ts:191-192`, reaches `Session.setMetadata`
+ * (`session.ts:763`), which calls the shared `patch()` — and `patch()` publishes
+ * `SessionV1.Event.Updated` with the WHOLE session object at `session.ts:748`. This plugin's
+ * `event` hook already receives every event for its directory, so the request arrives here with no
+ * new endpoint, no new dependency and no route registration (the server plugin surface has none to
+ * offer — `packages/plugin/src/index.ts` is hooks only, and `event` is receive-only).
+ *
+ * Self-triggering is not a hazard: archiving is itself a `patch()` and republishes `session.updated`
+ * with this key still set, but by then `time.archived` is populated and `considerRequest` bails on
+ * it. The key is deliberately left in place rather than cleared — it is a record of who asked.
+ */
+const REQUEST_KEY = "healbot"
+
+/** The request marker, or 0. Kept as a function so the grid's shape and this reader stay together. */
+function requestedAt(session: SessionInfo | undefined): number {
+  const value = session?.metadata?.[REQUEST_KEY]?.["retireRequested"]
+  return typeof value === "number" && value > 0 ? value : 0
+}
 
 // ---------------------------------------------------------------------------------------------
 // Structural types. Declared locally rather than imported, matching `trim-tools.ts`: the harness
@@ -163,6 +219,7 @@ type SessionInfo = {
   parentID?: string
   directory?: string
   time?: { archived?: number }
+  metadata?: Record<string, any>
 }
 
 type Todo = { content?: string; status?: string }
@@ -266,20 +323,26 @@ function occupancyOf(tokens: Tokens | undefined): number {
 }
 
 /**
- * Has the turn ended?
+ * Has a STEP ended? NOT "has the turn ended" — the name is the correction.
  *
- * An assistant message row exists ~20 ms after a prompt is accepted and is EMPTY until the turn
- * runs — the same race that produced a false `prompt_async` defect report in the Phase 4 audit.
- * So "an assistant message exists" means nothing; the completion signal is the message's own
- * `time.completed` / `finish`.
+ * An assistant message row exists ~20 ms after a prompt is accepted and is EMPTY until it runs —
+ * the same race that produced a false `prompt_async` defect report in the Phase 4 audit. So "an
+ * assistant message exists" means nothing; the signal is the message's own `time.completed` /
+ * `finish`.
  *
- * NOTE there is more than one projection site for that. `processor.ts:595-596` sets
- * `time.completed` and republishes in `SessionProcessor.cleanup`, which `Effect.ensuring` at
- * `:676` guarantees runs — but `prompt.ts:364-365`, `:396-397`, `:534-536` and `:1209-1210` each
- * do the same on the tool-driven and interrupted paths. Reading the FIELD rather than watching
- * one site is what makes this correct across all five.
+ * WHAT THIS DOES NOT MEAN. Every field read here is set per STEP, not per turn:
+ * `processor.ts:443` sets `finish = value.reason` and `:445` sets `tokens`, both inside the
+ * `step-finish` case that emits the `step-finish` part at `:452`; `:595-596` sets `time.completed`
+ * in `cleanup`, which `Effect.ensuring` at `:676` runs per `process()` call. A multi-step turn
+ * therefore satisfies this predicate several times, with `finish: "tool-calls"` each time, and
+ * `prompt.ts:1111-1114` keeps looping on exactly that value.
+ *
+ * opencode's own "the turn ended" predicate is `prompt.ts:1295`, and it is strictly narrower:
+ * `finish && !["tool-calls","unknown"].includes(finish)`. Swapping this function for that one is
+ * the whole difference between per-step and per-turn retirement, and it would resurrect
+ * `RETIRE_HARD`. Do not swap it without reading that constant's note.
  */
-function finished(info: MessageInfo): boolean {
+function stepFinished(info: MessageInfo): boolean {
   return Boolean(info.time?.completed || info.finish || info.error)
 }
 
@@ -290,15 +353,20 @@ function finished(info: MessageInfo): boolean {
 /**
  * The passover document handed to a successor session.
  *
- * This is a VERBATIM twin of `handoffDocument` in `healbot.tsx`. The two must stay identical or a
- * successor gets a different briefing depending on whether a human pressed `x` or the gate fired
- * — and "the same feature behaves differently depending on who triggered it" is precisely the
- * class of silent divergence this project keeps catching in itself.
+ * THE ONLY COPY. Until Phase 7 this was a verbatim twin of a `handoffDocument` in `healbot.tsx`,
+ * kept in step by hand because the operator's `x` ran its own retirement in the TUI process. The
+ * requirement was real — a successor briefed differently depending on whether a human pressed a
+ * key or the gate fired is precisely the class of silent divergence this project keeps catching in
+ * itself — but the guard was not. `probe_twin.py` compared only double-quoted literals, and both
+ * lines that render the document's actual bullets are template literals, so eight seeded
+ * divergences passed it.
  *
- * `.carryover/verified/probe_twin.py` asserts the two copies match, for free and with a mutation
- * check. If you edit this function, edit the other one; the probe will tell you if you did not.
+ * `x` now relays a request to this process instead (see `REQUEST_KEY`), so there is one
+ * implementation and nothing to keep in step. `probe_twin.py` was rewritten to assert the grid has
+ * NO copy of this function, with an inverted mutation check so the absence assertion cannot pass
+ * by reading the wrong text.
  *
- * DEVIATION FROM PLAN.md:371, inherited from the grid: the plan names
+ * DEVIATION FROM PLAN.md:383, inherited from the grid: the plan names
  * `POST /session/{id}/summarize` as the source, but that route is `compactSvc.create`
  * (`handlers/session.ts:273-283`) — COMPACTION, an LLM turn. The git-diff summariser is a
  * different function of the same name (`summary.ts:102-127`) which already runs on the prompt
@@ -390,13 +458,31 @@ export const Healbot = async (input: PluginInput) => {
     // the SAME directory as its successor, with no cell anywhere once archived, possibly parked
     // forever on a permission (`permission/index.ts:96-105` has no timeout).
     //
-    // Unconditional and idempotent: aborting an idle session is a no-op. On the soft-gate path it
-    // IS a no-op, since we only get here once the turn finished; its purpose is the race, where a
-    // turn starts between that check and this call. A turn beginning after the gate was met is
-    // exactly what "no turn consumption after the gate" forbids.
+    // Unconditional and idempotent: aborting an idle session is a no-op.
+    //
+    // It is USUALLY NOT a no-op, and this comment said the opposite for two phases. The gate fires
+    // at a step boundary (see `stepFinished`), so on a multi-step turn the common case is that the
+    // session is mid-turn right now and this abort cancels it. That is the intended trade under
+    // per-step semantics — one step of overshoot instead of a whole turn's — but it means the work
+    // of the in-flight step is discarded, so everything the handoff hands over has to come from
+    // what is already PERSISTED: the todos, the diffs, and the last completed text. It does.
     await api("POST", `/session/${sessionID}/abort`)
 
-    const todos = (await api<Todo[]>("GET", `/session/${sessionID}/todo`).catch(() => [])) ?? []
+    // NOT `.catch(() => [])`. A failed read and a genuinely empty list are the same value, and 60
+    // lines below, an empty list means ARCHIVE WITH NO SUCCESSOR — so one transient loopback
+    // failure would silently retire a session with outstanding work and log that there was none.
+    // That is the exact ordering hazard this function warns about further down ("archiving first
+    // and failing to seed loses the work with no cell to find it"), reached by a different route.
+    //
+    // Throwing is recoverable: `consider()` logs `retire FAILED`, the predecessor stays unarchived
+    // and still has a cell, and the next event retries. The grid's twin already behaves this way —
+    // its `ok()` wrapper throws on the same call — so this also removes a real divergence between
+    // the manual and automatic paths that `probe_twin.py` does not cover.
+    const todos = await api<Todo[]>("GET", `/session/${sessionID}/todo`).catch((error) => {
+      throw new Error(
+        `todo read failed, refusing to archive ${sessionID}: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    })
     const open = (Array.isArray(todos) ? todos : []).filter((todo) => todo && todo.status !== "completed")
 
     // ONE unlimited fetch, serving the objective, the file fan-out AND the closing narrative.
@@ -490,9 +576,19 @@ export const Healbot = async (input: PluginInput) => {
     // again — whereas archiving first and failing to seed loses the work with no cell to find it.
     await api("POST", `/session/${successorID}/prompt_async`, { parts: [{ type: "text", text: document }] })
 
-    // Re-read immediately before the irreversible step. The grid's manual `x` runs the same flow
-    // in a different process and neither can see the other's in-flight state; this narrows the
-    // double-retire window to the width of one request. It does NOT close it — see
+    // Re-read immediately before the irreversible step, because the grid's manual `x` runs the
+    // same flow in a different process and neither can see the other's in-flight state.
+    //
+    // BE PRECISE ABOUT WHAT THIS BUYS, because the surrounding docs overstated it: it does NOT
+    // narrow the two-successor window at all. By the time control reaches here the successor has
+    // already been created and seeded, two calls above — the return string below says so itself.
+    // All this check prevents is a redundant idempotent PATCH and a log line claiming a retirement
+    // that another actor already performed.
+    //
+    // The window that actually produces two successors runs from `consider()`'s archived check to
+    // the `POST /session` above, and it spans `isBlocked`'s two GETs, the abort, the todo GET, an
+    // unlimited full-history GET on a session at the gate, and up to DIFF_FANOUT parallel `/diff`
+    // GETs. That is seconds, not one request. Closing it needs a claim BEFORE the spawn — see
     // `docs/HEADLESS.md`.
     const current = await api<SessionInfo>("GET", `/session/${sessionID}`).catch(() => undefined)
     if (current?.time?.archived) {
@@ -509,36 +605,99 @@ export const Healbot = async (input: PluginInput) => {
     return outcome
   }
 
-  async function consider(sessionID: string, occupancy: number, turnOver: boolean) {
+  async function consider(sessionID: string, occupancy: number, stepOver: boolean) {
     if (busy) return
     if (handled.has(sessionID)) return
 
     const hard = occupancy >= RETIRE_HARD
-    // Let it finish — UNLESS it has also crossed the hard gate. Cutting a turn off throws away
-    // work the successor has to rediscover, which is the looping-discovery failure this handoff
-    // design exists to avoid, so the soft gate always waits.
-    if (!turnOver && !hard) return
+    // DEAD GUARD, kept honest rather than removed. It reads as "let the turn finish unless the
+    // hard gate is also crossed", and it has never once done that: `stepOver` is true on every
+    // event that can reach this function, because occupancy and `finish` are written in the same
+    // mutation (`processor.ts:443-445`). So this line never returns and `hard` never decides
+    // anything. Verified against 733 real assistant messages: 733/733 arrive with `stepOver` true.
+    //
+    // It stays because it is the exact hinge: make `stepFinished` per-turn and this line starts
+    // working as written, on the same day, with no other change.
+    if (!stepOver && !hard) return
 
-    const session = await api<SessionInfo>("GET", `/session/${sessionID}`).catch(() => undefined)
-    if (!session) return
-    // Already retired. Archiving hides a session from NOTHING server-side (`ListInput` has no
-    // `archived` field and `listByProject` has no `time_archived` predicate), so this has to be
-    // checked rather than assumed.
-    if (session.time?.archived) return
-    // Never a subagent. A subagent is a tool call inside its parent's turn; archiving one mid-turn
-    // orphans the parent's `task` call, and its window is the parent's problem to bound.
-    if (session.parentID) return
-    if (await isBlocked(sessionID)) return
-
-    handled.add(sessionID)
+    // CLAIM THE FLAG HERE, before the first await — not after the eligibility checks, which is
+    // where it used to be set and where it did not work.
+    //
+    // `busy` was read at the top of this function and written four awaits later, so it guarded
+    // nothing across them: the hook is fire-and-forget (`plugin/index.ts:255` calls it with
+    // `void`), a turn emits several qualifying events (occupancy and `finish` land together on
+    // every step), and `healbot_retire` can arrive from the control agent at any point. Two
+    // invocations could both pass `if (busy)` while the first was parked on the session GET or on
+    // `isBlocked`'s two GETs, and both would reach `POST /session` — two live successors seeded
+    // with the same handoff, editing the same directory. That contradicted the "serialised
+    // deliberately" note on `busy` itself.
+    //
+    // JavaScript's single thread is what makes the fix sufficient: nothing can interleave between
+    // the synchronous `if (busy) return` above and this assignment, so the check-and-set is
+    // atomic. `healbot_retire` already had its check and set adjacent, so the two entry points now
+    // hold the same discipline and exclude each other. The cost is that eligibility checks for
+    // OTHER sessions also wait — acceptable, because a session over the gate keeps emitting
+    // events and is reconsidered on the next one.
     busy = true
     try {
+      const session = await api<SessionInfo>("GET", `/session/${sessionID}`).catch(() => undefined)
+      if (!session) return
+      // Already retired. Archiving hides a session from NOTHING server-side (`ListInput` has no
+      // `archived` field and `listByProject` has no `time_archived` predicate), so this has to be
+      // checked rather than assumed.
+      if (session.time?.archived) return
+      // Never a subagent. A subagent is a tool call inside its parent's turn; archiving one
+      // mid-turn orphans the parent's `task` call, and its window is the parent's problem to bound.
+      if (session.parentID) return
+      // Blocked on a human — bail WITHOUT marking handled, so answering the block does not cost
+      // the session its retirement. This is why `handled.add` is here and not above with `busy`.
+      if (await isBlocked(sessionID)) return
+
+      handled.add(sessionID)
       await retire(session)
     } catch (error) {
       // Surfaced, not swallowed, and NOT retried — `handled` already holds the id. A retirement
       // that fails silently in a headless process is the same class of defect as a grid that
       // paints a dead session green.
       log(`retire FAILED for ${sessionID}: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      busy = false
+    }
+  }
+
+  /**
+   * The operator pressed `x`. Same serialisation as the gate — this is the whole reason the race
+   * is closed: both paths now run in ONE process, so `busy` and `handled` actually mean something.
+   *
+   * Differences from `consider()`, both deliberate:
+   *   - No occupancy test. A manual retirement is a decision, not a threshold; retiring a small
+   *     session on purpose is a supported thing to do and the grid offers it at any size.
+   *   - No `isBlocked` test. The automatic gate skips blocked sessions because retiring underneath
+   *     a pending permission discards a decision the human is in the middle of making — but here
+   *     the human IS the caller, looking at the same grid that renders the block. Refusing would
+   *     be second-guessing the operator; the gate's caution does not transfer.
+   * The archived and subagent guards DO transfer: both are structural, not policy.
+   */
+  async function considerRequest(sessionID: string) {
+    if (busy) return
+    if (handled.has(sessionID)) return
+    busy = true
+    try {
+      const session = await api<SessionInfo>("GET", `/session/${sessionID}`).catch(() => undefined)
+      if (!session) return
+      // The archive itself republishes `session.updated` with the request key still set. This is
+      // what stops that from looping.
+      if (session.time?.archived) return
+      if (session.parentID) return
+      // Re-read the marker from the server rather than trusting the event payload: the event may
+      // be stale by the time this runs, and a request that has already been served leaves an
+      // archived session that the check above catches anyway.
+      if (!requestedAt(session)) return
+      handled.add(sessionID)
+      log(`request: retiring ${sessionID} on the operator's mark`)
+      await retire(session)
+    } catch (error) {
+      log(`requested retire FAILED for ${sessionID}: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       busy = false
     }
@@ -587,7 +746,10 @@ export const Healbot = async (input: PluginInput) => {
       const value = occupancyOf(info.tokens)
       if (value > 0 && occupancy === 0) occupancy = value
       if (occupancy > 0) {
-        state = info.error ? "errored" : finished(info) ? "done" : "working"
+        // "done" here means the newest step ended, which for a multi-step turn still in flight
+        // reads as done between steps. The control agent re-lists before acting, so a one-poll
+        // stale "done" costs nothing; a cell that claimed "working" forever would cost more.
+        state = info.error ? "errored" : stepFinished(info) ? "done" : "working"
         break
       }
     }
@@ -757,6 +919,17 @@ export const Healbot = async (input: PluginInput) => {
      */
     event: async ({ event }: { event: PluginEvent }) => {
       try {
+        // `session.updated` — the OPERATOR'S `x`, relayed. See `claimedRequest`. This is checked
+        // before the AUTO_RETIRE gate on purpose: the kill switch disables the automatic gate, not
+        // the operator's ability to retire a session by hand.
+        if (event.type === "session.updated") {
+          const info = event.properties?.["info"] as SessionInfo | undefined
+          if (!info?.id) return
+          if (!requestedAt(info)) return
+          await considerRequest(info.id)
+          return
+        }
+
         if (!AUTO_RETIRE) return
         if (event.type !== "message.updated") return
         const info = event.properties?.["info"] as MessageInfo | undefined
@@ -765,7 +938,7 @@ export const Healbot = async (input: PluginInput) => {
         if (!sessionID) return
         const occupancy = occupancyOf(info.tokens)
         if (occupancy < RETIRE_AT) return
-        await consider(sessionID, occupancy, finished(info))
+        await consider(sessionID, occupancy, stepFinished(info))
       } catch (error) {
         log(`event handler error: ${error instanceof Error ? error.message : String(error)}`)
       }

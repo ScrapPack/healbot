@@ -253,6 +253,14 @@ provider does. The threshold exists to fire *before* the hard error, and at 350K
 
 Consequence, and it is a decision rather than a measurement: **the default should probably come
 down to 200–250K.** It is left at 350,000 because that number is the project owner's to choose.
+
+> **Superseded — 350,000 is not the shipped default and has not been since later in this same
+> phase.** This paragraph is left standing because it records the moment the decision was still
+> open, but read as a statement about the product it is now false: the owner took the decision
+> inside Phase 5 and the default is **256,000** (§7 sets it, §8 lists it, `healbot.ts:110` and
+> `healbot.tsx:53` both carry it). Nothing else in this section changes — the ~360K ceiling and
+> the 359,829 measurement are what forced the number down, and they still hold.
+
 A second consequence: at this default a session cannot reach both ≥350K occupancy and >100
 messages without failing turns on the way, so the rig's over-threshold assertion accepts either
 `RETIRE` or `ERROR` and leans on the occupancy-derived header count, which does not depend on
@@ -323,6 +331,16 @@ The same run measured the cost of "let it finish", and it is much larger than it
 | 4 — one tool result | **70,898** |
 | 6 — `stop` | **175,090** |
 
+> **The data is right; the reasoning built on it was not.** Note the column header: this is
+> **per-STEP** occupancy, and it was read as though it were per-turn. Phase 7 measured that the
+> *shipped* gate is evaluated at every step boundary rather than at the end of a turn (see the
+> note below §7's two-gate paragraph), so the row that matters for sizing it is the step-to-step
+> delta — **5,216 → 70,898 is ~65K of single-step growth** —
+> not the 5,216 → 175,090 span of the whole turn. That is the measurement which, read correctly,
+> shows the per-step gate has adequate margin: crossing at 256,000 exposes one more step, ~65K,
+> and lands near 321,000, inside the ~360K ceiling. See `HARNESS.md`, "The gate fires at a STEP
+> boundary".
+
 **One turn added ~170K.** Apply that to a 256,000 soft gate: a session sitting just under it
 that starts one more read-heavy turn finishes near **426,000** — past the ~360K ceiling, dead,
 having obeyed the finish-first rule the whole way. The soft gate alone cannot prevent the
@@ -333,6 +351,27 @@ then the handoff runs. `RETIRE_HARD` (**330,000**) is hard: cross it *during* a 
 session is retired immediately, aborting it. That abort is not weighed against finishing — it is
 weighed against `ContextOverflowError`, which discards the same work, spends the tokens first,
 and produces no handoff.
+
+> **Still a true record of Phase 5, and no longer a description of the shipped harness. There is
+> one live gate now, not two, and it aborts.** Nothing above is retracted: the grid's
+> `createEffect` really did wait for the turn, because it gated on the **session's** status
+> (`status?.type === "busy" || "retry"`), which stays busy for the whole turn. Finish-first was
+> implemented and TESTED as written.
+>
+> What changed it was Phase 6, silently. Moving retirement into the server plugin replaced that
+> session-status check with a check on the **message** — and `processor.ts:443-445` writes
+> `finish` and `tokens` in one mutation at every `step-finish`, with `:445` the only site in the
+> session tree writing a non-zero `tokens`. So every event carrying occupancy also carries a set
+> `finish`, usually `"tool-calls"`. MEASURED in Phase 7 on 733 real assistant messages with
+> occupancy > 0: **zero** had a null `finish`. The gate now fires at the first STEP boundary past
+> `RETIRE_AT` and aborts the turn in flight, and `RETIRE_HARD` is **inert** — its only consumer is
+> dominated by a condition true on 733/733, and no rig has executed the branch.
+>
+> The outcome is better than the design, not worse, and it was arrived at by accident: exposure is
+> one step (~65K) rather than one turn (~170K). The hard-gate constant is kept in the code and
+> documented as dead, because the hinge is a single function — swap the plugin's `stepFinished()`
+> for opencode's own per-turn predicate and both the finish-first semantics above and this hard
+> gate come back the same day. `HARNESS.md` carries the load-bearing facts.
 
 `HEALBOT_AUTO_RETIRE=0` restores the operator-initiated behaviour.
 
@@ -376,6 +415,11 @@ Added by this phase:
 - **The soft gate is workload-dependent.** 256,000 is right if turns add ~50K; a turn that adds
   ~170K needs the hard gate to catch it. If `RETIRE_HARD` fires routinely for a given workload,
   the soft gate is too high for that workload rather than the hard gate being too low.
+  > **Corrected in Phase 7.** The dependence is real but the unit is wrong, and so is the
+  > remedy. The gate fires per STEP, so what has to fit in the margin is one **step**, not one
+  > turn — ~65K measured, against ~104K of headroom below the ~360K ceiling. `RETIRE_HARD` can
+  > never catch anything; it is inert. Re-tune 256,000 only if a single step is ever measured
+  > above ~100K. `HARNESS.md`.
 - **The 256K gate has not been exercised end to end at its real value.** Automatic retirement is
   TESTED at 20,000 and the threshold comparison is a single `>=`, so the risk is low — but the
   full-scale run at 256,000 has not been paid for.

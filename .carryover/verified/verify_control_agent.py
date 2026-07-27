@@ -3,21 +3,38 @@
 `PLAN.md:378`: "Control agent. Its own session in the same server, with tools to spawn / prompt /
 abort / retire the others (POST /session, /prompt_async, /abort). Same registry you see."
 
-This rig asserts the two things that cannot be established without a model turn, and it asserts
-them as a PAIR: the same instruction, sent to two different agents, must produce opposite tool
-calls.
+This rig asserts, as a PAIR, that the same instruction sent to two different agents produces
+opposite tool calls:
 
   * Under `agent: "control"` the healbot tools must be present and used.
   * Under the default `build` agent they must be ABSENT — not merely refused, absent, removed from
     the request payload before the model ever sees them.
 
-The second is the one that matters for this project's founding purpose. Tool definitions are the
-largest single block of standing context (11 shipped tools measure 19,898 B), so five more left
+The second bullet is the one that matters for this project's founding purpose. Tool definitions are
+the largest single block of standing context (11 shipped tools measure 19,898 B), so five more left
 global would be rent every session pays forever for a capability one agent uses. The scoping is a
 global `healbot_*: deny` plus an `allow` in the control agent's own frontmatter, and it works
 because `Permission.disabled` (`permission/index.ts:204-215`) removes a tool exactly when the LAST
 matching rule is `pattern: "*"` with `action: "deny"`, while the agent's permission is merged last
-(`agent/agent.ts:293`). All of that is VERIFIED from source; none of it had ever run.
+(`agent/agent.ts:293`).
+
+WHAT ACTUALLY NEEDS THE MODEL TURN, AND WHAT DOES NOT. The bullets above used to be introduced as
+"the two things that cannot be established without a model turn", and that half-sentence was
+queueing paid work needlessly. The DISABLED SET is free and deterministic: `opencode debug agent
+<name>` prints it, via a `resolveTools` (`cli/cmd/debug/agent.handler.ts:88-98`) that calls the
+same `Permission.disabled` over the same merged ruleset, with the session-creating branch gated
+behind `if (toolID)` (`:43-58`), so without `--tool` there is no session and no provider call.
+TESTED under this harness with an isolated `OPENCODE_DB`: `debug agent build` reports all five
+`healbot_*` **false**, `debug agent control` all five **true**, 0 sessions in the DB afterwards.
+
+The caveat, and it is why the free check does not replace this file: `agent.handler.ts` is a
+SEPARATE function calling the same predicate, not the request path. The request path
+(`session/llm/request.ts:208-214`) additionally merges session-level permission into the ruleset
+and filters on `input.user.tools`. Both are empty under this harness, so the two are
+equivalent-under-this-config, not identical.
+
+What only a turn can show is EXECUTION: that the model, handed no tool names, reaches for the five
+under `control` and demonstrably cannot under `build`. That is what this file pays for.
 
 ASSERTION DISCIPLINE, and it shapes the prompt. The instruction below deliberately does NOT name
 any tool. If it did, the tool names would appear in the user message and any assertion scanning the
@@ -196,11 +213,29 @@ try:
     #
     # Stated the strong way instead: the build agent's delegation went through `task`, so every
     # session it produced has a parent.
+    #
+    # THE CORRECTED FORM WAS STILL WEAK, and a Phase 7 review caught it before it was ever run.
+    # `all(s.get("parentID") for s in extras)` is True on an EMPTY list — and `extras` is empty
+    # whenever the build agent answers directly instead of delegating, which is a perfectly
+    # ordinary outcome. So a re-run could have reported 16/16 having validated nothing.
+    #
+    # Assert the actual claim instead: the denied tools are the only way to create a TOP-LEVEL
+    # session, so the build agent must have created none. That is False the moment a top-level
+    # session appears, and it does not quietly become vacuous — when the interesting case did not
+    # occur, the detail line says so out loud rather than reporting a silent pass.
     extras = [s for s in live() if s["id"] not in before and s["id"] not in (control, spawned, plain)]
+    top_level = [s for s in extras if not s.get("parentID")]
     r.check(
-        "…and every session it did create is a `task` subagent, not a top-level one",
-        all(s.get("parentID") for s in extras),
-        f"{len(extras)} extra: {[(s['id'][:16], bool(s.get('parentID'))) for s in extras]}",
+        "…and it created NO top-level session — the denied tools are the only way to make one",
+        not top_level,
+        f"{len(extras)} extra, {len(top_level)} top-level: "
+        f"{[(s['id'][:16], 'subagent' if s.get('parentID') else 'TOP-LEVEL') for s in extras]}"
+        + (
+            "  [NOT EXERCISED: the build agent created no sessions at all this run, so this "
+            "assertion held vacuously — the scoping claim rests on the tool-call check above]"
+            if not extras
+            else ""
+        ),
     )
 
     # The pair, stated as one fact. This is the assertion the token budget rests on.

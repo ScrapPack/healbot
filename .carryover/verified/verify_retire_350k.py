@@ -1,4 +1,13 @@
-"""Retirement at the SHIPPED 350,000 default — the run every prior result stood in for.
+"""Retirement at FULL SCALE — 350,000 tokens of occupancy, the run every prior result stood in for.
+
+THIS FILE'S TITLE USED TO SAY "the SHIPPED 350,000 default", AND THAT NUMBER IS NO LONGER THE
+DEFAULT. `healbot.tsx:53` and `healbot.ts:110` both read `256_000` now; 350,000 was lowered
+because the measured provider ceiling is ~360K and 350K left under 3% of margin (docs/HARDEN.md
+§6). So `TARGET` below is no longer a mirror of the shipped default and is not maintained as one.
+What this rig is now is a DELIBERATE FULL-SCALE RUN: it drives a session to 350,000 tokens of live
+occupancy and past the store's 100-message window, which is the regime the cheap 20,000-token rigs
+cannot reach and where the objective-eviction defect described below actually lived. Read every
+"350K" below as "full scale", not as "the threshold the code ships with".
 
 Every retirement figure this project has ever recorded was measured at
 `HEALBOT_RETIRE_AT=20000` against a session of about eight messages. That was the right call
@@ -14,12 +23,31 @@ exactly where the feature does, in the one regime never run.
 
 This rig puts BOTH conditions in one session on purpose:
 
-  * occupancy >= 350,000  -> RETIRE fires at the shipped default, with NO env override
+  * occupancy >= 350,000  -> far past whatever the code's own gate is, with NO env override
   * messages     >  100   -> the store has evicted message one, so the objective can only be
                              right if it came from the server
 
 The second is what makes the first worth the money. Proving `RETIRE` renders at 350K is a
 threshold check; proving the objective survives the eviction is the fix.
+
+READ THIS BEFORE SPENDING THE MONEY — the lowered default probably breaks the growth loop.
+INFERRED, from VERIFIED premises, not TESTED (testing it is the ~5M tokens this file costs):
+
+  * `boot()` runs the TUI from source with the harness sourced, and the TUI hosts its server
+    IN-PROCESS, so `harness/config/opencode/plugin/healbot.ts` loads and arms. That is not a
+    guess — it is why `probe_error_state.py` and `probe_focus.py` have to disarm the gate with
+    `os.environ["HEALBOT_AUTO_RETIRE"] = "0"` to do their work.
+  * This file sets neither `HEALBOT_AUTO_RETIRE` nor `HEALBOT_RETIRE_AT`. The plugin's kill switch
+    defaults ON (`healbot.ts:133`, `!== "0"`) and its gate defaults to 256,000 (`healbot.ts:110`).
+  * The loop below drives occupancy from ~5K to 350,000, so it crosses 256,000 on the way.
+
+When this rig was recorded 25/25 the shipped default WAS 350,000 and automatic retirement did not
+yet live in the server, so the loop ran to the end untouched. Today the plugin should fire at
+~256K, archive the worker mid-loop, and leave the remaining `POST /session/{worker}/message` calls
+and the manual `x` with nothing to act on. Fixing that is a behaviour change and is deliberately
+not made here; the shape of the fix is either `HEALBOT_AUTO_RETIRE=0` for the growth phase (this
+rig is about MANUAL retirement — it presses `x`) or an explicit `HEALBOT_RETIRE_AT` above TARGET,
+which would cost the "no env override" property the rig was built for.
 
 COST. Reaching 350K of context is inherently quadratic — every step re-sends everything before
 it — so this is roughly 5M cumulative input tokens, the large majority of it `cache.read`. It
@@ -38,7 +66,18 @@ from rig import Api, PROJECT, Results, Term, boot, db, fixtures, git_baseline, o
 
 PORT = 4735
 DB = db("retire350")
-TARGET = 350_000          # must match healbot.tsx's RETIRE_AT default
+TARGET = 350_000          # NOT the RETIRE_AT default. This comment used to claim it "must match
+                          # healbot.tsx's RETIRE_AT default"; that default is 256_000
+                          # (`healbot.tsx:53`, `healbot.ts:110`) and has been since the ceiling was
+                          # measured at ~360K. 350_000 is kept as a deliberate full-scale target —
+                          # just under that ceiling — not as a mirror of the shipped threshold.
+                          # It is still a sound target: the rig pops the env var at :71 so the gate
+                          # under test is the code's own, and 350_000 is well above 256_000, so a
+                          # session that reaches TARGET has certainly crossed whatever the gate is.
+                          # What TARGET no longer does is name the gate's VALUE, and the printed
+                          # labels below still say "the SHIPPED default" — stale display text, left
+                          # alone so the recorded 25/25 output stays comparable. See the docstring
+                          # for why reaching TARGET at all is now in doubt.
 MIN_MESSAGES = 102        # > the store's 100-message window, so message one is evicted
 MAX_TURNS = 70            # hard cost stop; failing loudly beats spending unbounded
 CHUNK_BYTES = 35_000      # under tool/read.ts's MAX_BYTES = 50 KB even after the

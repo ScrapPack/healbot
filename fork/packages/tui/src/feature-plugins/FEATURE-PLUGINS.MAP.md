@@ -20,14 +20,19 @@ Parent map: `packages/tui/TUI.MAP.md`.
 | imports | 2-14 | one default import per plugin |
 | `BuiltinTuiPlugin` type | 16-20 | `Omit<TuiPluginModule,"id"> & { id: string; tui: TuiPlugin; enabled?: boolean }` |
 | `createBuiltinPlugins(options)` | 22-38 | returns the array; **`options` is declared and never read** — dead parameter |
-| the array | 23-37 | `HomeFooter, HomeTips, SidebarContext, SidebarMcp, SidebarLsp, SidebarTodo, SidebarFiles, SidebarFooter, Notifications, PluginManager, WhichKey, DiffViewer, HealbotSpike` |
+| the array | 23-37 | `HomeFooter, HomeTips, SidebarContext, SidebarMcp, SidebarLsp, SidebarTodo, SidebarFiles, SidebarFooter, Notifications, PluginManager, WhichKey, DiffViewer, Healbot` |
 
 Downstream: `packages/opencode/src/plugin/tui/internal.ts:6-10` → host `runtime.ts:1093-1103`
 (`enabled: item.enabled ?? true`) → `:1110-1117` activates **sequentially**, skipping
 `!plugin.enabled`. Order in this array is therefore the activation order, and route ids are
 **last-wins** on collision (`plugin/api.ts:35`).
 
-**To add the grid:** import it and append to the array at `builtins.ts:37`. Nothing else.
+**The grid is registered.** VERIFIED: `import Healbot from "./system/healbot"` at `builtins.ts:11`,
+and `Healbot` is the **last** array entry (`:36`) — so it activates last and wins any route-id
+collision. This paragraph used to read "**To add the grid:** import it and append to the array at
+`builtins.ts:37`", and the row above used to end `…DiffViewer, HealbotSpike`. Both were
+instructions for work completed at fork `26c9316`; this map was written at `c9323db` and not
+revised when `builtins.ts` was resynced at `f3c3785`. `HealbotSpike` appears nowhere in the tree.
 
 ---
 
@@ -47,9 +52,16 @@ Downstream: `packages/opencode/src/plugin/tui/internal.ts:6-10` → host `runtim
 | Plugin manager | `system/plugins.tsx` | 269 | `internal:plugin-manager` | commands `plugins.list`, `plugins.install` (`:238-262`) |
 | **Which-key** | `system/which-key.tsx` | 608 | `which-key` | 3 commands + slots `home_bottom`/`app`/`app_bottom` (`:578-597`). **`enabled: false`** (`:604`) |
 | **Diff viewer** | `system/diff-viewer.tsx` (+ `-ui` 103, `-file-tree` 162, `-file-tree-utils` 232) | 1077 | `diff-viewer` | **route `"diff"` + command `diff.open`** (`:1045-1072`) |
-| Healbot spike | `system/healbot-spike.tsx` | 133 | `healbot-spike` | route `"healbot-spike"` + command `healbot.spike` (`:104-128`) — **delete when the real grid lands** |
+| **Healbot grid** | `system/healbot.tsx` | **not quoted — `wc` it** | `healbot` | **route `"healbot"` + command `healbot.open` / `/healbot`** (`:1223-1245`); 10 in-route commands (`:995-1055`) |
 
 Sidebar `sidebar_content` render order is `context(100) → mcp(200) → lsp(300) → todo(400) → files(500)`.
+
+The grid's row is the one line in this table with no figure in **Lines**, deliberately.
+`HARNESS.md:130-132` records that byte and line counts for `healbot.tsx` were stated three times
+across this repo and all three were stale within a day; it instructs readers to `wc` the file.
+This map obeys that. The row it replaced read `| Healbot spike | system/healbot-spike.tsx | 133 |
+healbot-spike | route "healbot-spike" + command healbot.spike … **delete when the real grid
+lands** |`. The spike was deleted, at fork `26c9316`, in the commit that landed the grid.
 
 ### Two plugin shapes
 
@@ -59,7 +71,7 @@ const tui: TuiPlugin = async (api) => {
   api.slots.register({ order: 100, slots: { sidebar_content(_ctx, props) { … } } })
 }
 
-// B. route owner — diff-viewer, healbot-spike, and the Healbot grid
+// B. route owner — diff-viewer and the Healbot grid
 const tui: TuiPlugin = async (api) => {
   api.route.register([{ name: ROUTE, render: () => <View api={api} /> }])
   api.keymap.registerLayer({ commands: [{ …, run() { api.route.navigate(ROUTE, {…}) } }] })
@@ -204,38 +216,74 @@ Healbot *retirement confirmation* dialog (`api.ui.DialogConfirm` + toast on resu
 
 ---
 
-# `system/healbot-spike.tsx` — the working proof
+# `system/healbot.tsx` — the grid, the control terminal
 
-133 lines. Already in the tree, already registered (`builtins.ts:36`).
+**This section used to document `system/healbot-spike.tsx` — "the working proof", 133 lines,
+"already registered (`builtins.ts:36`)". That file no longer exists.** It was deleted at fork
+`26c9316`, in the commit that landed the real grid; `find . -name 'healbot-spike*'` returns
+nothing, and `HARNESS.md:316` records the same resolution. Everything below is the shipped grid.
 
-| Proof | Line |
-|---|---|
-| route registration | 106-111 |
-| palette command `healbot.spike` / `/healbot` | 113-127 |
-| `useKeyboard` — route owns the keyboard | 58-71 |
-| **`returnRoute` round-trip** — stash `:122`, shape-checked read `:29-35`, navigate back `:64-66` | 29-35, 64-66, 122 |
-| `api.client.session.list()` data path | 38-41 |
-| `api.event.on(…)` ×4, **each wrapped in `onCleanup`** | 48-55 |
-| theme accessor as a function | 17 |
-| `<box border borderColor={theme().primary}>` — the border mechanism | 75, 79, 92 |
-| `export default { id: "healbot-spike", tui }` | 130-133 |
+Shape B, built from `diff-viewer`'s skeleton. **No line or byte count is quoted here** — see the
+inventory note above and `HARNESS.md:130-132`. `wc` it.
 
-Its `useKeyboard` approach (`:58`) is the *cheap* path; `diff-viewer`'s
-`useBindings` + `keybinds.gather` (`diff-viewer.tsx:737-750`) is the *correct* one — it puts
-grid keys in the command palette, in which-key, and under user override. Migrate when the real
-grid lands.
+| Element | Line | Detail |
+|---|---|---|
+| `const ROUTE = "healbot"` | 15 | |
+| plugin body | 1218-1246 | the `selected` signal lives in the **plugin closure** (`:1221`), not the component — the which-key pattern (`which-key.tsx:533-535`), so selection survives focusing a session and coming back |
+| route registration | 1223-1228 | `render: () => <Healbot api selected setSelected />` |
+| palette command `healbot.open` / `/healbot` | 1230-1245 | `namespace:"palette"`; stashes `returnRoute: api.route.current` (`:1239`), then `api.ui.dialog.clear()` (`:1241`, F4) |
+| `export default { id: "healbot", tui }` | 1248-1251 | |
+| **10 in-route commands** | 995-1055 | `healbot.close`:996, `.left`:997, `.right`:998, `.up`:999, `.down`:1000, `.refresh`:1001, `.focus`:1003, `.answer`:1016, `.retire`:1027, `.next-blocked`:1039 |
+| **`useBindings` + `keybinds.gather("healbot", …)`** | 1057-1085 | the `diff-viewer` path, not the spike's `useKeyboard` — grid keys are in the palette, in which-key, and user-overridable |
+| **`mode: OPENCODE_BASE_MODE` + `enabled: !answering()`** | 1064-1065 | the part `diff-viewer` has no equivalent for: it hands the keyboard to the docked answer panel, which collides on almost every key (j/k/h/l, 1-9, return, escape) |
+| shape-checked `returnRoute` read | 958-964 | `leave()` at `:966-970` falls back to `"home"` on a malformed param |
+| **every `api.event.on` wrapped in `onCleanup`** | 665, 677-678, 707, 714-715, 976-977, 992-993 | nine subscriptions, all released on unmount |
+| direct host imports | 4, 6 | `useTerminalDimensions` from `@opentui/solid`; **`useSync` from `../../context/sync`** — the direct-import precedent (F7) cashed in |
 
-**Two things here are deliberately more correct than `diff-viewer`, and the grid should keep both:**
+**Two things the spike did better than `diff-viewer`, and the grid kept both:**
 
-1. **`onCleanup` around every `api.event.on`** (`:48-55`). The unsubscribe the host returns is
-   tracked to the **plugin** scope (`packages/opencode/src/plugin/tui/runtime.ts:593-597`), not to
-   the component — so without this, each route mount leaves more live handlers writing into a
-   disposed component's signals. `routes/session/index.tsx:320,350` omits it and gets away with it
-   only because those handlers self-neuter on a `part.sessionID !== route.sessionID` guard. A grid
-   subscribing to `message.part.updated` (fires per token delta) has no such excuse.
-2. **A shape-checked `returnRoute` read** (`:29-35`) instead of `diff-viewer`'s unvalidated cast of
-   the whole params bag (`diff-viewer.tsx:95-103`), so a malformed param falls back to `"home"`
+1. **`onCleanup` around every `api.event.on`.** The unsubscribe the host returns is tracked to the
+   **plugin** scope (`packages/opencode/src/plugin/tui/runtime.ts:593-597`), not to the component —
+   so without this, each route mount leaves more live handlers writing into a disposed component's
+   signals. `routes/session/index.tsx:320,350` omits it and gets away with it only because those
+   handlers self-neuter on a `part.sessionID !== route.sessionID` guard. The grid subscribes nine
+   times and has no such excuse; `:972-975` says so in place.
+2. **A shape-checked `returnRoute` read** (`:958-964`) instead of `diff-viewer`'s unvalidated cast
+   of the whole params bag (`diff-viewer.tsx:95-103`), so a malformed param falls back to `"home"`
    rather than attempting a bad navigate.
+
+## The grid does not own automatic retirement
+
+Since Phase 6 it does not, and this map is the last place that had not been told. `RETIRE_AT`
+(`:53`, default 256,000, `HEALBOT_RETIRE_AT`) survives in this file for **presentation only** —
+the `RETIRE` border (`:411`), the header's `N to retire` count, and each cell's
+share-of-threshold figure (`:509`). Manual retirement, `x` → `healbot.retire` (`:1027-1037`), is
+still here. The automatic gate moved to the **server** plugin
+(`harness/config/opencode/plugin/healbot.ts`) because a `createEffect` in this component could
+only run while the route was mounted: `enter` unmounts the route (`app.tsx:1079-1085` recomputes
+the plugin route and returns `undefined` once `route.data.type !== "plugin"`), and a fleet left
+running with no client attached retired nothing at all. **Exactly one process may own the gate** —
+the effect was deleted here rather than kept as a fallback, so an operator's `x` and the server
+plugin cannot each spawn a successor. Reasoning in full at `healbot.tsx:55-83`.
+
+**The gate fires at a STEP boundary, not at the end of a turn** — VERIFIED. `processor.ts:435` is
+the `step-finish` case; `:443-445` assign `finish`, `cost` and `tokens` in the same mutation, and
+`:445` is the only site in the session tree that writes a non-zero `tokens`. So every
+`message.updated` that carries occupancy at all also carries a set `finish` — usually
+`"tool-calls"`, i.e. mid-turn. MEASURED across 733 real assistant messages with occupancy > 0:
+zero had a null `finish` (677 `tool-calls`, 56 `stop`).
+
+Two consequences reach this file. The turn in flight **is** aborted, so overshoot past the gate is
+bounded by one step (~65K measured) rather than one whole turn (~170K measured) — better than the
+behaviour that was designed and documented, and arrived at by accident. What that looks like on
+screen is a cell going `RETIRE` and then gone mid-turn rather than at a turn boundary. And the
+server plugin's `RETIRE_HARD` (330,000, `HEALBOT_RETIRE_HARD`) is **inert** — its only consumer is
+dominated by the per-step predicate, which is true 733/733 — so a reader who comes here looking
+for a second threshold to tune will not find one, in this file or in effect. The hinge is one
+function: the server plugin's `stepFinished()` versus opencode's own per-turn predicate at
+`prompt.ts:1295` (`finish && !["tool-calls","unknown"].includes(finish)`). Swapping them switches
+the harness to per-turn retirement and makes the hard gate load-bearing again. Unchanged by any of
+this: the ~360K ceiling, the 256,000 default, and the handoff document.
 
 ---
 
@@ -246,21 +294,31 @@ grid lands.
 | F1 | `createBuiltinPlugins(options)` **ignores its `options` argument**. Anything flag-gated must read the flag itself. | `builtins.ts:22-38` |
 | F2 | Activation is **sequential and order-dependent** — commands registered earlier win keybind precedence; routes are **last-wins** on id collision. Array position in `builtins.ts:23-37` is meaningful. | `packages/opencode/src/plugin/tui/runtime.ts:1110-1117`; `plugin/api.ts:35` |
 | F3 | `enabled: false` (which-key) means the plugin never runs at boot; users flip it via `plugin_enabled` config or the plugin manager. | `which-key.tsx:604`; `runtime.ts:479,670-672,1102` |
-| F4 | Opening a route from a palette command **must** call `api.ui.dialog.clear()` or the dialog stays layered over the route. | `diff-viewer.tsx:1067`; `healbot-spike.tsx:123` |
+| F4 | Opening a route from a palette command **must** call `api.ui.dialog.clear()` or the dialog stays layered over the route. | `diff-viewer.tsx:1067`; `healbot.tsx:1241` |
 | F5 | Route params are read via `"params" in api.route.current ? …` and cast without validation. A missing param is `undefined`, not an error. | `diff-viewer.tsx:95-103` |
 | F6 | `notifications.ts` state is **plugin-local Sets, lost on restart**. Any "finished" signal derived from it — or from `session_status` — is process-local. | `notifications.ts:30-33`; `context/CONTEXT.MAP.md` G3 |
 | F7 | Feature-plugins freely import host internals with relative paths (`../../keymap`, `../../context/theme`, `../../ui/dialog-select`). This is builtin-only; external plugins get `api` and the `package.json` exports map. | `diff-viewer.tsx:11-20`; `plugins.tsx:5,7` |
 | F8 | Only `sidebar_*` slot handlers receive `props.session_id` (`(_ctx, props)`); `app`/`app_bottom`/`home_*` handlers take no session. A slot-based grid would have no session context — another reason to use a route. | `sidebar/context.tsx:53` vs `which-key.tsx:584,591` |
-| F9 | `healbot-spike.tsx` is registered in `builtins.ts:36` and will keep appearing as `/healbot` in the palette until removed. Pick a **different** route name and slash name for the real grid, or delete the spike in the same change. | `builtins.ts:11,36`; `healbot-spike.tsx:14,118` |
+
+**F9 is gone.** It read: "`healbot-spike.tsx` is registered in `builtins.ts:36` and will keep
+appearing as `/healbot` in the palette until removed. Pick a **different** route name and slash
+name for the real grid, or delete the spike in the same change." The second option is what
+happened, at fork `26c9316`, so `/healbot` belongs to `healbot.tsx:1235` and there is nothing to
+collide with. `HARNESS.md:316` already carried this as struck-through and resolved.
 
 ---
 
-## Build levers — Healbot grid assembly
+## How the grid was built — a record, not a to-do list
+
+**This table used to be a set of instructions.** The work is done; it is kept because each row
+names where a pattern was lifted from, which is the provenance a reader of `healbot.tsx` will
+want. Read it as history. Rows 16 and 18 are the two that were **not** taken — see the note below
+the table.
 
 | Step | Lift from | file:line |
 |---|---|---|
-| 1. Create `system/healbot.tsx` with shape B | `diff-viewer.tsx:1045-1072` | route + palette command + `dialog.clear()` |
-| 2. Register it | `builtins.ts:37` | append to the array (and drop `HealbotSpike` at `:11,:36`) |
+| 1. Create `system/healbot.tsx` with shape B | `diff-viewer.tsx:1045-1072` | route + palette command + `dialog.clear()` → shipped at `healbot.tsx:1223-1245` |
+| 2. Register it | `builtins.ts` | shipped: import at `:11`, last array entry at `:36`; `HealbotSpike` dropped in the same commit |
 | 3. All-session list | **direct import** `useSync` — precedent is the `useTheme` import | `diff-viewer.tsx:13`; store `context/sync.tsx:83` |
 | 4. Border: amber / green / dim | the `active` Set discriminator | `notifications.ts:59-78` (esp. `:68`) |
 | 5. Border: RED / YELLOW | `api.state.session.permission(id)` / `.question(id)` length | `plugin/adapters.tsx:140-145` |
@@ -270,7 +328,7 @@ grid lands.
 | 9. New sessions appear | `api.event.on("session.created", …)` → `useSync().session.refresh()` | GAP-1, `context/CONTEXT.MAP.md` |
 | 10. Cold cell content | `useSync().session.sync(id)` inside a guarded `onMount` — copy the shape of `routes/session/index.tsx:2213-2222` (its `stringValue` helper is module-local and unnecessary here: grid cells already hold typed `Session.id`s) | GAP-2, `context/sync.tsx:588-660` |
 | 11. Click/key to act | reuse `<PermissionPrompt request directory/>` / `<QuestionPrompt request directory/>` | `routes/session/permission.tsx:111`; `question.tsx:14` |
-| 12. Focus a session | `api.route.navigate("session", { sessionID })` | `plugin/adapters.tsx:47-52`; `returnRoute` variant `healbot-spike.tsx:64-66` |
+| 12. Focus a session | `api.route.navigate("session", { sessionID })` | `plugin/adapters.tsx:47-52`; `returnRoute` variant shipped at `healbot.tsx:958-970` |
 | 13. Return out | `returnRoute` round-trip | `diff-viewer.tsx:1065` + `:439-445` |
 | 14. Grid keys in the palette / user-overridable | `useBindings` + `keybinds.gather` | `diff-viewer.tsx:737-750` |
 | 15. Responsive columns | `useTerminalDimensions()` + width threshold | `diff-viewer.tsx:92,138-146` |
@@ -278,3 +336,10 @@ grid lands.
 | 17. Selection state that survives navigation | signals in the plugin closure | `which-key.tsx:533-535` |
 | 18. Retirement confirm + result toast | `api.ui.DialogConfirm` / `api.ui.toast` | `plugins.tsx:68-99` |
 | 19. Sound + desktop notify on state change | `api.attention.notify({...})` with the 6 sound names | `notifications.ts:9-18`; `src/attention.ts:46,170` |
+
+**Two levers were not taken.** VERIFIED by grep over `healbot.tsx`: there is no `api.kv.` call
+(16) and no `DialogConfirm` or `api.ui.toast` (18) — `x` retires without a confirmation step, and
+nothing about the layout persists across a restart. Both remain open if wanted; the citations
+above still point at working examples. Lever 18's premise has also narrowed since it was written:
+automatic retirement is the server plugin's now, so a confirm dialog here would gate only the
+manual `x` path.

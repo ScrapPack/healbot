@@ -1,8 +1,17 @@
 """HEADLESS automatic retirement: the gate fires with no client attached at all.
 
-This is `verify_auto_retire.py`'s lifecycle assertion — gate met, turn finishes, handoff, retire,
-successor picks up immediately, no turn consumption after the gate — run in the topology that
-version could not reach.
+This is `verify_auto_retire.py`'s lifecycle assertion — gate met, the model call in flight
+completes, handoff, retire, successor picks up immediately, no new turn after the gate — run in
+the topology that version could not reach.
+
+THAT SECOND CLAUSE USED TO READ "turn finishes", AND IT WAS WRONG. The gate fires at a STEP
+boundary, not at the end of a turn. `processor.ts:443-445` assigns `finish` and `tokens` in the
+SAME mutation at every `step-finish`, and `:445` is the only site in the session tree that writes
+a non-zero `tokens` — so every `message.updated` carrying occupancy at all also carries a set
+`finish`, usually `"tool-calls"`, i.e. mid-turn. MEASURED across 733 real assistant messages with
+occupancy > 0: zero had a null `finish` (677 `tool-calls`, 56 `stop`). The turn in flight IS
+aborted, and overshoot past the gate is bounded by one STEP (~65K measured) rather than one whole
+turn (~170K measured) — better than what was designed, arrived at by accident.
 
 WHAT CHANGED AND WHY IT MATTERS. Phase 5's trigger was a `createEffect` inside the Healbot route
 component. `verify_auto_retire.py` opens the grid first, and its own docstring records the
@@ -13,7 +22,8 @@ which means the guard was missing in the topology the architecture was built for
 **No TUI is started anywhere in this file.** There is no pty, no `boot()`, no `attach()`, no
 `on_grid` — nothing renders. Every session is driven over HTTP. If a session retires here, the
 only thing that can have retired it is the server plugin at
-`harness/config/opencode/plugin/auto-retire.ts`.
+`harness/config/opencode/plugin/healbot.ts` (this line said `auto-retire.ts` until 7b7ce9f
+renamed the file; there is no `auto-retire.ts` any more).
 
 Run at a LOW threshold on purpose: the path compares `occupancyOf` against `RETIRE_AT` and does
 not care what the number is, so 20,000 exercises the same code as 256,000 for a fraction of the
@@ -175,6 +185,17 @@ try:
     r.check("the predecessor was archived automatically", bool(archived))
 
     # ---------------------------------------------------------------- it finished first
+    #
+    # THIS ASSERTION HAS NEVER DISCRIMINATED PER-TURN FROM PER-STEP, and the label below used to
+    # imply it did. The gate fires at a STEP boundary (`processor.ts:443-445`), so the honest
+    # reading of `finishes[-1] == "stop"` here is that the crossing happened to land on the LAST
+    # model call — which it does BY CONSTRUCTION, because this rig's prompt puts the single large
+    # token jump (the 130 KB `ledger0.txt` read) on the final call. Move the jump earlier and the
+    # last finish would be `"tool-calls"` and this would fail, with nothing about the gate having
+    # changed. Kept because "no step ended in error" is still worth asserting; do not read it as
+    # evidence for a turn-boundary predicate. The LABEL below is stale display text and is left
+    # alone deliberately, so the recorded 20/20 output stays comparable — read it against this
+    # comment, not on its own.
     turns = assistants(worker)
     finishes = [a.get("finish") for a in turns if a.get("finish")]
     r.check(
@@ -184,8 +205,11 @@ try:
     )
     r.check("no turn ended in error", "error" not in finishes, f"{finishes.count('error')} errored")
 
-    # TURNS are user messages; assistant messages are STEPS within a turn. The gate rule is about
-    # turns — nothing new may be accepted once it is met.
+    # TURNS are user messages; assistant messages are STEPS within a turn. The second sentence
+    # here used to read "the gate rule is about turns"; it is not. The gate is evaluated per STEP
+    # and aborts the turn in flight. What survives the correction — and what this assertion
+    # actually measures — is that no NEW turn was accepted after the gate was met, which is the
+    # property that matters for a successor being the one that continues the work.
     user_turns = [m for m in messages(worker) if (m.get("info") or m).get("role") == "user"]
     r.check(
         "NO NEW TURN RAN AFTER THE GATE",

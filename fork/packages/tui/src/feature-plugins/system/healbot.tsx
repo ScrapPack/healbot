@@ -18,7 +18,7 @@ const CELL_HEIGHT = 6
 
 /**
  * Context occupancy at which a session should be retired, in tokens. Env-overridable so the
- * exit gate can actually be exercised: `PLAN.md:379-381` requires a session "driven past the
+ * exit gate can actually be exercised: `PLAN.md:392-394` requires a session "driven past the
  * retirement threshold", and `REVIEW.md` §4.3 records that clause as unadjudicable precisely
  * because no threshold was configurable anywhere in the deliverable.
  *
@@ -53,13 +53,27 @@ const CELL_HEIGHT = 6
 const RETIRE_AT = Math.max(1, Number(process.env["HEALBOT_RETIRE_AT"]) || 256_000)
 
 /**
- * AUTOMATIC retirement does not live in this file any more. It lives in the server plugin at
- * `harness/config/opencode/plugin/auto-retire.ts`, and `RETIRE_AT` above is now used HERE only
- * to render the `RETIRE` border, the `N to retire` header count and the share-of-threshold
- * figure on each cell. `x` — manual retirement — is still `retire()` below.
+ * RETIREMENT DOES NOT LIVE IN THIS FILE AT ALL. Automatic retirement moved to the server plugin
+ * at `harness/config/opencode/plugin/healbot.ts` in Phase 6 — this pointer read `auto-retire.ts`
+ * until 7b7ce9f renamed the file, and `find . -name "auto-retire*"` now returns nothing — and in
+ * Phase 7 MANUAL retirement followed it. `x` no longer runs a handoff; it writes a request to
+ * session metadata and the plugin, the only implementation left, performs it. See `retire()`
+ * below for the channel and why it is a metadata write.
  *
- * It moved because a `createEffect` in this component could only ever run while the grid was
- * mounted. Two consequences, and the second is the one that mattered:
+ * `RETIRE_AT` above is therefore used HERE only to render the `RETIRE` border, the `N to retire`
+ * header count and the share-of-threshold figure on each cell.
+ *
+ * The border painted off `RETIRE_AT` and the moment the server acts on it are NOT the same event.
+ * That gate fires at a STEP boundary, not at the end of a turn — `processor.ts:443-445` writes
+ * `finish` and `tokens` in one mutation at every `step-finish`, so the plugin's `stepFinished()`
+ * holds on every message that carries occupancy at all (MEASURED across 733 real assistant
+ * messages with occupancy > 0: zero had a null `finish`; 677 were `"tool-calls"`, i.e. mid-turn).
+ * So a cell reading `RETIRE · working` can be aborted and handed off mid-turn, one step after it
+ * turns purple, and overshoot past the line is bounded by a step rather than a whole turn — the
+ * full account is `HARNESS.md`.
+ *
+ * Automatic retirement moved because a `createEffect` in this component could only ever run while
+ * the grid was mounted. Two consequences, and the second is the one that mattered:
  *
  *   1. Navigating into a session with `enter` unmounts this route (`app.tsx:1079-1085` computes
  *      the plugin route in a `createMemo` that returns `undefined` as soon as
@@ -75,27 +89,20 @@ const RETIRE_AT = Math.max(1, Number(process.env["HEALBOT_RETIRE_AT"]) || 256_00
  * silent no-op. `TuiPluginModule` and `PluginModule` are mutually exclusive by type
  * (`tui?: never` / `server?: never`), so this file could not have hosted both halves regardless.
  *
- * **Exactly one process may own the gate.** If this effect still lived here, an operator pressing
- * `x` and the server plugin firing on the same session would each spawn a successor. That is why
- * it is deleted rather than kept as a fallback. Consequence to know: run the fork WITHOUT the
- * harness config and nothing retires automatically — the border still goes purple and `x` still
- * works. See `docs/HEADLESS.md`.
- */
-
-/**
- * How many user messages a handoff fans out over to collect changed files.
+ * **Exactly one process may own retirement**, and as of Phase 7 exactly one does. Deleting this
+ * effect was the first half; Phase 6 stopped there and left `x` running a second complete copy of
+ * the handoff in this process, which is why an operator pressing `x` as the gate fired could still
+ * produce two successors for one session. Phase 6 recorded that window as "narrowed to one
+ * request" by a re-read before archiving — a review showed the re-read narrows nothing, since it
+ * runs after the successor is created and seeded. The second writer is now gone rather than
+ * better-timed.
  *
- * Applied to the SERVER's full history, not to the store's window, and not biased toward
- * recent. Both of those were wrong and for the same reason the objective was: TESTED at the
- * shipped 350K threshold, a 103-message session produced an EMPTY file list and no
- * "## Files already changed" section at all, because the last 20 user messages were all pure
- * reads and the one file the session actually created was made on turn one — outside the
- * 20-message window and outside the store's 100-message cap besides.
- *
- * Scaffolding happens early. A handoff that only looks at recent turns systematically misses
- * exactly the files worth handing over.
+ * Consequence to know, and it is bigger than it was: run the fork WITHOUT the harness config and
+ * **neither** automatic nor manual retirement works. The border still goes purple, `x` still
+ * writes its request, and nothing is listening. That is an acceptable trade because the harness
+ * IS the deliverable — the model pin and `compaction.auto:false` live there too — but it is a real
+ * behavioural split between the two trees. See `docs/HEADLESS.md`.
  */
-const DIFF_FANOUT = 60
 
 /**
  * Border state, highest precedence first. RED/YELLOW outrank everything because they are the
@@ -136,7 +143,7 @@ type Cold = { permission: Map<string, PermissionRequest[]>; question: Map<string
  * Without this map the grid paints a session that died on an expired credential, a crashed tool
  * or a hard context overflow in `theme.success` and labels it `done`. On a terminal whose entire
  * premise is that border colour carries truth, that is the worst available failure: silent, and
- * biased toward "everything finished". PLAN.md:357 asked for the state; HARNESS.md's
+ * biased toward "everything finished". PLAN.md:370 asked for the state; HARNESS.md's
  * load-bearing facts and `TUI.MAP.md` G5 both say the grid must track it itself.
  */
 type Errors = Map<string, string>
@@ -169,30 +176,26 @@ type GridClient = {
   permission: { list(): Promise<unknown> }
   question: { list(): Promise<unknown> }
   session: {
-    todo(input: { sessionID: string }): Promise<Envelope<{ content: string; status: string }[]>>
-    diff(input: { sessionID: string; messageID: string }): Promise<Envelope<{ file?: string; path?: string }[]>>
     /**
-     * Omitting `limit` is load-bearing, not laziness. `handlers/session.ts:119-121` branches on
-     * it: with a limit you get `MessageV2.page`, which is `orderBy(desc(...))` — the NEWEST N.
-     * Without one you get `session.messages`, which pages the whole history backwards and
-     * `session.ts:852` `.reverse()`s it, so `[0]` is genuinely the session's first message.
+     * `metadata` IS accepted by the route and is NOT in the generated type — the same divergence
+     * `docs/HEADLESS.md` records for the v1 client's `time.archived`, one tree over. VERIFIED:
+     * `httpapi/groups/session.ts:51` declares `metadata: Schema.optional(Session.Metadata)` on the
+     * update payload and `handlers/session.ts:191-192` calls `session.setMetadata` with it. The
+     * generated `session.update` input is `{ sessionID, time? }` and typechecking the real call
+     * against it fails with TS2353. Widening the structural type here is the honest fix: this
+     * declaration exists precisely to name the slice of the client the grid uses, and the file
+     * already carries exactly one unsafe assertion to reach it.
+     *
+     * This shrank from ten members to three in Phase 7. `todo`, `diff`, `messages`, `create`,
+     * `promptAsync` and `abort` were the grid's own duplicate of `retire()`; the server plugin
+     * owns that now and they are gone. What is left is the two cold-start reconcile reads and one
+     * write to ask for a retirement.
      */
-    messages(input: {
+    update(input: {
       sessionID: string
-    }): Promise<
-      Envelope<
-        {
-          info?: { role?: string; id?: string }
-          role?: string
-          id?: string
-          parts?: { type: string; text?: string }[]
-        }[]
-      >
-    >
-    create(input: { directory?: string }): Promise<{ data?: { id?: string }; id?: string; error?: unknown } | undefined>
-    promptAsync(input: { sessionID: string; parts: { type: "text"; text: string }[] }): Promise<Envelope<unknown>>
-    abort(input: { sessionID: string }): Promise<Envelope<unknown>>
-    update(input: { sessionID: string; time?: { archived?: number } }): Promise<Envelope<unknown>>
+      time?: { archived?: number }
+      metadata?: Record<string, unknown>
+    }): Promise<Envelope<unknown>>
   }
 }
 
@@ -220,67 +223,24 @@ function ok<R extends { error?: unknown } | undefined>(result: R, what: string):
 const gridClient = (api: TuiPluginApi) => api.client as unknown as GridClient
 
 /**
- * The passover document handed to a successor session.
+ * `handoffDocument` USED TO LIVE HERE, and its deletion is the point of the Phase 7 change.
  *
- * DEVIATION FROM PLAN.md:371, which specifies `POST /session/{id}/summarize` as the source.
+ * It was a verbatim twin of the same function in `harness/config/opencode/plugin/healbot.ts`,
+ * because the grid ran its own `retire()` for manual `x` and the two trees cannot import each
+ * other. Phase 6 called two copies "a compromise guarded by a test" and pointed at
+ * `probe_twin.py`. A review then showed the guard compared only DOUBLE-QUOTED literals, so it
+ * could not see either of the two template literals that render the document's actual bullets —
+ * it missed eight seeded divergences and caught one.
  *
- * That route is not the git-diff summariser its name suggests — there are TWO `summarize`s and
- * the plan reads as though there is one. `handlers/session.ts:273-283` routes
- * `POST /session/{id}/summarize` into `compactSvc.create(...)`: it is COMPACTION, an LLM turn,
- * and it is what `HARNESS.md`'s "summarize mutates in place and adds tokens" describes. The
- * git-diff one is `SessionSummary.summarize` (`summary.ts:102-127`, no LLM), which already runs
- * automatically on the prompt path (`prompt.ts:1253`) and writes its result onto the *user*
- * message. So the diff data the plan wanted is available without compacting anything.
+ * The compromise is gone rather than better-guarded. `x` now relays a request to the server plugin
+ * (see `retire` below), which owns the only implementation. A successor is briefed identically
+ * whether a human pressed a key or the gate fired, because there is only one thing that can brief
+ * it. `probe_twin.py` no longer compares documents; it asserts this file has no second copy.
  *
- * Two further reasons to skip the compaction route:
- *
- *  1. The project's stated position (`opencode.jsonc`, REVIEW) is that handing a fresh session
- *     a passover prompt beats compacting, *because compaction loses specificity*. The sources
- *     below lose none — they are the literal todos and the literal file list.
- *  2. It costs an extra model turn, a wait and a failure mode, for material already available
- *     synchronously and exactly.
- *
- * What it does NOT carry is narrative — what was tried and abandoned. The last assistant
- * message is included as a partial substitute. If that proves too thin in practice, adding a
- * `summarize` call back is a two-line change; it is deliberately not the default.
+ * The thresholds are still duplicated — `RETIRE_AT` above — and still deliberately so: the grid
+ * needs the number to paint with and cannot import it. That one is a NUMBER, comparable exactly,
+ * and it is what `probe_twin.py` still guards.
  */
-function handoffDocument(input: {
-  title: string
-  objective?: string
-  open: { content: string }[]
-  files: string[]
-  lastMessage?: string
-}) {
-  const lines = [
-    "You are taking over a session that was retired because its context window was too full.",
-    "Continue its work now. Do not start over, and do not simply report status — the",
-    "outstanding items below are what is left to DO.",
-    "",
-    // Labelled as the ORIGINAL INSTRUCTION rather than "objective", and explicitly demoted
-    // below the outstanding list. TESTED and it matters: handed a verbatim first message that
-    // happened to contain step sequencing ("do only the first, leave the rest pending"), the
-    // successor obeyed that stale instruction and replied "No further work performed". The
-    // instruction is the best statement of intent available, but it is a historical record —
-    // the todo list is the live one.
-    "## Original instruction, for context only",
-    "It may contain sequencing that has already been carried out. Where the two disagree, the",
-    "outstanding list below wins.",
-    "",
-    input.objective?.trim() || input.title,
-    "",
-    "## Outstanding work — do this",
-    ...(input.open.length > 0
-      ? input.open.map((todo) => `- [ ] ${todo.content}`)
-      : ["- (no open todo items were recorded)"]),
-  ]
-  if (input.files.length > 0) {
-    lines.push("", "## Files already changed — read these before editing them", ...input.files.map((f) => `- ${f}`))
-  }
-  if (input.lastMessage?.trim()) {
-    lines.push("", "## Where it left off", input.lastMessage.trim().slice(0, 2000))
-  }
-  return lines.join("\n")
-}
 
 // Store first (live SSE), then the cold-start reconcile. The store's `permission` /
 // `question` maps are populated ONLY by events observed in this process, so a client that
@@ -293,7 +253,7 @@ function handoffDocument(input: {
 // loses the request on both sides and nothing can recover it — VERIFIED: sessions left
 // blocked on a permission and on a question both came back reading `idle`. The reconcile
 // pays off under the intended architecture instead — one long-lived `opencode serve` with
-// the control terminal as a client (PLAN.md:335) — where the server outlives the TUI.
+// the control terminal as a client (PLAN.md:348) — where the server outlives the TUI.
 
 function pendingPermission(sync: ReturnType<typeof useSync>, cold: Cold, sessionID: string): PermissionRequest[] {
   const live = sync.data.permission[sessionID] ?? []
@@ -414,7 +374,7 @@ function stateOf(sync: ReturnType<typeof useSync>, cold: Cold, errors: Errors, s
   // the HTTP seed only ever carries busy/retry. Key present + idle ⇒ it ran and finished in
   // THIS process. Absent ⇒ never started here — dim, not green. See CONTEXT.MAP.md G3.
   if (!status) return "idle"
-  // Split out of `busy`, per PLAN.md:357's "red flash | session.status {type:"retry"}". A retry
+  // Split out of `busy`, per PLAN.md:370's "red flash | session.status {type:"retry"}". A retry
   // is not progress: the provider rejected the request and opencode is backing off. It looks
   // exactly like work from the outside, which is precisely why it earns its own colour.
   if (status.type === "retry") return "retrying"
@@ -429,7 +389,7 @@ function borderColor(api: TuiPluginApi, state: CellState, selected: boolean) {
       return theme.error
     case "blocked-question":
       return theme.warning
-    // Red, like a permission, and deliberately so: PLAN.md:357 assigns red to both. The label
+    // Red, like a permission, and deliberately so: PLAN.md:366 and :370 assign red to both. The label
     // is what separates them, which is the same contract every other state in this grid keeps.
     case "errored":
     case "retrying":
@@ -761,14 +721,19 @@ function Healbot(props: { api: TuiPluginApi; selected: () => number; setSelected
   const clamp = (n: number) => Math.max(0, Math.min(n, sessions().length - 1))
   const move = (delta: number) => props.setSelected(clamp(props.selected() + delta))
 
-  // Retirement. AUTOMATIC on threshold (PLAN.md:381), with `x` kept as the manual override.
+  // Retirement, MANUAL only: `x` on the selected cell, and nothing else in this file retires
+  // anything. This comment read "AUTOMATIC on threshold (PLAN.md:381), with `x` kept as the manual
+  // override" for two phases; that described a `createEffect` which no longer exists here. The
+  // automatic gate is the server plugin's (`harness/config/opencode/plugin/healbot.ts`) and it
+  // fires per STEP — see the header block at the top of this file. `RETIRE_AT` survives in this
+  // file only to paint the `RETIRE` border (`stateOf`), count `N to retire` in the header
+  // (`retirable`) and print the share-of-threshold figure on each cell (`share`).
   //
-  // This reverses an earlier decision here that retirement should be operator-initiated so the
-  // grid never acts on its own. The reasoning was sound in isolation and wrong in context: it
-  // makes the threshold advisory, and an advisory threshold cannot do the one job it has. The
-  // ceiling is ~360K and there is no graceful degradation below it — a session that crosses the
-  // gate and keeps working eventually reaches a point where EVERY turn dies, which a 350K run
-  // demonstrated 25 times in a row.
+  // What has not changed is why the threshold cannot be advisory, which is the argument that moved
+  // to the plugin along with the effect: the ceiling is ~360K and there is no graceful degradation
+  // below it — a session that crosses the gate and keeps working eventually reaches a point where
+  // EVERY turn dies, which a 350K run demonstrated 25 times in a row. PLAN.md:381's "on threshold"
+  // is still the requirement; it is met in the server, not here.
   const [retiring, setRetiring] = createSignal<string | null>(null)
   const [retireNote, setRetireNote] = createSignal<string | null>(null)
 
@@ -778,178 +743,54 @@ function Healbot(props: { api: TuiPluginApi; selected: () => number; setSelected
     setRetiring(sessionID)
     setRetireNote(null)
     try {
-      // Stop the predecessor BEFORE anything else. Archiving does not abort — `session.update`
-      // reaches `session.setArchived`, a bare DB patch (`session.ts:759-761`) — and the grid
-      // deliberately renders `RETIRE · working` (see the Cell), so `x` on a mid-turn session is
-      // an invited action. Without this the predecessor keeps editing the SAME directory as its
-      // successor (`:724` passes `session.directory`), and the instant it is archived it leaves
-      // `sessions()` and therefore has no cell, no `a`, and no place in the blocked count — a
-      // session burning a slot, holding half an edit, possibly parked forever on a permission
-      // nothing can answer (`permission/index.ts:96-105` has no timeout).
+      // THE GRID NO LONGER RETIRES. It asks the server to, and this is the whole fix for the
+      // double-retire race — the one thing `NEXT.md` carried into Phase 7 as an open defect.
       //
-      // Unconditional and idempotent: aborting an idle session is a no-op, and checking
-      // `session_status` first would race the turn that starts between the check and the call.
-      // Unconditional, and it is not in tension with "let the agent finish what it is doing".
-      // The AUTO path only fires on an idle session, so this is a no-op there — its purpose is
-      // the race: a turn that starts between the idle check and this call is a turn beginning
-      // AFTER the gate was met, and the rule is that no turn runs after the gate. On the manual
-      // path it is what stops `x` on a `RETIRE · working` cell from orphaning a live session
-      // that keeps editing the same directory as its own successor.
-      ok(await client.session.abort({ sessionID }), "abort predecessor")
-
-      const todoResult = ok(
-        await client.session.todo({ sessionID }),
-        "read todos",
-      )
-      const todos = (todoResult?.data ?? []).filter(Boolean)
-      const open = todos.filter((todo) => todo.status !== "completed")
-
-      // ONE unlimited fetch, serving both the objective and the changed-file list. Omitting
-      // `limit` is what makes it the whole history, oldest-first — see the type on `messages`.
-      // Everything downstream that used to read `sync.data.message` was reading a window of
-      // the newest 100, which is wrong in both directions on exactly the sessions retirement
-      // targets. Best-effort: on failure we fall back to the store, which is worse but not
-      // nothing.
-      const history = await client.session
-        .messages({ sessionID })
-        .then((result) => result?.data ?? [])
-        .catch(() => [])
-      const historyUsers = history
-        .filter((entry) => (entry?.info?.role ?? entry?.role) === "user")
-        .map((entry) => ({ id: entry?.info?.id ?? entry?.id, parts: entry?.parts ?? [] }))
-        .filter((entry): entry is { id: string; parts: { type: string; text?: string }[] } => Boolean(entry.id))
-
-      // `GET /session/{id}/diff` is a PER-USER-MESSAGE endpoint, not a session-wide one:
-      // `summary.ts:130` returns [] outright when no messageID is given, and `:133` returns []
-      // again unless that message is a USER message — the git diffs are written onto the user
-      // message's `summary.diffs` by `SessionSummary.summarize` (`prompt.ts:1253`, forked).
-      // PLAN.md:383 says "its /diff" as though one call covered the session; it does not.
-      // So: fan out over the session's user messages and union the file list.
-      const fallbackUsers = (sync.data.message[sessionID] ?? [])
-        .filter((message) => message.role === "user")
-        .map((message) => ({ id: message.id }))
-      const allUsers: { id: string }[] = historyUsers.length > 0 ? historyUsers : fallbackUsers
-      // Head AND tail when the history is long, never just the tail. The files a successor
-      // needs are disproportionately the ones created while the session was setting up.
-      const candidates =
-        allUsers.length <= DIFF_FANOUT
-          ? allUsers
-          : [...allUsers.slice(0, DIFF_FANOUT / 2), ...allUsers.slice(-DIFF_FANOUT / 2)]
-      const files = [
-        ...new Set(
-          (
-            await Promise.all(
-              candidates.map((message) =>
-                client.session
-                  .diff({ sessionID, messageID: message.id })
-                  .then((result) => result?.data ?? [])
-                  .catch(() => []),
-              ),
-            )
-          )
-            .flat()
-            .map((entry) => entry?.file ?? entry?.path)
-            .filter((value): value is string => Boolean(value)),
-        ),
-      ]
-
-      // PLAN.md:369-370 splits the two cases and they really are different: a session with
-      // nothing outstanding has nothing to hand over, so spawning a successor for it would
-      // burn a fresh window to say "there is no work".
-      if (open.length === 0) {
-        ok(await client.session.update({ sessionID, time: { archived: Date.now() } }), "archive session")
-        setRetireNote(`retired ${truncate(session.title ?? sessionID, 40)} — nothing outstanding`)
-        await reload()
-        return
-      }
-
-      // Parts are keyed by messageID in their own map, not nested under the message
-      // (sync.tsx:96-98), so text has to be joined per message id.
-      const messages = sync.data.message[sessionID] ?? []
-      const textOf = (messageID: string) =>
-        (sync.data.part[messageID] ?? [])
-          .filter((part) => part.type === "text")
-          .map((part) => ("text" in part ? part.text : ""))
-          .join("\n")
-          .trim()
-      // The objective is fetched from the SERVER, not read out of the store, and this is the
-      // difference between a correct handoff and a confidently wrong one.
+      // What used to be here: ~180 lines that aborted the session, read its todos, fanned out over
+      // its diffs, built a handoff document, spawned a successor, seeded it and archived the
+      // predecessor — a second, complete implementation of `retire()`, running in the TUI process
+      // while the server plugin ran its own copy with no shared lock between them. Phase 6
+      // documented the resulting window as "narrowed to one request" by a re-read before
+      // archiving; a review showed the re-read narrows nothing, because it runs AFTER the
+      // successor is created and seeded. Both actors could reach `POST /session`, and one session
+      // would get two live successors editing the same directory.
       //
-      // `sync.data.message[id]` holds at most the NEWEST 100 messages — `sync.tsx:597` hydrates
-      // with `limit: 100`, `:618-619` keeps `infos.slice(-100)`, and the live path evicts
-      // `updated[0]` past 100. So on any session longer than that, its first entry is an
-      // arbitrary mid-conversation turn. `handoffDocument` then labels whatever it got
-      // "## Original instruction" and tells the successor it is the statement of intent.
+      // It also meant `handoffDocument` — prose that IS behaviour — existed twice, guarded only by
+      // a probe that (also per the review) compared double-quoted literals and could not see
+      // either of the two template literals that render the document's actual bullets.
       //
-      // Retirement exists to fire on long sessions — 256,000 tokens by default — which are
-      // exactly the sessions past 100 messages. The bug was invisible to the §10 verification
-      // because that ran at `HEALBOT_RETIRE_AT=20000` against an 8-message session, i.e. the one
-      // regime where the store still holds message one.
+      // Both problems have the same cause: two writers. So there is now one. The server plugin
+      // owns retirement outright, for `x` and for the gate, and this call is the entire client
+      // side of it.
       //
-      // Reuses `historyUsers` from the single unlimited fetch above — oldest-first, so the
-      // first one with text is genuinely message one. Best-effort: if that fetch failed,
-      // `historyUsers` is empty and this falls through to the store, which costs accuracy on
-      // the objective line but does not cost the handoff.
-      const firstUserText = historyUsers
-        .map((entry) =>
-          entry.parts
-            .filter((part) => part.type === "text")
-            .map((part) => part.text ?? "")
-            .join("\n")
-            .trim(),
-        )
-        .find(Boolean)
-      const objective =
-        firstUserText ?? messages.filter((message) => message.role === "user").map((m) => textOf(m.id)).find(Boolean)
-      const lastMessage = [...messages]
-        .reverse()
-        .filter((message) => message.role === "assistant")
-        .map((m) => textOf(m.id))
-        .find(Boolean)
-
-      const document = handoffDocument({
-        title: session.title ?? sessionID,
-        objective,
-        open,
-        files,
-        lastMessage,
-      })
-
-      // POST /session + seed is the ONLY path that yields a zero-token successor: `fork`
-      // reports 0 at creation then climbs to exactly the parent's total within ~3s, and
-      // `summarize` mutates in place. Same directory, or the successor cannot see the work.
-      const created = ok(
-        await client.session.create({ directory: session.directory }),
-        "spawn successor",
-      )
-      const successorID = created?.data?.id ?? created?.id
-      if (!successorID) throw new Error("session.create returned no id")
-
-      // prompt_async, per PLAN.md:341. It was reported broken by the audit and is not —
-      // it acks in ~10ms and the turn completes normally; the report polled an assistant row
-      // that exists ~20ms before it fills.
+      // THE CHANNEL, and why a metadata write rather than an endpoint: the server plugin surface
+      // is hooks only (`packages/plugin/src/index.ts`) and its `event` hook is receive-only, so a
+      // plugin cannot register a route for the TUI to call. It does not need one. `PATCH
+      // /session/{id}` accepts `metadata` (`httpapi/groups/session.ts:51`,
+      // `handlers/session.ts:191-192`), which reaches `Session.setMetadata` (`session.ts:763`),
+      // which calls the shared `patch()` — and `patch()` publishes `SessionV1.Event.Updated` with
+      // the whole session object at `session.ts:748`. The plugin already receives every event for
+      // its directory. So a one-line write is a durable, ordered request that survives this
+      // process dying, and needs no new dependency on either side.
       //
-      // ORDERING IS THE POINT. Archiving used to happen unconditionally on the next line with
-      // none of these three calls having their `.error` read — the SDK resolves rather than
-      // rejects, so a 4xx anywhere left the predecessor archived, the successor unseeded, and
-      // the footer reporting `handed off N open items`. The handoff is only real once the seed
-      // is accepted, so the seed is confirmed BEFORE the source is retired. Failing the other
-      // way round is recoverable: an unarchived predecessor still has a cell and can be retired
-      // again, whereas an archived one has no cell at all.
+      // The key and its shape are `REQUEST_KEY` / `requestedAt` in
+      // `harness/config/opencode/plugin/healbot.ts`. If you change one, change the other — and
+      // note that unlike the two `handoffDocument`s this replaces, the failure mode here is loud:
+      // nothing retires, rather than something retiring differently.
       ok(
-        await client.session.promptAsync({ sessionID: successorID, parts: [{ type: "text", text: document }] }),
-        "seed successor",
+        await client.session.update({ sessionID, metadata: { healbot: { retireRequested: Date.now() } } }),
+        "request retirement",
       )
-      ok(await client.session.update({ sessionID, time: { archived: Date.now() } }), "archive predecessor")
-      await reload()
 
-      // Hand the grid slot to the replacement, so the operator's cursor follows the work
-      // rather than the cell that just vanished.
-      const index = sessions().findIndex((item) => item.id === successorID)
-      props.setSelected(index === -1 ? clamp(props.selected()) : index)
-      setRetireNote(`handed off ${open.length} open item${open.length === 1 ? "" : "s"}, ${files.length} file${files.length === 1 ? "" : "s"}`)
+      // Deliberately NOT awaited to completion, and not reported as done. Retirement now happens
+      // in another process and takes several round trips; the grid learns it happened the same way
+      // it learns everything else, through `session.updated` and its own `reload()`. Claiming
+      // success here would be claiming knowledge this process does not have — the exact failure
+      // this project keeps catching in itself.
+      setRetireNote(`asked the server to retire ${truncate(session.title ?? sessionID, 40)}`)
+      await reload()
     } catch (error) {
-      setRetireNote(`retire failed: ${error instanceof Error ? error.message : String(error)}`)
+      setRetireNote(`retire request failed: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setRetiring(null)
     }

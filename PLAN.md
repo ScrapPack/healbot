@@ -19,35 +19,49 @@ the audit in [docs/REVIEW.md](docs/REVIEW.md) refuted a number of statements bel
 still written as settled fact. The body is left intact as a record; this table is the
 correction. **Where they disagree, this table wins.**
 
-> **Citations below are pinned to THIS revision of this file.** Every `:NNN` in the *Where*
-> column was silently wrong by exactly **+31** until Phase 5 — inserting this errata block
-> shifted the body it cites, and nothing re-derived them, so all fourteen rows pointed 31
-> lines above their target. Re-verified row by row after the shift. **If you insert or delete
-> lines above §0, re-run the same check**; a table that is authoritative over the body is
-> worse than useless when it points at the wrong body. The general lesson, measured in the
-> Phase 5 audit: citations into upstream opencode held at 59/64, citations into this
-> project's own moving files at 0/17. Only the former has a stable target.
+> **Citations below are pinned to THIS revision of this file — errata rev 4.** Two counters,
+> do not confuse them: the `(rev 2)` on the title line counts revisions of the *body*, which
+> is frozen as a historical record and does not move again; this one counts revisions of
+> *this table*, and it is the one to bump. `HARNESS.md:28` calls the header rev-3 — correct
+> for the Phase 6 state it described, one behind after this pass.
+>
+> Every `:NNN` in the *Where* column was silently wrong by exactly **+31** until Phase 5 —
+> inserting this errata block shifted the body it cites, and nothing re-derived them, so all
+> fourteen rows pointed 31 lines above their target. **Then it happened again, smaller:**
+> Phase 6 (`7b7ce9f`) swapped one row for two, a net +1, and re-derived nothing; every
+> citation in this column points at §0 or below, so every one of them was off by one at that
+> commit. Phase 7 re-derived the column against the verbatim quote each row carries rather
+> than adding one blindly — which caught `§4 step 4 / step 5`, whose span was already wrong
+> when Phase 5 wrote it and which +1 alone would not have fixed. **If you insert or delete
+> lines above §0 — this header included — re-run the same check**; a table that is
+> authoritative over the body is worse than useless when it points at the wrong body. This
+> pass moved the body a further **+14**, and `PLAN.md:NNN` citations held *elsewhere* in the
+> repo moved with it: spot-checked at three, they were already pinned to three different
+> revisions of this file, none of them this one. The general lesson, measured in the Phase 5
+> audit: citations into upstream opencode held at 59/64, citations into this project's own
+> moving files at 0/17. Only the former has a stable target.
 
 | Where | Says | Actually |
 |---|---|---|
-| §0.1 line 115, and :259, :323 | `OPENCODE_CONFIG_DIR` gives config isolation | **False, and harmful.** All three of `OPENCODE_CONFIG_DIR` / `_CONFIG` / `_CONFIG_CONTENT` **merge** the harness config on top of the inherited global one. Following this row leaves you with the ollama provider block, 18 skills and `~/.claude/CLAUDE.md` while believing you are isolated. Only `XDG_CONFIG_HOME` replaces (SCAN C1, TESTED) |
-| §0.1 line 122; §2 risk (b); :327 | risk (b) RESOLVED by `OPENCODE_DISABLE_AUTOCOMPACT` | Reaches the legacy compactor only. Use `"compaction": {"auto": false}` in the config file (SCAN C2) |
-| §0.1 line 123; §2 risk (d); :366 | the yellow border may be gated | False alarm. The gate is `["app","cli","desktop"].includes(flags.client)` and `OPENCODE_CLIENT` defaults to `cli` (SCAN C3). Still worth confirming for a non-CLI client |
-| §0.1 line 124 | `OPENCODE_ENABLE_PARALLEL` = "parallelism, relevant to N-session operation" | **Unrelated.** It selects the web-search provider (parallel.ai vs exa), `runtime-flags.ts:36-39`. Nothing to do with session concurrency |
-| §1 (:152-179) | Ink grid + PTY hand-off hybrid; focus suspends Ink and hands off to `opencode attach` | **Superseded by PROBE F7 (TESTED).** The grid is a plugin-registered route inside the fork's TUI; focus is `route.navigate("session", {sessionID})`. No PTY, no Ink, no suspend/resume. (`opencode attach --session`/`--mini` *do* exist, so the fallback is real if F7's external-plugin case fails) |
-| :162-163, :251, :280 | `packages/tui` is Go; "TS core + Go TUI" | 33 packages, **zero** `.go` files. The TUI is TypeScript + SolidJS on OpenTUI (PROBE F1/F2) |
-| §2 risk (a) (:185-188) | 350K "must mean cumulative tokens" because the model caps at 256K | **The premise died with F6.** `openai/gpt-5.6-sol` is context 1,050,000 / `limit.input` 922,000 — a session absolutely can hold 350K. The threshold is a **context-occupancy** limit, motivated by quality degradation under context bloat. See HARNESS.md "Token accounting" |
-| §2 risk (a), and :81 | `GET /api/session/{id}/context` gives per-message lifetime tokens | It returns the post-compaction tail — and for a **v1** session it returns an **empty array**, because it reads `SessionMessageTable` which v1 never writes (TESTED) |
-| §0 (:100-102) | `session.next.*` listed under "Verified event types" | The entire family is **v2-only** — zero publishers in `packages/opencode/src`. On the v1 path you must use, they never fire. That includes `session.next.tool.called`, which :371 makes a frame field |
-| §4 (:341-389) | Phase 4 build order: Ink in `control/`, `@opencode-ai/sdk`, spike S3 | Superseded by F7. The grid is a TUI plugin route |
-| :345, :350 | "P4 already proved the SDK works on Node"; "P1/P2/P4 already answered in Phase 0" | **All three were never run** (PROBE.md:21-23). P1 was answered in Phase 1 instead; P2 in Phase 1 (C3) |
-| :374 | click-to-act via `POST /permission/{id}/reply` | `client.permission.reply({requestID, ...})` — keyed by `requestID` alone |
-| :386 | "Compare against `POST /session/{id}/fork`, which is cheaper" | `fork` is disqualified — it inherits the parent's whole token count within ~3s. `summarize` also wrong. Use `POST /session` + seed prompt |
-| §5 (:399-402) | phases run fresh, handoff is the written artifact | The method has **no repair step**, which is why this errata table is necessary. Every phase should now also revise the artifacts it contradicts |
-| §3 layout (:223, :230-235) | the `.md` substructure: `harness/AGENTS.md`, and "one .md named after the directory it sits in" | **Do not follow this.** `AGENTS.md` / `CLAUDE.md` / `CONTEXT.md` are auto-ingested into the model's context window (`session/instruction.ts:64-68`) and `SKILL.md` collides with opencode's skill-manifest glob — the exact cost this project exists to remove. The convention actually used is `<DIR>.MAP.md`; see HARNESS.md's Naming note, which forbids all four filenames |
-| §4 step 4 / step 5 (:377-382) | focus hands off to a child process; a control agent drives the others | Focus is `route.navigate("session", {sessionID})`. **Both are now built and TESTED** (Phase 6, `docs/HEADLESS.md`): focus 24/24 free, the control agent 14/14 wiring + 15/16 runtime. Step 5's tools live on the *server plugin's* `tool` hook, not in `<configdir>/tool/*.ts` — only the plugin hook gets an HTTP client. There is still no key to get **back** from a session to the grid |
+| §0.1 line 130, and :274, :338 | `OPENCODE_CONFIG_DIR` gives config isolation | **False, and harmful.** All three of `OPENCODE_CONFIG_DIR` / `_CONFIG` / `_CONFIG_CONTENT` **merge** the harness config on top of the inherited global one. Following this row leaves you with the ollama provider block, 18 skills and `~/.claude/CLAUDE.md` while believing you are isolated. Only `XDG_CONFIG_HOME` replaces (SCAN C1, TESTED) |
+| §0.1 line 137; §2 risk (b); :342 | risk (b) RESOLVED by `OPENCODE_DISABLE_AUTOCOMPACT` | Reaches the legacy compactor only. Use `"compaction": {"auto": false}` in the config file (SCAN C2) |
+| §0.1 line 138; §2 risk (d); :381 | the yellow border may be gated | False alarm. The gate is `["app","cli","desktop"].includes(flags.client)` and `OPENCODE_CLIENT` defaults to `cli` (SCAN C3). Still worth confirming for a non-CLI client |
+| §0.1 line 139 | `OPENCODE_ENABLE_PARALLEL` = "parallelism, relevant to N-session operation" | **Unrelated.** It selects the web-search provider (parallel.ai vs exa), `runtime-flags.ts:36-39`. Nothing to do with session concurrency |
+| §1 (:167-194) | Ink grid + PTY hand-off hybrid; focus suspends Ink and hands off to `opencode attach` | **Superseded by PROBE F7 (TESTED).** The grid is a plugin-registered route inside the fork's TUI; focus is `route.navigate("session", {sessionID})`. No PTY, no Ink, no suspend/resume. (`opencode attach --session`/`--mini` *do* exist, so the fallback is real if F7's external-plugin case fails) |
+| :177-178, :266, :295 | `packages/tui` is Go; "TS core + Go TUI" | 33 packages, **zero** `.go` files. The TUI is TypeScript + SolidJS on OpenTUI (PROBE F1/F2) |
+| §2 risk (a) (:200-203) | 350K "must mean cumulative tokens" because the model caps at 256K | **The premise died with F6.** `openai/gpt-5.6-sol` is context 1,050,000 / `limit.input` 922,000 — a session absolutely can hold 350K. The threshold is a **context-occupancy** limit, motivated by quality degradation under context bloat. See HARNESS.md "Token accounting" |
+| §2 risk (a), and :96 | `GET /api/session/{id}/context` gives per-message lifetime tokens | It returns the post-compaction tail — and for a **v1** session it returns an **empty array**, because it reads `SessionMessageTable` which v1 never writes (TESTED) |
+| §0 (:115-117) | `session.next.*` listed under "Verified event types" | The entire family is **v2-only** — zero publishers in `packages/opencode/src`. On the v1 path you must use, they never fire. That includes `session.next.tool.called`, which :386-387 makes a frame field |
+| §4 (:356-404) | Phase 4 build order: Ink in `control/`, `@opencode-ai/sdk`, spike S3 | Superseded by F7. The grid is a TUI plugin route |
+| :360, :365 | "P4 already proved the SDK works on Node"; "P1/P2/P4 already answered in Phase 0" | **All three were never run** (PROBE.md:21-23). P1 was answered in Phase 1 instead; P2 in Phase 1 (C3) |
+| :389 | click-to-act via `POST /permission/{id}/reply` | `client.permission.reply({requestID, ...})` — keyed by `requestID` alone |
+| :401 | "Compare against `POST /session/{id}/fork`, which is cheaper" | `fork` is disqualified — it inherits the parent's whole token count within ~3s. `summarize` also wrong. Use `POST /session` + seed prompt |
+| §5 (:414-417) | phases run fresh, handoff is the written artifact | The method has **no repair step**, which is why this errata table is necessary. Every phase should now also revise the artifacts it contradicts |
+| §3 layout (:238, :245-250) | the `.md` substructure: `harness/AGENTS.md`, and "one .md named after the directory it sits in" | **Do not follow this.** `AGENTS.md` / `CLAUDE.md` / `CONTEXT.md` are auto-ingested into the model's context window (`session/instruction.ts:64-68`) and `SKILL.md` collides with opencode's skill-manifest glob — the exact cost this project exists to remove. The convention actually used is `<DIR>.MAP.md`; see HARNESS.md's Naming note, which forbids all four filenames |
+| §4 step 4 / step 5 (:391-394) | focus hands off to a child process; a control agent drives the others | Focus is `route.navigate("session", {sessionID})`. **Both are now built and TESTED** (Phase 6, `docs/HEADLESS.md`): focus 24/24 free, the control agent 14/14 wiring + 15/16 runtime. Step 5's tools live on the *server plugin's* `tool` hook, not in `<configdir>/tool/*.ts` — only the plugin hook gets an HTTP client. There is still no key to get **back** from a session to the grid. *(The citation read `:377-382` until Phase 7 and never covered these two steps at any revision — it opened on step 4's second line and ran into step 6. It was wrong before the shift, so adding one would not have found it.)* |
 | §4 step 5, and §0's premise that the terminal drives everything | the control terminal is where the lifecycle happens | **Automatic retirement is not in the terminal at all.** Phase 6 moved it to a server plugin so a fleet with no client attached still retires — a TUI plugin would not have helped, since it needs a TUI, and TUI plugin scope has no Solid owner besides. The grid keeps manual `x` and the `RETIRE` border. `docs/HEADLESS.md` §1 |
-| §4 build order, and the "blocked" premise | — | **Phase 5 built `serve` + `attach`** (`harness/fleet.sh`). `opencode attach <url>` is a registered command (`cli/cmd/attach.ts:7`, `index.ts:84`) running the full TUI, so the long-lived-server architecture this document assumes at :378 is real and TESTED, and the cold-start reconcile with it (21/21, `docs/HARDEN.md`) |
+| §4 build order, and the "blocked" premise | — | **Phase 5 built `serve` + `attach`** (`harness/fleet.sh`). `opencode attach <url>` is a registered command (`cli/cmd/attach.ts:7`, `index.ts:84`) running the full TUI, so the long-lived-server architecture this document assumes at :393 is real and TESTED, and the cold-start reconcile with it (21/21, `docs/HARDEN.md`) |
+| §4 step 6 (:395-399) | retirement fires "on threshold" and then branches on whether the session is *finished* or *unfinished* — a question that only has an answer between turns | **The shipped gate fires at a STEP boundary, not at the end of a turn**, and it got there by accident rather than by design. VERIFIED: `processor.ts:443-445` assigns `finish` and `tokens` in the same mutation at every `step-finish`, and `:445` is the only site in the session tree that writes a non-zero `tokens`, so every `message.updated` that carries occupancy at all also carries a set `finish` — usually `"tool-calls"`, i.e. mid-turn. MEASURED across 733 real assistant messages with occupancy > 0: zero had a null `finish` (677 `tool-calls`, 56 `stop`). Two consequences. The turn in flight **is** aborted, so overshoot past the gate is bounded by one STEP (~65K measured) instead of one whole turn (~170K measured) — better than what this document asked for. And `RETIRE_HARD` (330,000) is **inert**: its only consumer is `consider()`'s `if (!stepOver && !hard) return`, which `stepOver` dominates on 733/733, so `HEALBOT_RETIRE_HARD` is a knob with no effect — kept in the code and documented as dead, because it becomes load-bearing again the day the predicate is made per-turn. Corrected in Phase 7 after a review; every artifact in this repo, this table included, asserted the per-turn reading until then. Detail, and the one-function hinge, in HARNESS.md's "The gate fires at a STEP boundary" block |
 
 **Settled since, and not reflected below:** N-way session concurrency works (4 sessions
 finished in the time of the slowest, not the sum) and a blocked permission does not stall the

@@ -16,10 +16,25 @@ differently:
     cannot use them.
 
 This probe covers what can be established without a model turn: registration, agent identity, and
-the static shape of the permission wiring. It deliberately does NOT claim to prove the scoping
-takes effect — that happens in `resolveTools` at request-prep time and needs a real turn, which
-`verify_control_agent.py` pays for by running the same instruction under two different agents and
-comparing which tool calls appear.
+the static shape of the permission wiring.
+
+THIS PARAGRAPH USED TO SAY THE SCOPING "happens in `resolveTools` at request-prep time and needs a
+real turn". That is false, and it was queueing paid work that did not need to be paid for. The
+DISABLED SET is free and deterministic: `opencode debug agent <name>` prints it. Its
+`resolveTools` (`cli/cmd/debug/agent.handler.ts:88-98`) calls the same `Permission.disabled` over
+the same merged ruleset, and the session-creating branch is gated behind `if (toolID)`
+(`:43-58` → `createToolContext` → `sessionSvc.create` at `:131`), so without `--tool` no session
+is created and no provider call is made. TESTED under this harness with an isolated `OPENCODE_DB`:
+`debug agent build` reports all five `healbot_*` **false**, `debug agent control` reports all five
+**true**, and the DB held 0 sessions afterwards. Only EXECUTION of a tool needs a real turn.
+
+The honest caveat: `agent.handler.ts` is a SEPARATE function calling the same predicate, not the
+request path. The real one (`session/llm/request.ts:208-214`) additionally merges session-level
+permission into the ruleset and filters on `input.user.tools`. Both are empty under this harness,
+so the two are equivalent-under-this-config rather than identical — a session-scoped permission
+override or a per-request `tools` map would separate them. What `verify_control_agent.py` still
+buys, and the reason it is worth a real turn, is that the model actually CALLS the five tools
+under `control` and cannot under `build`.
 
   venv/bin/python probe_control_wiring.py
 """

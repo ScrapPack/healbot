@@ -136,9 +136,13 @@ def serve(port, db, timeout=90, log=None, env_extra=None):
     `log` redirects the server's merged stdout/stderr to a file the caller can read WHILE the
     server runs. The default `subprocess.PIPE` cannot be read incrementally without either a
     reader thread or risking a deadlock when the pipe buffer fills, and since Phase 6 the server
-    is where automatic retirement actually happens — `harness/config/opencode/plugin/
-    auto-retire.ts` reports arming and every retirement there. A headless test that cannot read
-    the server's log cannot see the thing it is testing.
+    is where automatic retirement actually happens — the plugin at
+    `harness/config/opencode/plugin/healbot.ts` reports arming and every retirement there. A
+    headless test that cannot read the server's log cannot see the thing it is testing.
+
+    That path was `plugin/auto-retire.ts` until 7b7ce9f and this docstring still said so, wrapped
+    across two lines so a grep for the old name did not find it. The file does not exist under
+    that name any more; anything still citing it is stale.
 
     `env_extra` sets variables for the SERVER process specifically. That distinction became
     load-bearing in Phase 6: the retirement thresholds are read by the server plugin, not by the

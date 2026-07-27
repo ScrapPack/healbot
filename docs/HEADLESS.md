@@ -4,6 +4,14 @@ Date 2026-07-27. Three items, in the order they had to happen: make automatic re
 without a client, close the two open questions that had been deferred since Phase 4, and build the
 last non-optional step of `PLAN.md`'s build order.
 
+> **Phase 7 erratum — read before trusting this document's account of the gate.** A review of this
+> phase established that the gate fires at a **step** boundary, not at the end of a turn, and that
+> `RETIRE_HARD` is therefore inert. Every statement below that says the turn in flight is allowed
+> to finish is wrong; the turn is aborted. The behaviour is *better* than what this document
+> claims — overshoot is bounded by one step (~65K) rather than one turn (~170K) — but it is not
+> what was written. Corrections are marked inline. The full account is in `HARNESS.md`'s
+> load-bearing facts. This document is otherwise left as the Phase 6 record.
+
 ---
 
 ## 1. The prescribed fix does not work, and why
@@ -117,6 +125,20 @@ re-run against a deliberately corrupted copy, required to fail. It also asserts 
 contains an automatic trigger, and that the plugin exports only functions (`getLegacyPlugins`
 throws `TypeError: Plugin export is not a function` on any export that is not one — a single
 exported constant would disable the whole guard at load time, in a log line nobody reads).
+
+> **Phase 7 erratum — "every string literal" is false, and the sentence was doing real work.**
+> `document_strings()` (`probe_twin.py:83`) is `re.findall(r'"((?:[^"\\]|\\.)*)"', body)` —
+> **double-quoted only**. The two lines that render every *variable* line of the handoff are
+> template literals (`` `- [ ] ${todo.content}` `` and `` `- ${f}` ``) and are invisible to it, as
+> is `MAX_DOCUMENT_TAIL`, which is declared 178 lines above `handoffDocument` and thus outside the
+> brace-matched body the extractor reads. TESTED by mutating the grid and leaving the plugin
+> alone: the probe **missed** eight real divergences (both bullet formats, the tail slice bound,
+> two conditional thresholds, the objective fallback, and a dropped `.trim()`) and caught one —
+> `lines.join("\n")`, the sole double-quoted operand. Both mutation checks at `:165-172` mutate a
+> double-quoted *heading*, i.e. the one thing the extractor already sees, so they demonstrate the
+> machinery without exercising the gap. The two copies **are** byte-identical today (VERIFIED), so
+> this is a coverage hole, not a live divergence — but the claim above is exactly the kind of
+> overstatement this project exists to catch, and it was mine.
 
 This is why the control agent's tools live in the **same file** as the gate rather than their own:
 `healbot_retire` calls the same `retire()`. Two copies are a compromise guarded by a test. Three
@@ -322,19 +344,42 @@ Carried forward, unchanged:
   an agent session cannot launch it. Still the owner's action.
 - **The 256K gate has never been exercised at its real value.** The comparison is a single `>=`
   and the path is TESTED at 20,000, so the risk is low, but the full-scale run has not been paid
-  for.
+  for. **Phase 7: `verify_headless_retire.py` cannot be the vehicle.** It hardcodes
+  `THRESHOLD = 20_000` at `:52` and forces it into the server's environment at `:96-103`, which
+  `rig.py:159` applies last — there is no override to remove. Nor does editing the constant
+  help: one prompt, one `read` capped at 50 KB by `read.ts:16`, measured peak 36,647, and
+  `len(user_turns) == 1` asserted structurally at `:200-204`. See `NEXT.md` for what does work and
+  what it costs.
 
 Added by this phase:
 
 - **Cold start on the gate.** The trigger is purely event-driven, so a server that restarts with a
   session already over the threshold does nothing until that session's next turn. In practice the
-  next turn's first `message.updated` carries the occupancy and the hard gate catches it mid-turn,
-  but a startup sweep would close it properly. Deliberately not built: a server restart causing
-  mass retirement is a policy decision, not a bug fix.
-- **The manual/automatic double-retire window is narrowed, not closed.** `retire()` re-reads the
-  session's archived state immediately before the irreversible step, which reduces the window to
-  the width of one request. Two processes, no shared lock. An operator pressing `x` at the exact
-  moment the gate fires can still produce two successors.
+  next turn's first `message.updated` carries the occupancy and ~~the hard gate catches it
+  mid-turn~~ — **Phase 7: the SOFT gate catches it, at that turn's first step boundary. The hard
+  gate is inert and could not have caught anything** — but a startup sweep would close it properly.
+  Deliberately not built: a server restart causing mass retirement is a policy decision, not a bug
+  fix.
+- **The manual/automatic double-retire window is ~~narrowed, not closed~~ neither narrowed nor
+  closed.** `retire()` re-reads the session's archived state immediately before the irreversible
+  step, which reduces the window to the width of one request. Two processes, no shared lock. An
+  operator pressing `x` at the exact moment the gate fires can still produce two successors.
+
+  > **Phase 7 erratum, and this one was self-flattering.** The re-read narrows *nothing* about two
+  > successors: it runs **after** `POST /session` and `prompt_async`, so whichever actor loses has
+  > already created and seeded one — the code's own return string says so ("successor `${id}` is
+  > seeded and live"). All the re-read prevents is a redundant idempotent PATCH and a log line
+  > claiming a retirement someone else performed. The window that actually produces two successors
+  > runs from `consider()`'s archived check to `POST /session`, spanning `isBlocked`'s two GETs,
+  > the abort, the todo GET, an unlimited full-history GET on a session at the gate, and up to
+  > `DIFF_FANOUT` parallel `/diff` GETs. That is seconds, not one request. The grid's copy has no
+  > re-read at all, so "narrowed" never described the manual half under any reading.
+  >
+  > It is also **not only cross-process**, which this entry asserted throughout. `consider()` tests
+  > `busy` and `handled` at the top and sets them *after three awaits*, so the control agent's
+  > `healbot_retire` can interleave with the automatic gate **inside one process** — contradicting
+  > the "serialised deliberately" comment on `busy` itself. Closing the race needs a claim written
+  > **before** the spawn, not a check after it.
 - **`verify_control_agent.py` has not been re-executed since its one assertion was corrected** —
   see §3.
 - **The session route does not surface a dismissed question on screen.** The text is in the

@@ -33,6 +33,7 @@ import rig  # noqa: E402
 
 PORT_ON = 4141
 PORT_OFF = 4142
+PORT_DEFAULT = 4143
 SOFT = "37000"
 HARD = "41000"
 
@@ -151,12 +152,55 @@ try:
     )
 
     # -----------------------------------------------------------------------------------------
-    # Nothing was retired. Neither server ran a model turn, so a retirement line here would mean
+    # THE SHIPPED DEFAULT, ARMED FOR REAL — and it is FREE, which is the point.
+    #
+    # `HARNESS.md` carried "the 256K gate has never been exercised at its real value" as an open
+    # item, and `NEXT.md` proposed closing it by running `verify_headless_retire.py` with no
+    # override. That does not work: that rig hardcodes `THRESHOLD = 20_000` and forces it into the
+    # server's environment, so there is no override to remove, and its single ~50KB-capped read
+    # cannot reach 256,000 anyway.
+    #
+    # Separate the question into its two halves and only one of them costs money:
+    #   (a) does the shipped constant actually arm at 256,000 — a fact about config resolution,
+    #       answered here, free, in two seconds;
+    #   (b) does a session driven to 256,000 retire — a fact about a single `>=`, already TESTED
+    #       at 20,000 by `verify_headless_retire.py` (20/20) and threshold-independent by
+    #       inspection.
+    # This closes (a). (b) remains bought-or-not, and `.carryover/verified/README.md` carries the
+    # costing.
+    #
+    # NOTE the pairing with the assertion above: that one requires "soft 256,000" to be ABSENT when
+    # an override is supplied, this one requires it to be PRESENT when none is. The same string,
+    # asserted both ways in one run, so neither can be passing for a trivial reason.
+    # -----------------------------------------------------------------------------------------
+    servers.append(rig.serve(PORT_DEFAULT, rig.db("armdefault"), log=log_of(PORT_DEFAULT), env_extra={}))
+    time.sleep(2)
+    default = read_log(PORT_DEFAULT)
+
+    r.check("a server with NO threshold override came up", bool(default), f"{len(default)} bytes of log")
+    r.check(
+        "THE SHIPPED DEFAULT ARMS AT 256,000 — the number that actually ships, exercised",
+        "soft 256,000" in default,
+        "no HEALBOT_RETIRE_AT anywhere: not in the rig, not in the server's environment",
+    )
+    r.check(
+        "…and the shipped HARD default is 330,000",
+        "hard 330,000" in default,
+        "inert under the shipped per-step predicate, but it is what would arm — see HARNESS.md",
+    )
+    r.check(
+        "the override server and the default server disagree, as they must",
+        (f"soft {int(SOFT):,}" in on) and ("soft 256,000" in default) and (f"soft {int(SOFT):,}" not in default),
+        "proves the env var is read per-process rather than baked in",
+    )
+
+    # -----------------------------------------------------------------------------------------
+    # Nothing was retired. No server ran a model turn, so a retirement line here would mean
     # the guard fired on something it invented.
     # -----------------------------------------------------------------------------------------
     r.check(
-        "no session was retired by either server",
-        "handed off" not in on and "handed off" not in off,
+        "no session was retired by any server",
+        not any("handed off" in log for log in (on, off, default)),
         "arming is not firing",
     )
 
