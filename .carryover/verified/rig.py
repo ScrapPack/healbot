@@ -17,25 +17,131 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 SP = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SP)
 from term import Term  # noqa: E402
 
-HEALBOT = "/Users/brittonwerdell/Desktop/healbot"
+# Everything derives from __file__. Previously every verify_*.py hardcoded an absolute
+# scratchpad path belonging to the session that wrote it; those directories are gone, so the
+# suite could not be re-run from a fresh clone — which for a project whose only mechanism for
+# proving anything is this rig is a defect in the evidence, not just an inconvenience.
+HEALBOT = os.path.dirname(os.path.dirname(SP))
 REPO = f"{HEALBOT}/opencode"
 ENVSH = f"{HEALBOT}/harness/env.sh"
-PROJECT = f"{SP}/hb/project"
+WORK = os.environ.get("HEALBOT_RIG_WORK", f"{SP}/hb")
+PROJECT = f"{WORK}/project"
+
+# The fork run from source. The installed `opencode` binary does NOT contain healbot.tsx, so
+# every rig here has to go through the checkout or it is testing a different program.
+OC = f"bun run --cwd {REPO}/packages/opencode --conditions=browser src/index.ts"
+
+
+def db(name):
+    """Absolute, per-rig DB path. OPENCODE_DB is the ONLY isolation this suite applies —
+    `database.ts:43-46` returns an absolute value directly, bypassing the data dir. Do NOT
+    reach for XDG_DATA_HOME: `global.ts:11` derives Global.Path.data from it and auth.json
+    lives there, so redirecting it strands the OpenAI oauth credentials and the model pin
+    silently stops resolving. That mistake is what voided the first verification run."""
+    os.makedirs(WORK, exist_ok=True)
+    return f"{WORK}/{name}.db"
+
+
+def fixtures():
+    """Create the project fixtures the rigs prompt against. Idempotent.
+
+    `worker0..2.txt` carry assertable payloads so a tool-using turn can be proven to have
+    really read a file; `ledger0..2.txt` are large enough (~130 KB each) that reading them
+    moves context occupancy far enough to cross a lowered HEALBOT_RETIRE_AT.
+    """
+    os.makedirs(PROJECT, exist_ok=True)
+    for i in range(3):
+        path = f"{PROJECT}/worker{i}.txt"
+        if not os.path.exists(path):
+            with open(path, "w") as fh:
+                fh.write(f"payload-{i}\n")
+    for i in range(3):
+        path = f"{PROJECT}/ledger{i}.txt"
+        # Regenerate if short: a truncated ledger silently stops moving occupancy, and the
+        # retirement rigs would then fail for a reason that looks like a code defect.
+        if os.path.exists(path) and os.path.getsize(path) >= 130_000:
+            continue
+        with open(path, "w") as fh:
+            row = 0
+            while fh.tell() < 130_000:
+                fh.write(f"{i:02d}-{row:06d}  ACCT-{(row * 7919) % 100000:05d}  {(row * 31) % 997:04d}.{row % 100:02d}  OK\n")
+                row += 1
+    return PROJECT
 
 
 def boot(port, db, cols=170, rows=48, settle=25):
-    """TUI from source, harness sourced, DB isolated. The TUI hosts its own server on
-    `port` (--port is 'port to listen on'; it cannot attach to an external server)."""
-    inner = (
-        f". {ENVSH} && exec bun run --cwd {REPO}/packages/opencode --conditions=browser "
-        f"src/index.ts {PROJECT} --port {port}"
+    """TUI from source, harness sourced, DB isolated. The TUI hosts its own server on `port`
+    — `--port` is 'port to listen on' (`cli/network.ts:9`), so this mode cannot meet a block
+    that predates it. For that, use `serve()` + `attach()`."""
+    fixtures()
+    inner = f". {ENVSH} && exec {OC} {PROJECT} --port {port}"
+    t = Term(
+        ["/bin/zsh", "-c", inner],
+        env={"OPENCODE_DB": db, "OPENCODE_CLIENT": os.environ.get("OPENCODE_CLIENT", "cli")},
+        cwd=PROJECT,
+        cols=cols,
+        rows=rows,
     )
+    t.pump(settle)
+    return t
+
+
+def serve(port, db, timeout=90):
+    """A long-lived headless server, separate from any TUI — PLAN.md:335's architecture.
+
+    Returns the Popen. This is what makes the cold-start reconcile reachable: pending
+    permission and question requests live in an in-memory Map inside the SERVER
+    (`permission/index.ts:24,50`), so as long as the server outlives the client, a block can
+    predate the client and `healbot.tsx`'s `reconcile()` has something to recover.
+    """
+    import subprocess
+
+    fixtures()
+    inner = f". {ENVSH} && exec {OC} serve --port {port} --hostname 127.0.0.1"
+    env = dict(os.environ)
+    env["OPENCODE_DB"] = db
+    env.setdefault("OPENCODE_CLIENT", "cli")
+    proc = subprocess.Popen(
+        ["/bin/zsh", "-c", inner],
+        cwd=PROJECT,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    api = Api(port)
+    # Probe an API route, not `/app` — `/app` serves the web UI's HTML, so `Api` blows up
+    # decoding it as JSON and the probe never goes true. `is not None` rather than truthiness
+    # because a fresh server correctly answers `[]`, which is falsy.
+    ready = wait_for(
+        lambda: api("GET", "/session?scope=project", timeout=3) is not None, timeout, f"server on :{port}"
+    )
+    if not ready:
+        proc.kill()
+        raise RuntimeError(f"server did not come up on :{port}")
+    return proc
+
+
+def attach(port, db, cols=170, rows=48, settle=25):
+    """The control terminal as a CLIENT of an existing server.
+
+    `opencode attach <url>` is a real, registered command (`cli/cmd/attach.ts:7-16`,
+    `index.ts:84`), and its non---mini branch calls the same `run()` from `cli/tui/layer`
+    with the same `createLegacyTuiPluginHost()` as `cli/cmd/tui.ts:271-296` — so it is the
+    full TUI and the Healbot builtin loads on it. HARNESS.md used to record this as
+    impossible, on the true premise that `--port` only ever listens.
+
+    OPENCODE_DB is still passed for parity, but it is the SERVER's DB that holds the
+    sessions; the client reaches them over HTTP.
+    """
+    inner = f". {ENVSH} && exec {OC} attach http://127.0.0.1:{port} --dir {PROJECT}"
     t = Term(
         ["/bin/zsh", "-c", inner],
         env={"OPENCODE_DB": db, "OPENCODE_CLIENT": os.environ.get("OPENCODE_CLIENT", "cli")},
@@ -48,13 +154,34 @@ def boot(port, db, cols=170, rows=48, settle=25):
 
 
 class Api:
-    def __init__(self, port):
+    """HTTP client for the rig, scoped to the same project the TUI is scoped to.
+
+    The `x-opencode-directory` header is NOT optional, and leaving it off is a trap that costs
+    a whole test run. `workspace-routing.ts:87` resolves the instance as
+    `?directory || x-opencode-directory || process.cwd()`, and the real SDK always sends the
+    header (`sdk/js/src/client.ts:49`, url-encoded). Without it the rig talks to whatever
+    directory the SERVER's cwd happens to be — and under `serve()` that is
+    `packages/opencode`, because `bun run --cwd` sets it there, not the project.
+
+    Symptom when this is wrong: every API call succeeds, `GET /session` returns the sessions
+    you created, and the grid shows `0 sessions`, because the two are looking at different
+    instances. TESTED — that is exactly how the first cold-start run failed.
+    """
+
+    def __init__(self, port, directory=None):
         self.base = f"http://127.0.0.1:{port}"
+        self.directory = directory or PROJECT
 
     def __call__(self, method, path, body=None, timeout=900):
         data = json.dumps(body).encode() if body is not None else None
         req = urllib.request.Request(
-            self.base + path, data=data, method=method, headers={"Content-Type": "application/json"}
+            self.base + path,
+            data=data,
+            method=method,
+            headers={
+                "Content-Type": "application/json",
+                "x-opencode-directory": urllib.parse.quote(self.directory, safe=""),
+            },
         )
         with urllib.request.urlopen(req, timeout=timeout) as r:
             raw = r.read().decode()
@@ -91,6 +218,28 @@ def wait_for(fn, timeout, label, interval=1.0):
         time.sleep(interval)
     print(f"  !! timed out waiting for {label} after {timeout}s", flush=True)
     return None
+
+
+# The grid's own header: the literal title, then the session count. `healbot.tsx` renders
+# `Healbot` followed by two spaces and `N session(s)`; nothing else in the TUI does.
+GRID_HEADER = r"Healbot\s+\d+\s+sessions?"
+
+
+def on_grid(t):
+    """Is the Healbot route the thing on screen?
+
+    NOT `t.find("Healbot")`, which is what every "the route never changed" assertion in this
+    suite used to be. `Term.find` lowercases both sides, and the rig's own project directory
+    is `.../healbot/.carryover/verified/hb/project` — the session route renders a session's
+    directory in its sidebar footer, so that predicate can be satisfied by the path alone. It
+    was measured returning True on home, on the grid, on the session route, and on home again
+    after quitting: zero discriminating power, on the assertion carrying the load-bearing
+    claim that answering a block never navigated away.
+
+    Any rig that asserts `on_grid` MUST also assert `not on_grid` somewhere it should be
+    false. A positive-only predicate cannot be distinguished from a tautology.
+    """
+    return t.search(GRID_HEADER)
 
 
 def marker_col(t):

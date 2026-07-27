@@ -18,11 +18,10 @@ nearly every key.
 import json
 import time
 
-from rig import Api, Results, boot, fire, wait_for
+from rig import Api, Results, boot, db, fire, on_grid, wait_for
 
 PORT = 4714
-SP = "/private/tmp/claude-501/-Users-brittonwerdell-Desktop-healbot/ac594553-97c7-4390-a005-9576eb0554eb/scratchpad"
-DB = f"{SP}/hb/quest.db"
+DB = db("quest")
 
 # Genuine forks in the road, no mention of any tool. Tried in order until one asks.
 ASKS = [
@@ -61,7 +60,10 @@ try:
 
     asker, q, attempt = None, None, 0
     for attempt, text in enumerate(ASKS, start=1):
-        asker = api("POST", "/session", {})["id"]  # created last -> last cell
+        # Created after the quiet workers, so under the grid's newest-first ordering it
+        # lands in cell 0 -- the initial cursor position. This rig therefore asserts the
+        # cursor SURFACES onto the block (an event-driven move), not that `tab` reached it.
+        asker = api("POST", "/session", {})["id"]
         print(f"  attempt {attempt}: session {asker}", flush=True)
         fire(api, asker, text, box=box, label=f"asker{attempt}")   # NO tools map — unforced
         q = wait_for(lambda: (api("GET", "/question") or None), 300, f"question.asked (attempt {attempt})")
@@ -89,7 +91,7 @@ try:
     t.send("/healbot", 1.2)
     t.key("enter", 3.5)
     t.show("grid with a pending question")
-    r.check("grid route renders", t.find("Healbot"))
+    r.check("grid route renders", on_grid(t))
     r.check("blocked cell renders as QUESTION", t.find("QUESTION"))
     r.check("header counts the block", t.find("1 blocked"))
     start = marker(t)
@@ -110,8 +112,8 @@ try:
     qtext = (first.get("question") or "").strip()
     opened = any(t.find(o) for o in options if o) or (bool(qtext) and t.find(qtext[:24]))
     r.check("the question prompt mounts INSIDE the grid", opened)
-    r.check("the grid is still rendered while answering", t.find("Healbot") and t.find("4 sessions"))
-    r.check("the route never changed (grid still owns the screen)", t.find("Healbot"))
+    r.check("the grid is still rendered while answering", on_grid(t) and t.find("4 sessions"))
+    r.check("the route never changed (grid still owns the screen)", on_grid(t))
     r.check("footer names escape honestly as destructive", t.find("esc reject"))
     if not opened:
         raise SystemExit(1)
@@ -138,7 +140,7 @@ try:
     r.check("the reply cleared the block server-side", cleared is not None,
             f"GET /question -> {api('GET', '/question')}")
     r.check("the cell left the QUESTION state", not t.find("QUESTION"))
-    r.check("still on the control terminal after answering", t.find("Healbot"))
+    r.check("still on the control terminal after answering", on_grid(t))
     r.check("the answer panel collapsed on its own", not t.find("esc reject") or not t.find("answering "))
 
     # ---------------------------------------------------------------- reached the model

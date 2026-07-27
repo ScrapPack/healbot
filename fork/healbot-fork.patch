@@ -3594,10 +3594,10 @@ index b67923f3c..9003fb84a 100644
  }
 diff --git a/packages/tui/src/feature-plugins/system/healbot.tsx b/packages/tui/src/feature-plugins/system/healbot.tsx
 new file mode 100644
-index 000000000..7437e96f8
+index 000000000..0d2ae3f9f
 --- /dev/null
 +++ b/packages/tui/src/feature-plugins/system/healbot.tsx
-@@ -0,0 +1,878 @@
+@@ -0,0 +1,1114 @@
 +/** @jsxImportSource @opentui/solid */
 +import type { TuiPlugin, TuiPluginApi, TuiRouteCurrent } from "@opencode-ai/plugin/tui"
 +import type { PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2"
@@ -3639,11 +3639,21 @@ index 000000000..7437e96f8
 +
 +/**
 + * Border state, highest precedence first. RED/YELLOW outrank everything because they are the
-+ * states that need a human *now*: the session is blocked until someone answers. RETIRE
-+ * outranks activity because a session over the threshold keeps spending toward a hard error
-+ * while it works, and the cell still carries its occupancy so "working" is not lost.
++ * states that need a human *now*: the session is blocked until someone answers. ERROR sits
++ * directly under them for the same reason — the turn is over and it did not succeed, and the
++ * one thing a control terminal must never do is let that read as completion. RETIRE outranks
++ * activity because a session over the threshold keeps spending toward a hard error while it
++ * works, and the cell still carries its occupancy so "working" is not lost.
 + */
-+type CellState = "blocked-permission" | "blocked-question" | "needs-retire" | "busy" | "done" | "idle"
++type CellState =
++  | "blocked-permission"
++  | "blocked-question"
++  | "errored"
++  | "needs-retire"
++  | "retrying"
++  | "busy"
++  | "done"
++  | "idle"
 +
 +/**
 + * Pending requests recovered by the cold-start reconcile, grouped by session — see
@@ -3652,6 +3662,24 @@ index 000000000..7437e96f8
 + * its options), and for a block that predates this client the live store holds nothing.
 + */
 +type Cold = { permission: Map<string, PermissionRequest[]>; question: Map<string, QuestionRequest[]> }
++
++/**
++ * Sessions whose last turn ended in error, mapped to a short reason for the cell.
++ *
++ * This has to be tracked out of band because **the store cannot express it**. Every v1 error
++ * path ends by setting status idle (`session/processor.ts:611` for the context-overflow case,
++ * `:623` for everything else), and `session/status.ts:41` publishes that `{type:"idle"}` before
++ * `:44` deletes the key — so `sync.tsx:310` records it and a dead session becomes
++ * indistinguishable from one that finished its task. `session-status-event.ts` has no `error`
++ * member at all; the only carrier is the separate `session.error` event.
++ *
++ * Without this map the grid paints a session that died on an expired credential, a crashed tool
++ * or a hard context overflow in `theme.success` and labels it `done`. On a terminal whose entire
++ * premise is that border colour carries truth, that is the worst available failure: silent, and
++ * biased toward "everything finished". PLAN.md:357 asked for the state; HARNESS.md's
++ * load-bearing facts and `TUI.MAP.md` G5 both say the grid must track it itself.
++ */
++type Errors = Map<string, string>
 +
 +/**
 + * A grid cell's session, from either roster source. `time.archived` rides along because
@@ -3675,19 +3703,47 @@ index 000000000..7437e96f8
 + * instead of one per call site. Each response is the generated client's usual
 + * `{ data }` envelope, which some transports flatten — hence the unwrapping at the use sites.
 + */
++type Envelope<T> = { data?: T; error?: unknown } | undefined
++
 +type GridClient = {
 +  permission: { list(): Promise<unknown> }
 +  question: { list(): Promise<unknown> }
 +  session: {
-+    todo(input: { sessionID: string }): Promise<{ data?: { content: string; status: string }[] } | undefined>
-+    diff(input: {
-+      sessionID: string
-+      messageID: string
-+    }): Promise<{ data?: { file?: string; path?: string }[] } | undefined>
-+    create(input: { directory?: string }): Promise<{ data?: { id?: string }; id?: string } | undefined>
-+    promptAsync(input: { sessionID: string; parts: { type: "text"; text: string }[] }): Promise<unknown>
-+    update(input: { sessionID: string; time?: { archived?: number } }): Promise<unknown>
++    todo(input: { sessionID: string }): Promise<Envelope<{ content: string; status: string }[]>>
++    diff(input: { sessionID: string; messageID: string }): Promise<Envelope<{ file?: string; path?: string }[]>>
++    /**
++     * Omitting `limit` is load-bearing, not laziness. `handlers/session.ts:119-121` branches on
++     * it: with a limit you get `MessageV2.page`, which is `orderBy(desc(...))` — the NEWEST N.
++     * Without one you get `session.messages`, which pages the whole history backwards and
++     * `session.ts:852` `.reverse()`s it, so `[0]` is genuinely the session's first message.
++     */
++    messages(input: { sessionID: string }): Promise<Envelope<{ info?: { role?: string }; role?: string; parts?: { type: string; text?: string }[] }[]>>
++    create(input: { directory?: string }): Promise<{ data?: { id?: string }; id?: string; error?: unknown } | undefined>
++    promptAsync(input: { sessionID: string; parts: { type: "text"; text: string }[] }): Promise<Envelope<unknown>>
++    abort(input: { sessionID: string }): Promise<Envelope<unknown>>
++    update(input: { sessionID: string; time?: { archived?: number } }): Promise<Envelope<unknown>>
 +  }
++}
++
++/**
++ * Passes an SDK response through, or throws with a usable message if it carries an error.
++ *
++ * The generated client does NOT reject on failure — it is built without `throwOnError`
++ * (`context/sdk.tsx:25-31`), so `client.gen.ts:222-233` resolves with `{data: undefined, error}`
++ * and an unchecked `await` looks exactly like success. Every mutating call in `retire()` runs
++ * through this, because the alternative is a handoff that reports `handed off N open items`
++ * after archiving a session it never actually replaced.
++ */
++function ok<R extends { error?: unknown } | undefined>(result: R, what: string): R {
++  const error = result?.error
++  if (!error) return result
++  const detail =
++    typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
++      ? error.message
++      : typeof error === "object" && error !== null && "name" in error && typeof error.name === "string"
++        ? error.name
++        : "request failed"
++  throw new Error(`${what}: ${detail}`)
 +}
 +
 +const gridClient = (api: TuiPluginApi) => api.client as unknown as GridClient
@@ -3817,16 +3873,40 @@ index 000000000..7437e96f8
 +  return 0
 +}
 +
-+function stateOf(sync: ReturnType<typeof useSync>, cold: Cold, sessionID: string): CellState {
++/**
++ * Short, human reason for an error cell. Mirrors `notifications.ts:20-27`, which is not
++ * exported. `MessageAbortedError` is called out separately because an abort is a deliberate act
++ * — including the one `retire()` performs on a busy predecessor — and reading it as a failure
++ * would train the operator to ignore the state.
++ */
++function errorReason(error: { name?: string; data?: unknown } | undefined): string {
++  if (error?.name === "MessageAbortedError") return "aborted"
++  const data = error?.data
++  if (data && typeof data === "object" && "message" in data && (data as { message?: unknown }).message === "SSE read timed out") {
++    return "model stopped responding"
++  }
++  return error?.name ?? "error"
++}
++
++function stateOf(sync: ReturnType<typeof useSync>, cold: Cold, errors: Errors, sessionID: string): CellState {
 +  if (pendingPermission(sync, cold, sessionID).length > 0) return "blocked-permission"
 +  if (pendingQuestion(sync, cold, sessionID).length > 0) return "blocked-question"
++  // Above RETIRE, because a session that died is not a session that needs retiring — retiring a
++  // dead session hands its successor a document built from a turn that failed. The header's
++  // `to retire` count is computed off occupancy rather than off this function (see `retirable`),
++  // so nothing is lost by ranking the error first.
++  if (errors.has(sessionID)) return "errored"
 +  if (occupancyOf(sync, sessionID) >= RETIRE_AT) return "needs-retire"
 +  const status = sync.data.session_status[sessionID]
 +  // Absent is meaningful: the server deletes the key on idle (session/status.ts:42-45), so
 +  // the HTTP seed only ever carries busy/retry. Key present + idle ⇒ it ran and finished in
 +  // THIS process. Absent ⇒ never started here — dim, not green. See CONTEXT.MAP.md G3.
 +  if (!status) return "idle"
-+  if (status.type === "busy" || status.type === "retry") return "busy"
++  // Split out of `busy`, per PLAN.md:357's "red flash | session.status {type:"retry"}". A retry
++  // is not progress: the provider rejected the request and opencode is backing off. It looks
++  // exactly like work from the outside, which is precisely why it earns its own colour.
++  if (status.type === "retry") return "retrying"
++  if (status.type === "busy") return "busy"
 +  return "done"
 +}
 +
@@ -3837,6 +3917,11 @@ index 000000000..7437e96f8
 +      return theme.error
 +    case "blocked-question":
 +      return theme.warning
++    // Red, like a permission, and deliberately so: PLAN.md:357 assigns red to both. The label
++    // is what separates them, which is the same contract every other state in this grid keeps.
++    case "errored":
++    case "retrying":
++      return theme.error
 +    case "needs-retire":
 +      // PLAN.md reserved purple for `session.next.compaction.started`, which REVIEW R3 proved
 +      // cannot fire on the v1 path under any flag — so the colour is free, and retirement is
@@ -3857,6 +3942,10 @@ index 000000000..7437e96f8
 +      return "PERMISSION"
 +    case "blocked-question":
 +      return "QUESTION"
++    case "errored":
++      return "ERROR"
++    case "retrying":
++      return "RETRY"
 +    case "needs-retire":
 +      return "RETIRE"
 +    case "busy":
@@ -3881,6 +3970,7 @@ index 000000000..7437e96f8
 +  selected: boolean
 +  width: number
 +  cold: Cold
++  errors: Errors
 +}) {
 +  const sync = useSync()
 +  const theme = () => props.api.theme.current
@@ -3893,7 +3983,7 @@ index 000000000..7437e96f8
 +    if (!sync.data.message[props.sessionID]?.length) void sync.session.sync(props.sessionID)
 +  })
 +
-+  const state = createMemo(() => stateOf(sync, props.cold, props.sessionID))
++  const state = createMemo(() => stateOf(sync, props.cold, props.errors, props.sessionID))
 +  const todos = createMemo(() => (sync.data.todo[props.sessionID] ?? []).filter((item) => item.status !== "completed"))
 +  const last = createMemo(() => {
 +    const messages = sync.data.message[props.sessionID] ?? []
@@ -3922,6 +4012,17 @@ index 000000000..7437e96f8
 +      </box>
 +      <box flexDirection="row">
 +        <text fg={borderColor(props.api, state(), props.selected)}>{label(state())}</text>
++        <Show when={state() === "errored"}>
++          <text fg={theme().textMuted}> · {props.errors.get(props.sessionID)}</text>
++        </Show>
++        {/*
++          An errored session that is ALSO over the threshold still needs retiring once looked at,
++          and ERROR outranks RETIRE — so say both rather than let the precedence swallow one.
++          Same bargain the `· working` suffix below makes for RETIRE over `busy`.
++        */}
++        <Show when={state() === "errored" && occupancy() >= RETIRE_AT}>
++          <text fg={theme().secondary}> · retire</text>
++        </Show>
 +        <Show when={state() === "needs-retire" && sync.data.session_status[props.sessionID]?.type === "busy"}>
 +          <text fg={theme().accent}> · working</text>
 +        </Show>
@@ -3965,11 +4066,43 @@ index 000000000..7437e96f8
 +  // route sources it from `sync.session.get(id)?.directory` (routes/session/index.tsx:1286),
 +  // and the grid deliberately shows sessions that store cannot see.
 +  const [roster, setRoster] = createSignal<Roster[]>([])
++  const [rosterError, setRosterError] = createSignal<string | null>(null)
 +  const reload = async () => {
-+    const result: any = await props.api.client.session.list({ scope: "project" })
-+    const list = (result?.data ?? result ?? []) as Roster[]
-+    // Ids are monotonic-ascending, so id order is creation order — newest first.
-+    setRoster([...list].sort((a, b) => b.id.localeCompare(a.id)))
++    // The SDK RESOLVES on failure rather than rejecting — the client is built without
++    // `throwOnError` (`context/sdk.tsx:25-31`), so `client.gen.ts:222-233` hands back
++    // `{data: undefined, error, request, response}`. The previous `(result?.data ?? result ?? [])`
++    // therefore fell through to the envelope on exactly the path it was meant to protect, and
++    // `[...envelope]` threw `TypeError: list is not iterable`. All four call sites are `void
++    // reload()`, and the TUI render process installs no `unhandledRejection` handler, so under
++    // Bun that TERMINATED the terminal — a control terminal that dies when the server it is
++    // watching hiccups is worse than one that shows a stale roster.
++    //
++    // `Array.isArray` rather than dropping the `?? result` fallback outright: both shapes are
++    // real (some transports flatten the envelope), and neither can throw through this guard.
++    try {
++      const result: any = await props.api.client.session.list({ scope: "project" })
++      const payload = result?.data ?? result
++      if (!Array.isArray(payload)) {
++        setRosterError(result?.error ? "session list failed" : "session list returned no array")
++        return
++      }
++      setRosterError(null)
++      // Ids are DESCENDING identifiers (`schema/src/session-id.ts:8` → `identifier.ts:22`:
++      // `descending ? ~current : current`), so a later creation time yields a lexicographically
++      // SMALLER id and plain ascending order is already newest-first. The comment that used to
++      // sit here claimed the opposite and the comparator it justified reversed the roster into
++      // oldest-first — cosmetic, but cell order is what an operator builds muscle memory on.
++      setRoster([...payload].sort((a: Roster, b: Roster) => a.id.localeCompare(b.id)))
++    } catch (error) {
++      // Keep the previous roster. A grid that empties itself on a transient failure loses the
++      // operator every cell they were watching.
++      setRosterError(error instanceof Error ? error.message : String(error))
++    }
++    // The selection index lives in the PLUGIN closure so it survives navigating into a session
++    // and back (`:846-848`), which means it also survives sessions disappearing underneath it.
++    // Unclamped, a stale index renders no `▸` anywhere and leaves `a`/`x`/`enter` inert on a
++    // cell that is not there.
++    props.setSelected(clamp(props.selected()))
 +  }
 +  // Cold-start reconcile of RED/YELLOW. `permission.list` / `question.list` return every
 +  // pending request across all sessions, which is the only way to see blocks that predate
@@ -4050,7 +4183,36 @@ index 000000000..7437e96f8
 +    return out
 +  })
 +
-+  const isBlocked = (sessionID: string) => stateOf(sync, cold(), sessionID).startsWith("blocked")
++  // Error tracking. `session.error` is the ONLY event that carries the fact — see the `Errors`
++  // type. Cleared when the session next goes busy or retry, so a session that errors and is then
++  // re-prompted stops reading ERROR the moment it is working again; the idiom is lifted from
++  // `notifications.ts:59-65`, which solves the same problem for its toast.
++  //
++  // Unlike notifications.ts this does NOT gate on having seen the session go busy first. That
++  // gate is right for a toast (don't notify about work you never watched) and wrong for a grid,
++  // whose whole job is to show state for sessions it did not start.
++  const [errors, setErrors] = createSignal(new Map<string, string>())
++  onCleanup(
++    props.api.event.on("session.error", (event) => {
++      const sessionID = event.properties.sessionID
++      if (!sessionID) return
++      setErrors((prev) => new Map(prev).set(sessionID, errorReason(event.properties.error)))
++    }),
++  )
++  onCleanup(
++    props.api.event.on("session.status", (event) => {
++      const { sessionID, status } = event.properties
++      if (status.type !== "busy" && status.type !== "retry") return
++      setErrors((prev) => {
++        if (!prev.has(sessionID)) return prev
++        const next = new Map(prev)
++        next.delete(sessionID)
++        return next
++      })
++    }),
++  )
++
++  const isBlocked = (sessionID: string) => stateOf(sync, cold(), errors(), sessionID).startsWith("blocked")
 +  const directoryOf = (sessionID: string) => sessions().find((item) => item.id === sessionID)?.directory
 +
 +  // The answer panel. It holds a sessionID rather than a request so that it stays correct
@@ -4101,7 +4263,23 @@ index 000000000..7437e96f8
 +    setRetiring(sessionID)
 +    setRetireNote(null)
 +    try {
-+      const todoResult = await client.session.todo({ sessionID }).catch(() => undefined)
++      // Stop the predecessor BEFORE anything else. Archiving does not abort — `session.update`
++      // reaches `session.setArchived`, a bare DB patch (`session.ts:759-761`) — and the grid
++      // deliberately renders `RETIRE · working` (see the Cell), so `x` on a mid-turn session is
++      // an invited action. Without this the predecessor keeps editing the SAME directory as its
++      // successor (`:724` passes `session.directory`), and the instant it is archived it leaves
++      // `sessions()` and therefore has no cell, no `a`, and no place in the blocked count — a
++      // session burning a slot, holding half an edit, possibly parked forever on a permission
++      // nothing can answer (`permission/index.ts:96-105` has no timeout).
++      //
++      // Unconditional and idempotent: aborting an idle session is a no-op, and checking
++      // `session_status` first would race the turn that starts between the check and the call.
++      ok(await client.session.abort({ sessionID }), "abort predecessor")
++
++      const todoResult = ok(
++        await client.session.todo({ sessionID }),
++        "read todos",
++      )
 +      const todos = (todoResult?.data ?? []).filter(Boolean)
 +      const open = todos.filter((todo) => todo.status !== "completed")
 +
@@ -4137,10 +4315,9 @@ index 000000000..7437e96f8
 +      // nothing outstanding has nothing to hand over, so spawning a successor for it would
 +      // burn a fresh window to say "there is no work".
 +      if (open.length === 0) {
-+        await client.session.update({ sessionID, time: { archived: Date.now() } })
++        ok(await client.session.update({ sessionID, time: { archived: Date.now() } }), "archive session")
 +        setRetireNote(`retired ${truncate(session.title ?? sessionID, 40)} — nothing outstanding`)
 +        await reload()
-+        props.setSelected(clamp(props.selected()))
 +        return
 +      }
 +
@@ -4153,7 +4330,40 @@ index 000000000..7437e96f8
 +          .map((part) => ("text" in part ? part.text : ""))
 +          .join("\n")
 +          .trim()
-+      const objective = messages.filter((message) => message.role === "user").map((m) => textOf(m.id)).find(Boolean)
++      // The objective is fetched from the SERVER, not read out of the store, and this is the
++      // difference between a correct handoff and a confidently wrong one.
++      //
++      // `sync.data.message[id]` holds at most the NEWEST 100 messages — `sync.tsx:597` hydrates
++      // with `limit: 100`, `:618-619` keeps `infos.slice(-100)`, and the live path evicts
++      // `updated[0]` past 100. So on any session longer than that, its first entry is an
++      // arbitrary mid-conversation turn. `handoffDocument` then labels whatever it got
++      // "## Original instruction" and tells the successor it is the statement of intent.
++      //
++      // Retirement exists to fire on long sessions — 350,000 tokens by default — which are
++      // exactly the sessions past 100 messages. The bug was invisible to the §10 verification
++      // because that ran at `HEALBOT_RETIRE_AT=20000` against an 8-message session, i.e. the one
++      // regime where the store still holds message one.
++      //
++      // `messages()` without a `limit` returns the whole history oldest-first; see the type.
++      // Best-effort: a failure here costs the objective line, not the handoff.
++      const firstUserText = await client.session
++        .messages({ sessionID })
++        .then((result) => {
++          for (const entry of result?.data ?? []) {
++            const role = entry?.info?.role ?? entry?.role
++            if (role !== "user") continue
++            const text = (entry.parts ?? [])
++              .filter((part) => part.type === "text")
++              .map((part) => part.text ?? "")
++              .join("\n")
++              .trim()
++            if (text) return text
++          }
++          return undefined
++        })
++        .catch(() => undefined)
++      const objective =
++        firstUserText ?? messages.filter((message) => message.role === "user").map((m) => textOf(m.id)).find(Boolean)
 +      const lastMessage = [...messages]
 +        .reverse()
 +        .filter((message) => message.role === "assistant")
@@ -4171,18 +4381,29 @@ index 000000000..7437e96f8
 +      // POST /session + seed is the ONLY path that yields a zero-token successor: `fork`
 +      // reports 0 at creation then climbs to exactly the parent's total within ~3s, and
 +      // `summarize` mutates in place. Same directory, or the successor cannot see the work.
-+      const created = await client.session.create({ directory: session.directory })
++      const created = ok(
++        await client.session.create({ directory: session.directory }),
++        "spawn successor",
++      )
 +      const successorID = created?.data?.id ?? created?.id
 +      if (!successorID) throw new Error("session.create returned no id")
 +
 +      // prompt_async, per PLAN.md:341. It was reported broken by the audit and is not —
 +      // it acks in ~10ms and the turn completes normally; the report polled an assistant row
 +      // that exists ~20ms before it fills.
-+      await client.session.promptAsync({
-+        sessionID: successorID,
-+        parts: [{ type: "text", text: document }],
-+      })
-+      await client.session.update({ sessionID, time: { archived: Date.now() } })
++      //
++      // ORDERING IS THE POINT. Archiving used to happen unconditionally on the next line with
++      // none of these three calls having their `.error` read — the SDK resolves rather than
++      // rejects, so a 4xx anywhere left the predecessor archived, the successor unseeded, and
++      // the footer reporting `handed off N open items`. The handoff is only real once the seed
++      // is accepted, so the seed is confirmed BEFORE the source is retired. Failing the other
++      // way round is recoverable: an unarchived predecessor still has a cell and can be retired
++      // again, whereas an archived one has no cell at all.
++      ok(
++        await client.session.promptAsync({ sessionID: successorID, parts: [{ type: "text", text: document }] }),
++        "seed successor",
++      )
++      ok(await client.session.update({ sessionID, time: { archived: Date.now() } }), "archive predecessor")
 +      await reload()
 +
 +      // Hand the grid slot to the replacement, so the operator's cursor follows the work
@@ -4332,6 +4553,10 @@ index 000000000..7437e96f8
 +  // but it still needs retiring once answered, and the header is the only place that survives
 +  // the precedence collapse.
 +  const retirable = createMemo(() => sessions().filter((item) => occupancyOf(sync, item.id) >= RETIRE_AT).length)
++  // Same reasoning as `retirable`: counted off the raw fact rather than off `stateOf`, so a
++  // session that is blocked AND errored is still counted here after the block collapses it to
++  // PERMISSION. A count that disappears because another state outranked it is not a count.
++  const failed = createMemo(() => sessions().filter((item) => errors().has(item.id)).length)
 +
 +  return (
 +    <box
@@ -4355,6 +4580,12 @@ index 000000000..7437e96f8
 +            {blocked()} blocked
 +          </text>
 +        </Show>
++        <Show when={failed() > 0}>
++          <text fg={theme().error}>
++            {"  "}
++            {failed()} failed
++          </text>
++        </Show>
 +        <Show when={retirable() > 0}>
 +          <text fg={theme().secondary}>
 +            {"  "}
@@ -4373,7 +4604,11 @@ index 000000000..7437e96f8
 +            ? "answering · esc reject"
 +            : retiring()
 +              ? "retiring · handing off"
-+              : (retireNote() ?? "a answer · x retire · tab next blocked · enter focus · r refresh · q close")}
++              : // A failed roster fetch outranks the key legend: the cells on screen are stale
++                // and the operator has no other way to learn that. `r` retries.
++                (rosterError()
++                  ? `${rosterError()} · r retry`
++                  : (retireNote() ?? "a answer · x retire · tab next blocked · enter focus · r refresh · q close"))}
 +        </text>
 +      </box>
 +
@@ -4399,6 +4634,7 @@ index 000000000..7437e96f8
 +                      selected={rowIndex() * columns() + columnIndex() === props.selected()}
 +                      width={cellWidth()}
 +                      cold={cold()}
++                      errors={errors()}
 +                    />
 +                  )}
 +                </For>

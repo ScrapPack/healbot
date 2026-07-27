@@ -9,11 +9,10 @@ file-writing turn and inspecting the parts directly.
 import json
 import time
 
-from rig import Api, Results, boot, fire, wait_for
+from rig import Api, PROJECT, Results, boot, db, fire, wait_for
 
 PORT = 4720
-SP = "/private/tmp/claude-501/-Users-brittonwerdell-Desktop-healbot/ac594553-97c7-4390-a005-9576eb0554eb/scratchpad"
-DB = f"{SP}/hb/diffdiag.db"
+DB = db("diffdiag")
 
 r = Results()
 api = Api(PORT)
@@ -47,7 +46,7 @@ try:
     summaries = [(m.get("info") or m).get("summary") for m in msgs if (m.get("info") or m).get("role") == "assistant"]
     print(f"  assistant summary fields: {json.dumps(summaries)[:400]}", flush=True)
     import os
-    print(f"  probe.txt on disk: {os.path.exists(f'{SP}/hb/project/probe.txt')}", flush=True)
+    print(f"  probe.txt on disk: {os.path.exists(f'{PROJECT}/probe.txt')}", flush=True)
 finally:
     r.summary()
     t.close()

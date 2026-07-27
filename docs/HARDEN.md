@@ -1,0 +1,222 @@
+# Phase 5 — harden the grid, and build the fleet
+
+Date 2026-07-27. Phase 5 did not exist in `PLAN.md`, which stops at Phase 4. It was created out
+of the residue of an adversarial audit of Phase 4's completeness, and has two halves:
+
+**A.** Fix what the audit found, and repair the instrument that failed to find it.
+**B.** Build `opencode serve` + `opencode attach` — the long-lived-server architecture
+`PLAN.md:378` assumed from the start and that `HARNESS.md` had recorded as **blocked**.
+
+---
+
+## 1. The audit, and the honest answer on Phase 4
+
+67 agents across five dimensions, every finding put to an adversarial verifier that defaulted to
+refuting it. 61 findings, **56 survived**, 5 refuted.
+
+**Is the Phase 4 exit gate met? Yes — on outcome. The instrument was weaker than its numbers.**
+
+Both clauses genuinely happened, and the artefacts in the run databases confirm it: four turns
+in flight at once, a permission answered from the grid with the answer reaching the model, and a
+handoff that carried the objective, both open todos into the successor's own list and a changed
+file, at occupancy 90,310 → 5,649. None of that is in doubt.
+
+What is in doubt is the evidence that was written to prove it:
+
+| Claim | Assertion that carried it | Verdict |
+|---|---|---|
+| "continuity 1/3 — handed the objective" | `"Original instruction" in seed` | **Tautology.** `healbot.tsx` emits that heading into *every* document unconditionally, and an assertion 33 lines earlier already entailed it |
+| "continuity 3/3 — handed a changed file" | `"stage1.txt" in seed` | **Collision.** The objective is echoed verbatim into the same document and it names `stage1.txt`. Stripping the entire file section left the predicate green |
+| "started at its OWN occupancy" | `r.check(..., True, "see figure below")` | **A literal constant.** The headline 21/21 is 20 substantive + 1 label |
+| "the route never changed" ×9 | `t.find("Healbot")` | **True on every screen.** `Term.find` lowercases and the run's own project path contains `healbot`. Measured `True` on home, on the grid, on the session route, and on home again after quitting |
+
+That makes **eight** bad assertions across this effort against four real defects found by tests.
+The pattern is stable enough to name: *this project's tests fail by passing.* Every fix below
+that touches the rig is aimed at that, not at coverage.
+
+**Gate ≠ build order**, and conflating them is the error this project keeps catching in itself.
+The gate names three behaviours and they are met. The build order names seven steps: three
+built, two partial, two absent. Step 5 (the control agent) does not exist; step 4 (focus) is
+three lines of code with no test. Neither is in the gate. `HARNESS.md` was scrupulous about
+this distinction; `docs/VERIFY.md` was not, and its top-line Result still declared the handoff
+clause *unbuilt* 310 lines above §10 reporting it built and passing.
+
+---
+
+## 2. Six defects, fixed
+
+Ranked as the audit ranked them. All in `healbot.tsx` unless noted.
+
+**1. A hard-errored session rendered GREEN `done`.** The one that matters most, because the
+product actively lied. Every v1 error path ends `status.set(idle)` (`processor.ts:611` for the
+context overflow this project's whole retirement threshold exists to prevent, `:623` for
+everything else); `status.ts:41` publishes that idle *before* `:44` deletes the key;
+`sync.tsx:310` stores it; `stateOf` had six outcomes and no error branch, so it returned `done`
+→ `theme.success`. Expired credential, crashed tool, aborted run, filled window — all green.
+Fixed with an `errored` state fed from `session.error` and cleared on the next busy (idiom from
+`notifications.ts:59-65`), ranked directly under the blocked states, carrying the reason on the
+cell and a `N failed` count in the header. `retry` split out of `busy` at the same time, which
+is the other half of `PLAN.md:369`'s border row.
+
+**2. `reload()` turned any list failure into an uncaught `TypeError`.** The SDK resolves rather
+than rejects (no `throwOnError`, `sdk.tsx:25-31`), so `(result?.data ?? result ?? [])` fell
+through to the error envelope and `[...envelope]` threw — on the one path the fallback existed
+to protect. Four `void reload()` call sites, no handler, and under Bun an unhandled rejection
+exits the process: a control terminal that dies when the server it is watching hiccups. Now an
+`Array.isArray` guard plus try/catch that keeps the previous roster and puts the failure in the
+footer where `r` retries it.
+
+**3. `retire()` archived the source on unverified success.** Neither `session.create`,
+`promptAsync` nor either `session.update` had its `.error` read, so a 4xx anywhere left the
+predecessor archived, the successor unseeded and the footer reporting `handed off N open items`.
+Every call now goes through `ok()`, and the ordering is inverted: the seed is confirmed *before*
+the source is retired. Failing that way round is recoverable — an unarchived predecessor still
+has a cell.
+
+**4. The handoff's "Original instruction" was the first user message of the last 100.**
+`sync.data.message` holds the newest 100 (`sync.tsx:597, :618-619, :334-336`), so on any longer
+session the document labelled an arbitrary mid-conversation turn as the founding intent — and
+told the successor to treat it as such. Retirement targets long sessions, so the bug lived
+exactly where the feature is meant to fire; the §10 run could not see it because it ran at
+`HEALBOT_RETIRE_AT=20000` on an 8-message session. Now fetched from the server:
+`GET /session/{id}/message` **without** a `limit` returns the whole history oldest-first
+(`handlers/session.ts:119-121` → `session.ts:837-852`), where `[0]` really is message one.
+
+**5. Retiring a busy session orphaned it.** Archiving is a bare DB patch
+(`session.ts:759-761`) and aborts nothing, while the grid deliberately renders `RETIRE ·
+working` — so `x` there left the predecessor editing the same directory as its successor, with
+no cell anywhere and possibly parked forever on a permission (`permission/index.ts:96-105` has
+no timeout). `retire()` now aborts first, unconditionally and idempotently.
+
+**6. A stale cursor left the grid inert.** `selected` lives in the plugin closure so it survives
+navigation, which means it also survives sessions vanishing under it. `reload()` now clamps.
+
+Plus one in the harness: `env.sh` documented "set `HARNESS_ROOT` yourself before sourcing" and
+then overwrote it unconditionally on the next line. Now `${HARNESS_ROOT:-…}`.
+
+**Gates.** `tsgo --noEmit -p packages/tui/tsconfig.json` → exit 0, zero output. `oxlint` on
+`healbot.tsx` → exit 0, **3 warnings**, down from the committed baseline of 4.
+
+---
+
+## 3. The rig, made able to fail
+
+**Re-runnable at all.** Every `verify_*.py` hardcoded an absolute scratchpad path belonging to
+the session that wrote it; those directories no longer exist, and nothing generated the fixtures
+they prompt against. For a project whose only mechanism for proving anything is this rig, that
+is a defect in the evidence. Everything now derives from `__file__`, and `rig.fixtures()`
+generates the payload files and the 130 KB ledgers.
+
+**A screen predicate that discriminates.** `on_grid(t)` matches `Healbot\s+\d+\s+sessions?` —
+the grid's own header, case-sensitively — replacing `t.find("Healbot")` at all nine sites.
+`probe_on_grid.py` proves it in both directions with **no model turn**: false on home, true on
+the grid, false again after `q`, and it prints the old predicate returning `True` on the home
+screen so the collision is on the record rather than merely argued. **4/4.** Every rig that
+asserts `on_grid` now also asserts `not on_grid` somewhere it must be false.
+
+**Continuity legs that can fail.** Leg 1 asserts a sentinel (`ORCHID-7742`) that appears in the
+predecessor's first message and nowhere else, scoped to the document's *objective section*. Leg
+3 asserts against the *file section* rather than the whole document. Both are followed by
+**mutation checks** that re-run the predicate on a document with that material stripped and
+require it to fail. The constant-`True` check is deleted; the real occupancy comparison two
+lines below it always did that job.
+
+**Roster ordering, fixed at the source instead of compensated for.** Session ids are descending
+identifiers, so ascending sort is already newest-first; the grid sorted `b.localeCompare(a)`
+under a comment claiming that gave newest-first, and rendered oldest-first. The rigs compensated
+by creating the interesting session last. Both are corrected together — the grid sorts ascending
+and the rigs create it first — because a fix on one side alone would have made three navigation
+assertions pass for the wrong reason.
+
+---
+
+## 4. The fleet — `serve` + `attach`
+
+`HARNESS.md` recorded this as **blocked**, on the reasoning: `--port` is "port to listen on"
+(`cli/network.ts:9`), so the TUI always hosts its own server, so no client can meet a block that
+predates it, so the cold-start reconcile is unreachable and two shipped defect fixes sit on a
+dead path.
+
+**The premise is true. The conclusion was false, and had been for three phases.**
+`opencode attach <url>` is a registered, unhidden command (`cli/cmd/attach.ts:7-16`,
+`index.ts:84`) whose non-`--mini` branch calls the same `run()` from `cli/tui/layer` with the
+same `createLegacyTuiPluginHost()` as `cli/cmd/tui.ts:271-296` — the full TUI, Healbot builtin
+included. `PLAN.md`'s own errata had said as much in passing and nothing followed it up. Nobody
+checked the rest of the command surface; the cost was an architecture step written off as
+impossible.
+
+`harness/fleet.sh` ships it: reuse-or-start a server, attach a control terminal, and leave the
+server running when the terminal closes.
+
+### `verify_cold.py` — 21/21, the reconcile finally exercised
+
+The ordering is the whole test: start a headless server, raise a permission with **nothing
+rendering**, wait until it exists, and only then start the client. At that point the live SSE
+store cannot know about the block — it is populated only by events seen in-process — so if the
+cell renders `PERMISSION`, `reconcile()` is the only thing that can have put it there.
+
+| | |
+|---|---|
+| block raised before any client existed | **37 s** |
+| grid on first paint | `PERMISSION`, `1 blocked` |
+| panel mounted from the reconciled request | carried the real `Patterns / - /etc/*` |
+| reply → block cleared → answer reached the model | `/bin/zsh` in the transcript, `gpt-5.6-sol` |
+| server after the client exits | still serving, session intact |
+
+That panel line upgrades **"the reconcile carries full request bodies, not just ids"** from
+INFERRED (`VERIFY.md:198-200`) to TESTED. Colouring a border needs an id; mounting a prompt
+needs the request.
+
+### `probe_fleet.py` — 10/10, the script an operator actually runs
+
+`verify_cold.py` proves the architecture; this proves the deliverable. It found a real defect:
+**the server died with the terminal.** A plain `&` background job is HUP'd by the shell on exit
+and shares the terminal's stdin — so closing the control terminal took the whole fleet down,
+which is the precise failure the fleet exists to prevent. `nohup … </dev/null & disown` fixes
+it, and reuse is now asserted on **pid identity** rather than on a message the TUI scrolls away.
+
+### The trap that cost a run
+
+The first attempt failed with the grid reporting `0 sessions` while every API call succeeded and
+`GET /session` returned the session. `workspace-routing.ts:87` resolves an instance as
+`?directory || x-opencode-directory || process.cwd()`; the rig sent no header, so it addressed
+the *server's* cwd — which `bun run --cwd` had set to `packages/opencode`, not the project —
+while the client asked for `--dir <project>`. Two different instances, both answering happily.
+`Api` now sends the header like a real client (`sdk/js/src/client.ts:49`).
+
+---
+
+## 5. What this changes elsewhere
+
+Per the process rule from `docs/REVIEW.md` — every phase revises the artifacts it contradicts:
+
+- **`PLAN.md`** — all 14 ERRATA citations were off by exactly **+31**, because inserting the
+  errata block shifted the body it cites and nothing re-derived them. Re-derived, verified row
+  by row, and pinned with a note. Three rows added: the forbidden `AGENTS.md`/`SKILL.md`
+  filenames §3 still prescribes, the unbuilt control agent and untested focus, and the fleet.
+- **`docs/VERIFY.md`** — the Result block now reads 128/129 and reports both gate clauses met,
+  with §10's caveat attached; §6's four "not established" items are struck through with their
+  outcomes.
+- **`HARNESS.md`** — the attach trap is marked REFUTED, the cold-reconcile row moves out of
+  *Still open*, the `session.list` row is corrected to say it is about *projects* and not
+  directories, three new traps are added (the directory header, the dying background job, and
+  the error state), and the stale byte counts are removed rather than re-stated.
+- **`fork/README.md`** — same, plus the later commits it never recorded.
+
+**Deliberately not quoting sizes any more.** `fork/README.md` said "24.1 KB, 566 lines" and
+`HARNESS.md` said "12.8 KB" for one file that was 878 lines at the time. The audit's diagnostic
+is worth keeping: citations into **upstream** opencode held at 59/64, every miss off by one
+line; citations into this project's **own** moving files were 0/17 and 0/4. Only the former has
+a stable target, so the latter should be section names, quoted text, or a command you can run —
+not numbers.
+
+---
+
+## 6. Still open after Phase 5
+
+Unchanged and honest, in `HARNESS.md`'s *Still open* table: the control agent (build-order step
+5) is not built; focus has never been tested; retirement has never run at the shipped 350K
+default; the `question.rejected` half of the cold reconcile is source-reading only; external
+plugin route registration is untested; and **Phase 3's exit gate is still unmet** — the
+`/code-review ultra` pass on the `harness/` diff is user-triggered and cannot be launched from
+an agent session.

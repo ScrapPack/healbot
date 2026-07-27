@@ -6,14 +6,27 @@ bug in the test, not the code (see below).
 
 ```sh
 python3 -m venv venv && venv/bin/pip install pyte
+
+# free — no model turns, no API credits
+venv/bin/python probe_on_grid.py     # 4/4   does the route predicate actually discriminate?
+venv/bin/python probe_fleet.py       # 10/10 does harness/fleet.sh do what it claims?
+
+# these spend credits
 venv/bin/python smoke.py             # 6/6   provider/model/config sanity — run this first
 venv/bin/python verify_permission.py # 40/40 the exit-gate permission clause at N=4
 venv/bin/python verify_question.py   # 27/27 the question clause, UNFORCED
 venv/bin/python verify_surface.py    # 17/18 auto-surface, suppression, tab cycling
+venv/bin/python verify_retire.py     # 17/17 the retirement observable and threshold
+venv/bin/python verify_handoff.py    # 21/21 retire and hand off with continuity intact
+venv/bin/python verify_cold.py       # 21/21 the COLD-START reconcile, via serve + attach
 ```
 
-`rig.py` needs `hb/project/` beside it with `worker0.txt`..`worker2.txt` containing
-`payload-0`..`payload-2`, and a writable `hb/` for the isolated DBs.
+**Paths derive from `__file__` and fixtures generate themselves.** They did not until Phase 5:
+every `verify_*.py` hardcoded an absolute scratchpad path belonging to the session that wrote
+it, and nothing created the `worker*.txt` payloads or the 130 KB `ledger*.txt` files the
+retirement rigs prompt against — so the suite could not be re-run from a fresh clone at all.
+`rig.fixtures()` now builds them; `rig.db(name)` gives each rig its own isolated DB. Override
+the work directory with `HEALBOT_RIG_WORK` if you want it off the repo.
 
 ## What is different from the void run, and why it matters
 
@@ -37,14 +50,42 @@ actually ran.
 
 ## Assertion discipline
 
+**This suite's characteristic failure is passing.** Eight assertions across the effort were
+found to be incapable of failing, against four real defects that tests actually caught. Read
+that as the house style to guard against, not a historical note.
+
 Navigation is asserted on the `▸` marker's `(line, column)`, never on cell text — cell text is
 present regardless of which cell is selected. The terminal is 120 cols on purpose: at 170 the
 four cells fit one row, `j`/`k` clamp, and the keyboard-gating assertions pass vacuously.
 
+**A screen predicate is worthless until it has been shown FALSE.** `on_grid(t)` matches
+`Healbot\s+\d+\s+sessions?` case-sensitively — the grid's own header, and nothing else in the
+TUI. It replaced `t.find("Healbot")`, which backed nine "the route never changed" assertions and
+was `True` on *every* screen: `Term.find` lowercases both sides and the rig's own project path
+is `.../healbot/.carryover/verified/hb/project`. `probe_on_grid.py` demonstrates both the
+collision and the replacement, for free. Every rig asserting `on_grid` also asserts `not
+on_grid` somewhere it must be false.
+
+**Prefer `t.exact()` for cell labels.** `find()` is case-insensitive, and three of the four
+substring failures came through it — `find("RETIRE")` also matches the header's `1 to retire`.
+Labels are uppercase and header phrasing is lowercase; case is the only separator.
+
+**Scope a document assertion to its section, then mutate it.** `verify_handoff.py`'s continuity
+legs check a sentinel inside the objective section and a filename inside the file section, and
+then re-run each predicate against a document with that material stripped and require it to
+fail. Checking the whole document passed via the objective echo, which names the same files.
+
+**`Api` must send `x-opencode-directory`.** `workspace-routing.ts:87` resolves the instance as
+`?directory || x-opencode-directory || process.cwd()`. Omit it under `serve()` and you address
+`packages/opencode` — every call succeeds, the sessions are there, and the grid shows
+`0 sessions`, because you and it are looking at different instances.
+
 Session ids are **descending** identifiers (`schema/src/session-id.ts:8` →
-`identifier.ts:22`), so the grid's `sort((a,b) => b.id.localeCompare(a.id))` renders
-**oldest first**. The blocker is therefore created **last** so it lands away from the initial
-cursor; create it first and `tab`/`a` assertions pass for the wrong reason.
+`identifier.ts:22`), so ascending sort is already newest-first. The grid used to sort
+`b.localeCompare(a)` under a comment claiming the opposite and rendered oldest-first; both the
+grid and these rigs were corrected together, so the interesting session is now created **first**
+to land in the last cell. Fixing only one side would have made three assertions pass for the
+wrong reason.
 
 ## The one failure
 

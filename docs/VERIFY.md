@@ -11,7 +11,14 @@ why, because the failure mode is instructive and cheap to repeat.
 
 ## Result
 
-90 of 91 assertions passed on `openai/gpt-5.6-sol` through the real harness. The single
+> **This block was written for §1–§8 and was stale for a day.** §9 and §10 were appended below
+> without revising it, so the headline read *"90 of 91"* and declared the handoff clause
+> **unbuilt** while §10 of this same file reported it built and passing. A reader who stops at
+> "Result" — the normal way to read a verification report — concluded the gate was not met.
+> Corrected in Phase 5, along with the two assertions in §10 that could not fail; see
+> [HARDEN.md](HARDEN.md).
+
+**128 of 129** assertions passed on `openai/gpt-5.6-sol` through the real harness. The single
 failure is a bug in the test, not the code (§6).
 
 | Run | | Covers |
@@ -20,14 +27,24 @@ failure is a bug in the test, not the code (§6).
 | `verify_permission.py` | 40/40 | the exit-gate permission clause at N=4 |
 | `verify_question.py` | 27/27 | the question clause, **unforced** |
 | `verify_surface.py` | 17/18 | auto-surface, both suppression rules, `tab` cycling |
+| `verify_retire.py` | 17/17 | §9 — the retirement observable and a reachable threshold |
+| `verify_handoff.py` | 21/21 | §10 — retire and hand off with continuity intact |
 
 The rig is at `.carryover/verified/`, with a README covering how to re-run it. The four
 `.carryover/verify*.py` at the level above are the void ones; they are kept only as a record.
 
-**Exit-gate status** (`PLAN.md:379-381`). The clause *"four sessions concurrent, one
-deliberately blocked on a permission prompt and answered from the grid without focusing"* is
-**met, TESTED**, as is the question equivalent. The clause *"one driven past the retirement
-threshold and handed off with continuity intact"* is **unbuilt** and was out of scope here.
+**Exit-gate status** (`PLAN.md:391-393`). **Both clauses are met, TESTED.** *"Four sessions
+concurrent, one deliberately blocked on a permission prompt and answered from the grid without
+focusing"* — §2–§5, and the question equivalent with it. *"One driven past the retirement
+threshold and handed off with continuity intact"* — §10.
+
+**Read that with §10's caveat, and with Phase 5's.** The outcome is real: the handoff carried
+the objective, both open todos into the successor's own list, and a changed file, at occupancy
+90,310 → 5,649. But of the three continuity legs, only leg 2 discriminated — leg 1 asserted a
+heading `healbot.tsx` emits unconditionally, and leg 3 passed via the objective echo. A
+twenty-first "assertion" was the literal constant `True`. Phase 5 replaced all three and added
+mutation checks that fail when the material is removed. The gate is met on the record; the
+instrument that recorded it was weaker than its numbers implied.
 
 ---
 
@@ -191,22 +208,29 @@ is the only guard, and it is the right call.
 Recorded because the previous session reported the gate as TESTED on evidence that did not
 support it.
 
-**The cold-start reconcile is unreachable today, so it is untested.** `cli/network.ts:9`
-describes `--port` as *"port to listen on"* — the TUI always hosts its own server and cannot
-attach to an external one. A client meeting a block that predates it therefore cannot occur
-until the long-lived `opencode serve` architecture from `PLAN.md:335` exists. The reconcile
-carrying **full request bodies** rather than a `Set` of ids is correct by source reading —
-colouring a border needs an id, rendering a prompt needs the request — but it is INFERRED, not
-TESTED.
+> **Three of the four items below were closed after this section was written and it was never
+> revised.** Struck through with the correction inline; see §9, §10 and
+> [HARDEN.md](HARDEN.md). Only the last is still open.
 
-**Both "defects fixed in passing" are on that same cold path.** `sync.tsx:221-222` already
-handles `question.rejected` for the live store, so the new subscription and the post-reply
-staleness-window fix only affect the `cold` map. Correct by source reading; not exercised.
+**~~The cold-start reconcile is unreachable today, so it is untested.~~ CLOSED — TESTED, 21/21
+(Phase 5).** The reasoning here was: `cli/network.ts:9` describes `--port` as *"port to listen
+on"*, so the TUI always hosts its own server, so a client can never meet a block that predates
+it. **The premise is true and the conclusion was false.** `opencode attach <url>` is a separate
+registered command (`cli/cmd/attach.ts:7-16`, `index.ts:84`) whose non-`--mini` branch calls
+the same `run()` from `cli/tui/layer` with the same `createLegacyTuiPluginHost()` as
+`cli/cmd/tui.ts:271-296` — the full TUI, Healbot builtin included. `harness/fleet.sh` ships it.
+A permission raised 37 s before any client existed rendered `PERMISSION` on first paint, and
+the panel mounted carrying the request's real patterns — so the reconcile carrying **full
+request bodies** rather than a `Set` of ids is now TESTED, not INFERRED.
 
-**The handoff clause is unbuilt** — retirement threshold, continuity, and the definition of
-"continuity intact" are all still open.
+**~~Both "defects fixed in passing" are on that same cold path.~~ Half closed.** The permission
+half is exercised by the run above. The `question.rejected` half is still source-reading only:
+no rig rejects a question that predates the client.
 
-**External plugin route registration** remains untested; the grid is a builtin.
+**~~The handoff clause is unbuilt.~~ CLOSED** — §9 built the threshold, §10 the handoff, and
+Phase 5 replaced the two continuity legs that could not fail.
+
+**External plugin route registration** remains untested; the grid is a builtin. **Still open.**
 
 **The one test failure.** `verify_surface.py`'s precondition asserts `not t.find("blocked")`
 before any block exists. The grid footer is literally `a answer · tab next blocked · …`

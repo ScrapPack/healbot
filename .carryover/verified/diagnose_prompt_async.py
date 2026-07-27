@@ -19,11 +19,10 @@ import threading
 import time
 import urllib.request
 
-from rig import Api, Results, boot, wait_for
+from rig import Api, Results, boot, db, wait_for
 
 PORT = 4717
-SP = "/private/tmp/claude-501/-Users-brittonwerdell-Desktop-healbot/ac594553-97c7-4390-a005-9576eb0554eb/scratchpad"
-DB = f"{SP}/hb/async2.db"
+DB = db("async2")
 
 r = Results()
 api = Api(PORT)

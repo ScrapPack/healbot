@@ -15,7 +15,12 @@
 # compaction.auto=false, no agent/build.md prompt override, no trim plugin. The two exports
 # below still apply, so it looks like a working harness while delivering none of the
 # measured isolation. That is the worst possible failure shape here, so it is checked.
-HARNESS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
+# `:-` and not a bare assignment: the error message below tells you to "set HARNESS_ROOT
+# yourself before sourcing", and an unconditional assignment overwrote the value you set,
+# so the documented escape hatch did not work. It does now. Consequence to know about: once
+# HARNESS_ROOT is exported it is sticky, so sourcing a SECOND harness checkout in the same
+# shell keeps pointing at the first. `unset HARNESS_ROOT` between them.
+HARNESS_ROOT="${HARNESS_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)}"
 
 if [ ! -f "$HARNESS_ROOT/config/opencode/opencode.jsonc" ]; then
   echo "env.sh: could not locate the harness (looked in '$HARNESS_ROOT')." >&2

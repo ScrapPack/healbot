@@ -10,11 +10,10 @@ Everything is asserted on the position of the selection marker, never on cell te
 
 import time
 
-from rig import Api, Results, boot, fire, wait_for
+from rig import Api, Results, boot, db, fire, on_grid, wait_for
 
 PORT = 4715
-SP = "/private/tmp/claude-501/-Users-brittonwerdell-Desktop-healbot/ac594553-97c7-4390-a005-9576eb0554eb/scratchpad"
-DB = f"{SP}/hb/surf.db"
+DB = db("surf")
 
 r = Results()
 api = Api(PORT)
@@ -48,7 +47,7 @@ try:
     t.send("/healbot", 1.2)
     t.key("enter", 3.5)
     t.show("grid, three idle sessions, nothing blocked")
-    r.check("grid open", t.find("Healbot"))
+    r.check("grid open", on_grid(t))
     r.check("nothing is blocked yet", not t.find("blocked") and not t.find("PERMISSION"))
     start = marker(t)
     r.check("initial cursor position recorded", start is not None, f"marker={start}")
@@ -105,7 +104,7 @@ try:
     r.check("the cursor did NOT move while the answer panel was open",
             marker(t) == answering_at, f"marker {answering_at} -> {marker(t)}")
     r.check("the answer panel is still the one you opened", t.find("Permission required"))
-    r.check("the grid is still rendered underneath", t.find("Healbot"))
+    r.check("the grid is still rendered underneath", on_grid(t))
     r.check("header counts all three blocks", t.find("3 blocked"))
 
     before = npending(api)
@@ -113,7 +112,7 @@ try:
     cleared = wait_for(lambda: npending(api) == before - 1, 90, "one block cleared")
     r.check("answering cleared exactly the one block", cleared is not None,
             f"{before} pending -> {npending(api)}")
-    r.check("still on the control terminal", t.find("Healbot"))
+    r.check("still on the control terminal", on_grid(t))
     t.show("final")
 finally:
     r.summary()

@@ -6,11 +6,14 @@ real tool-using turns, and the blocked one blocks because `external_directory` d
 "ask" (agent/agent.ts:122) and /etc/shells is outside the instance
 (tool/external-directory.ts:15-45).
 
-Ordering, corrected against source after run 1 put the blocker in cell 0: session ids are
-DESCENDING identifiers (schema/src/session-id.ts:8 -> identifier `descending()`), so the
-grid's `sort((a,b) => b.id.localeCompare(a.id))` yields OLDEST first. The blocker is
-therefore created LAST so it lands in the final cell, away from the initial cursor — which
-is what makes the `tab` and marker assertions mean anything.
+Ordering. Session ids are DESCENDING identifiers (schema/src/session-id.ts:8 ->
+identifier.ts:22, `descending ? ~current : current`), so a later creation time yields a
+lexicographically SMALLER id and plain ascending sort is already newest-first. The grid used
+to sort `b.id.localeCompare(a.id)` under a comment claiming that gave newest-first; it gave
+the exact opposite, and this rig compensated by creating the blocker LAST. Both are fixed:
+the grid now sorts ascending (genuinely newest-first) and the blocker is created FIRST so it
+still lands in the final cell, away from the initial cursor — which is what makes the `tab`
+and marker assertions mean anything rather than pass by accident.
 
 Terminal is 120 cols so the 4 cells wrap to 2 rows: with one row, `j`/`k` clamp and the
 keyboard-gating assertion would pass vacuously.
@@ -19,11 +22,10 @@ keyboard-gating assertion would pass vacuously.
 import json
 import time
 
-from rig import Api, Results, boot, fire, wait_for
+from rig import Api, Results, boot, db, fire, on_grid, wait_for
 
 PORT = 4713
-SP = "/private/tmp/claude-501/-Users-brittonwerdell-Desktop-healbot/ac594553-97c7-4390-a005-9576eb0554eb/scratchpad"
-DB = f"{SP}/hb/perm2.db"
+DB = db("perm2")
 EXTERNAL = "/etc/shells"
 
 r = Results()
@@ -52,8 +54,8 @@ r.check("fork TUI up", wait_for(lambda: api("GET", "/session?scope=project") is 
 try:
     # ---------------------------------------------------------------- four concurrent
     print("\n== four sessions, fired simultaneously ==", flush=True)
+    blocker = api("POST", "/session", {})["id"]  # created FIRST -> last cell, newest-first grid
     quiet = [api("POST", "/session", {})["id"] for _ in range(3)]
-    blocker = api("POST", "/session", {})["id"]  # created last -> last cell
     for i, s in enumerate(quiet):
         print(f"  worker{i}  {s}", flush=True)
     print(f"  blocker  {blocker}", flush=True)
@@ -88,11 +90,20 @@ try:
         r.check(f"worker{i} really ran a tool-using turn", f"payload-{i}" in blob)
 
     # ---------------------------------------------------------------- the grid
+    # NEGATIVE CONTROL, and it is not optional. Every "the route never changed" assertion in
+    # this suite rests on `on_grid`, so `on_grid` has to be shown FALSE somewhere before its
+    # truth anywhere means anything. The predicate it replaced — `t.find("Healbot")` — was
+    # measured True on this very screen, because `Term.find` lowercases and the run's project
+    # path contains "healbot". A positive-only screen predicate is indistinguishable from a
+    # constant, and this suite already shipped one of those.
+    print("\n== negative control: the grid is NOT open yet ==", flush=True)
+    r.check("on_grid is FALSE before the grid is opened", not on_grid(t))
+
     print("\n== open the control terminal ==", flush=True)
     t.send("/healbot", 1.2)
     t.key("enter", 3.5)
     t.show("grid opened, one session blocked")
-    r.check("grid route renders", t.find("Healbot"))
+    r.check("grid route renders", on_grid(t))
     r.check("blocked cell renders as PERMISSION", t.find("PERMISSION"))
     r.check("header counts the block", t.find("1 blocked"))
     r.check("header counts every session", t.find("4 sessions"))
@@ -122,8 +133,8 @@ try:
     t.show("after pressing 'a'")
     opened = t.find("Permission required") and t.find("Allow once")
     r.check("the permission prompt mounts INSIDE the grid", opened)
-    r.check("the grid is still rendered while answering", t.find("Healbot") and t.find("4 sessions"))
-    r.check("the route never changed (grid still owns the screen)", t.find("Healbot"))
+    r.check("the grid is still rendered while answering", on_grid(t) and t.find("4 sessions"))
+    r.check("the route never changed (grid still owns the screen)", on_grid(t))
     r.check("footer names escape honestly as destructive", t.find("esc reject"))
     r.check("the prompt is the external-directory one we triggered", t.find("/etc"))
     if not opened:
@@ -158,7 +169,7 @@ try:
     r.check("the reply cleared the block server-side", cleared is not None,
             f"GET /permission -> {api('GET', '/permission')}")
     r.check("the cell left the PERMISSION state", not t.find("PERMISSION"))
-    r.check("still on the control terminal after answering", t.find("Healbot"))
+    r.check("still on the control terminal after answering", on_grid(t))
     r.check("the answer panel collapsed on its own", not t.find("Allow once"))
 
     # ---------------------------------------------------------------- reached the model
@@ -197,12 +208,21 @@ try:
         t.show("after escape")
         gone = wait_for(lambda: api("GET", "/permission") == [], 90, "permission cleared by escape")
         r.check("escape cleared the block", gone is not None)
-        r.check("escape did NOT leave the grid (still the control terminal)", t.find("Healbot"))
+        r.check("escape did NOT leave the grid (still the control terminal)", on_grid(t))
         wait_for(lambda: any(b[0] == "escape" for b in box), 300, "escape turn to end")
         eblob = json.dumps(api("GET", f"/session/{esc}/message") or [])
         r.check("escape REJECTED rather than dismissed (rejection reached the session)",
                 "reject" in eblob.lower() or "denied" in eblob.lower() or "/usr/local/bin" not in eblob,
                 "no file content in transcript" if "/usr/local/bin" not in eblob else "file WAS read")
+    # ------------------------------------------------------- negative control, second half
+    # The other end of the same discipline: leaving the grid must make `on_grid` false again.
+    # Together with the check before it was ever opened, this shows the predicate tracks the
+    # route in BOTH directions — which is the whole claim every route assertion above makes.
+    print("\n== negative control: q leaves the grid ==", flush=True)
+    t.send("q", 2.5)
+    t.show("after leaving the grid")
+    r.check("on_grid is FALSE again after closing the grid", not on_grid(t))
+
     t.show("final screen")
 finally:
     r.summary()

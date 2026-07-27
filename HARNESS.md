@@ -16,6 +16,7 @@ Phase docs, newest first:
 
 | Doc | Phase | Read it for |
 |---|---|---|
+| [docs/HARDEN.md](docs/HARDEN.md) | 5 | The Phase 4 audit and what it forced: six defects fixed, the rig's vacuous assertions replaced, and `serve` + `attach` built — which closed the cold-start reconcile that was recorded here as *blocked* |
 | [docs/VERIFY.md](docs/VERIFY.md) | 4 | The control terminal, verified on `gpt-5.6-sol`: answering a blocked session from the grid. What is TESTED, what is unreachable, and why the first attempt was void |
 | [docs/REVIEW.md](docs/REVIEW.md) | audit | **Read this before trusting any figure below.** Adversarial audit of every phase-0–3 assumption; what held, what did not |
 | [docs/STRIP.md](docs/STRIP.md) | 3 | The strip: what was cut, what it measures, how to run the harness |
@@ -34,9 +35,17 @@ it is not part of the fork.
 opencode
 ```
 
+For a **fleet** — one long-lived server, the control terminal as a client, sessions that outlive
+the terminal — use `fleet.sh` instead. It is the architecture `PLAN.md` assumed all along:
+
+```sh
+~/Desktop/healbot/harness/fleet.sh [project-dir] [port]   # default port 4096
+```
+
 | File | Owns |
 |---|---|
 | `harness/env.sh` | The switch set. `XDG_CONFIG_HOME` isolation + the skill switch + the claude-code switch, each with its measured justification and a NOT-SET list of the switches that break things |
+| `harness/fleet.sh` | `opencode serve` + `opencode attach`: sessions survive the terminal, and the cold-start reconcile becomes reachable. TESTED 10/10 end to end, plus 21/21 on the reconcile itself (`docs/HARDEN.md`). Resolves the fork checkout automatically — the released binary has no grid |
 | `harness/config/opencode/opencode.jsonc` | Model pin, `compaction.auto=false` and why, plugin registration |
 | `harness/config/opencode/agent/build.md` | The 1,715 B prompt that *replaces* `gpt.txt` |
 | `harness/config/opencode/plugin/trim-tools.ts` | Tool-description trimming. Ships OFF (`HARNESS_TRIM_TOOLS=1`) |
@@ -114,7 +123,9 @@ Established across phases 0–2. Each is cited in the map named.
 **Architecture.** The grid is a plugin-registered **route**, not an `app`-slot overlay and not
 a separate app (`tui/plugin`). Focus is `api.route.navigate("session", {sessionID})` — no PTY,
 no Ink, no suspend/resume. Proven by a running spike (PROBE F7), and now **built**:
-`feature-plugins/system/healbot.tsx` (12.8 KB) landed at fork `26c9316` and retired the spike.
+`feature-plugins/system/healbot.tsx` landed at fork `26c9316` and retired the spike. **Byte and
+line counts are deliberately not quoted here** — they were stated three times across this repo
+and all three were stale within a day. `wc` the file.
 
 **Answering from the grid works — TESTED, and it is the feature the project exists for.** Four
 sessions on one server, three finishing real tool-using turns in 6.1 s wall while the fourth sat
@@ -160,10 +171,17 @@ Corrected; the earlier rule here was wrong for its own stated purpose.
   **turn 77**, not turn 90. The old text attached SCAN's turn-90 measurement to a different
   formula.
 
-**Compaction is off, so overflow is a HARD ERROR.** `overflow.ts:28` returns `false` outright
-when `compaction.auto === false`, and `processor.ts:607-613` then sets `finish: "error"` and
-status idle. The grid must render that as its own state; it arrives looking like an ordinary
-idle-after-error.
+**Compaction is off, so overflow is a HARD ERROR — and the grid now renders it. Built in Phase
+5; before that it painted GREEN.** `overflow.ts:28` returns `false` outright when
+`compaction.auto === false`, and `processor.ts:607-613` then sets `finish: "error"` and status
+idle. That idle is the trap: `status.ts:41` publishes `{type:"idle"}` *before* `:44` deletes the
+key, `sync.tsx:310` stores it, and the grid's `stateOf` had no error branch — so a session that
+died on an expired credential, a crashed tool or a filled window was pixel-identical to one that
+finished its task, in `theme.success`, labelled `done`. On a terminal whose whole premise is that
+border colour carries truth, that is the worst available failure: silent, and biased toward
+"everything finished". The state is tracked out of band from `session.error` (the only event that
+carries the fact — `session-status-event.ts` has no `error` member) and cleared when the session
+next goes busy. `retry` is split out of `busy` at the same time, per `PLAN.md:369`'s border table.
 
 **Handoff.** `fork` is disqualified — TESTED, a fork reports 0 tokens at creation then climbs
 to exactly the parent's total within ~3s. `summarize` mutates in place and adds tokens. Only
@@ -216,7 +234,7 @@ Things that will silently cost correctness. All cited in the maps.
 | **The v2 engine never writes `session.tokens`.** `applyUsage` has 5 call sites, all in v1 projections; v2 usage lands on the message row instead. TESTED — a v2 turn burned 3,399 tokens and left the session row at `{0,0,0,0,0}`. A v2-driven session is invisible to any retirement trigger | `core/session/SESSION.MAP.md` |
 | **`GET /api/session/{id}/context` returns an EMPTY array for v1 sessions.** It reads `SessionMessageTable`, which v1 never writes. TESTED: the 101-turn reference session has 0 `session_message` rows and 738 `part` rows. `PLAN.md:143-144` names this endpoint as the token source | REVIEW |
 | **`PATCH time.archived` hides a session from nothing.** `ListInput` has no `archived` field; `listByProject` (behind `GET /session`) has no `time_archived` predicate; the v2 list does not filter; `grep -rn archived packages/tui/src` → zero hits. Only `listGlobal` filters, reachable solely via `GET /experimental/session`. **The grid must filter retired sessions itself** | REVIEW |
-| **`client.session.list()` cannot enumerate across projects** — hard-scoped to `ctx.project.id` (`session.ts:548-555`), and `ListInput` has no `projectID` to widen it. Worse, the documented tripwire `api.state.session.count()` reads `sync.data.session.length` — the *same narrowed store*, so it can never detect the misses. Use `client.experimental.session.list()` (cursor-paginated) | `tui/context/CONTEXT.MAP.md` |
+| **`client.session.list()` cannot enumerate across PROJECTS** — hard-scoped to `ctx.project.id` (`session.ts:548-555`), and `ListInput` has no `projectID` to widen it. Worse, the documented tripwire `api.state.session.count()` reads `sync.data.session.length` — the *same narrowed store*, so it can never detect the misses. Use `client.experimental.session.list()` (cursor-paginated). **Note the axis**: this is about projects, not directories. `scope: "project"` IS a real query param (`groups/session.ts:32` declares it, `handlers/session.ts:67-68` drops the directory filter for it) and is what the grid uses to escape the current-subdirectory filter | `tui/context/CONTEXT.MAP.md` |
 | **An "always" permission applies to every session in the process** — approvals are instance-wide, never persisted, no sessionID filter. Directly hostile to a multi-session terminal | `permission/PERMISSION.MAP.md` |
 | **No timeout on a pending permission** — a client that ignores `permission.asked` hangs that tool call forever. TESTED: it hangs indefinitely, but it does **not** stall other sessions | `permission/PERMISSION.MAP.md` |
 | **`permission: {skill: "deny"}` does not stop a skill.** TESTED in one process: the deny removes the `skill` tool *and* the whole `<available_skills>` block, yet `/<skill-name>` still executes the skill to completion, shell substitutions included. Only removing skills from the prompt closes it | `skill/SKILL.MAP.md` |
@@ -231,7 +249,9 @@ Things that will silently cost correctness. All cited in the maps.
 | **`route.navigate("session", …)` discards every param but `sessionID`** | `tui/plugin/PLUGIN.MAP.md` |
 | **The grid's roster renders OLDEST first, and its comment claims the opposite.** `healbot.tsx:203-204` says "ids are monotonic-ascending … newest first" and sorts `b.id.localeCompare(a.id)`. Session ids are **descending** identifiers (`schema/src/session-id.ts:8` → `identifier.ts:22`, `descending ? ~current : current`), so they already sort newest-first ascending and that comparator reverses them. TESTED both ways. Cosmetic, but cell order is what an operator builds muscle memory on | `docs/VERIFY.md` §7 |
 | **`escape` is destructive on both prompts and there is no back-out key** — `escapeKey="reject"` (`permission.tsx:406`) and question's escape calls `reject()` (`question.tsx:280`). TESTED: escape rejected, the tool never ran. Worse, the labels disagree on screen — the grid footer says `esc reject`, the question panel it docks says `esc dismiss` (`question.tsx:508`, upstream) | `docs/VERIFY.md` §5, §7 |
-| **The TUI cannot attach to an external server** — `--port` is "port to listen on" (`cli/network.ts:9`), so it always hosts its own. The cold-start reconcile is therefore unreachable, and two shipped defect fixes sit on that path untested | `docs/VERIFY.md` §6 |
+| ~~**The TUI cannot attach to an external server**~~ — **REFUTED, TESTED.** `--port` really is "port to listen on" (`cli/network.ts:9`), but that was never the whole CLI: `opencode attach <url>` is a registered command (`cli/cmd/attach.ts:7-16`, `index.ts:84`) whose non-`--mini` branch calls the same `run()` with the same `createLegacyTuiPluginHost()` as `cli/cmd/tui.ts:271-296`, so the grid loads on it. `harness/fleet.sh` ships the pairing and the cold-start reconcile is now TESTED 21/21. **A true premise carried a false conclusion for three phases because nothing checked the rest of the command surface** | `docs/HARDEN.md` |
+| **A client and the rig must agree on `x-opencode-directory`** — `workspace-routing.ts:87` resolves the instance as `?directory \|\| x-opencode-directory \|\| process.cwd()`, and under `serve` the cwd is wherever the launcher put it, not your project. Get this wrong and every API call succeeds, `GET /session` returns your sessions, and the grid renders `0 sessions` — two different instances. TESTED, it cost a whole run | `docs/HARDEN.md` |
+| **A backgrounded server dies with the shell that launched it** — plain `&` is not enough; the shell HUPs its jobs on exit and the job shares the terminal's stdin. `nohup … </dev/null & disown` is the working form. TESTED: without it, closing the control terminal took the whole fleet down, which is the exact failure the fleet exists to prevent | `harness/fleet.sh` |
 | **`GET /session/{id}/diff` returns `[]` without a `messageID`** — `summary.ts:130` returns `[]` outright when none is given, and `:133` returns `[]` again unless that message is a **user** message. It is a per-user-message endpoint; the diffs live on the user message's `summary.diffs`. `PLAN.md:371` says "its `/diff`" as though one call covered the session. Fan out over user messages and union | `docs/VERIFY.md` §10 |
 | **There are TWO `summarize`s.** `POST /session/{id}/summarize` → `compactSvc.create` (`handlers/session.ts:273-283`) is **compaction**, an LLM turn — that is the one that "mutates in place and adds tokens". `SessionSummary.summarize` (`summary.ts:102-127`) computes git diffs, calls no LLM, and already runs on the prompt path (`prompt.ts:1253`). Do not reach for the route to get diff data | `docs/VERIFY.md` §10 |
 | **An assistant message row exists ~20 ms after `prompt_async` acks, and is EMPTY until the turn runs.** Polling "does an assistant message exist" returns true immediately with no content. The completion signal is the message's own `time.completed` / `finish`. This produced a false "prompt_async executes nothing" defect report in the audit, and fooled the verification session again before it was caught | `docs/REVIEW.md` |
@@ -295,6 +315,14 @@ multi-step turns.
 | Question | Why it matters | Cost |
 |---|---|---|
 | Can an **external** plugin register a route, or only a builtin? | F7 proved a builtin can and that `route.register` is on the public API. The external case is untested, and it decides whether the grid must live inside the fork | ~20 min |
-| Does the grid handle the **remaining** traps? | Sessions created while the grid is open **do** appear (TESTED, VERIFY §5) — but that does not isolate the grid's `session.created → reload()` from the store's `session.updated` path, so the trap is mitigated in behaviour, not proven closed. Still unexercised: RED silent under `--auto`, the project-scoped `session.list()`, and archived sessions never leaving the list | review |
-| Can the **cold-start reconcile** ever be tested? | Not today: `--port` is "port to listen on" (`cli/network.ts:9`), so the TUI always hosts its own server and no client can meet a block that predates it. Needs the long-lived `opencode serve` of `PLAN.md:335`. Two shipped defect fixes sit on that unreachable path | blocked |
 | Can an external plugin's route survive a real workload? | The grid is a builtin. Everything TESTED here was measured on the builtin path | ~20 min |
+| **Step 5 — the control agent — is not built.** | The last non-optional step of `PLAN.md`'s Phase 4 build order: a session of its own with tools to spawn / prompt / abort / retire the others. Two of the three endpoints are already exercised inside `retire()`, and `/abort` landed in Phase 5, so what is missing is the agent shell and its tool definitions. It is **not** in the exit gate | medium |
+| **Focus (`enter` → the session route) has never been tested.** | Build-order step 4. The code is three lines and the gate is about *not* focusing, so nothing ever exercised it. `.carryover/verify_nav.py` is in the void set | ~20 min |
+| Does the grid handle the **remaining** traps? | Sessions created while the grid is open **do** appear (TESTED, VERIFY §5) — but that does not isolate the grid's `session.created → reload()` from the store's `session.updated` path, so the trap is mitigated in behaviour, not proven closed. Still unexercised: RED silent under `--auto`, and archived sessions never leaving the list. *(The project-scoped `session.list()` is now exercised on both the hosted and attached paths.)* | review |
+| Does retirement work at the **shipped 350K default**? | Every retirement result was measured at `HEALBOT_RETIRE_AT=20000` on a short session. The Phase 5 objective fix specifically targets sessions past 100 messages, which is the regime the default fires in and the one never run | small in code, **expensive in credits** |
+| Is the `question.rejected` half of the cold reconcile exercised? | The permission half is TESTED (`verify_cold.py`). No rig rejects a *question* that predates the client | ~20 min |
+| **Phase 3's exit gate is still unmet** — `/code-review ultra` on the `harness/` diff | `PLAN.md:339` makes "code-review ultra findings triaged" an explicit clause. It is user-triggered and billed; it cannot be launched from an agent session. Run it from `~/Desktop/healbot` | user action |
+
+~~Can the **cold-start reconcile** ever be tested?~~ **Closed, TESTED 21/21** — see the refuted
+trap above and [docs/HARDEN.md](docs/HARDEN.md). It was never blocked; the CLI already had
+`attach`.

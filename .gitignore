@@ -6,3 +6,10 @@
 
 node_modules/
 .DS_Store
+
+# Rig working state. All DERIVED: `rig.fixtures()` regenerates the project files and the
+# 130 KB ledgers, and each rig makes its own isolated DB via `rig.db()`. Set HEALBOT_RIG_WORK
+# to move this off the repo entirely.
+.carryover/verified/hb/
+.carryover/verified/venv/
+__pycache__/

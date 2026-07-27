@@ -15,11 +15,10 @@ import json
 import os
 import time
 
-from rig import Api, Results, boot, fire, wait_for
+from rig import Api, PROJECT, Results, boot, db, fire, on_grid, wait_for
 
 PORT = 4719
-SP = "/private/tmp/claude-501/-Users-brittonwerdell-Desktop-healbot/ac594553-97c7-4390-a005-9576eb0554eb/scratchpad"
-DB = f"{SP}/hb/handoff.db"
+DB = db("handoff")
 THRESHOLD = 20_000
 
 r = Results()
@@ -68,7 +67,16 @@ try:
     # instruction verbatim as the handoff's objective made the first run's successor obey it
     # and refuse to continue. Partial completion is produced by ABORTING mid-task instead,
     # which is also the realistic shape: you retire a session that was interrupted.
+    # OBJECTIVE_SENTINEL exists so continuity leg 1 can be a real assertion. The leg used to
+    # read `"Original instruction" in seed` — a heading `healbot.tsx` writes into EVERY handoff
+    # unconditionally, before it has even looked at the objective, and one already entailed by
+    # the `"taking over" in seed` check made 30 lines earlier. It could not fail. A token that
+    # appears in the predecessor's first user message and NOWHERE else — not in a todo, not in
+    # a filename, not in the document's boilerplate — is the only way to show the objective
+    # actually travelled.
+    OBJECTIVE_SENTINEL = "ORCHID-7742"
     fire(api, worker,
+         f"Project codename: {OBJECTIVE_SENTINEL}. "
          "Create three files in the current project directory: stage1.txt containing the single "
          "word ALPHA, stage2.txt containing BRAVO, stage3.txt containing CHARLIE. Use the "
          "todowrite tool to track all three as separate items and mark each completed as you go. "
@@ -76,7 +84,7 @@ try:
          "verify the ledger data is intact.",
          box=box, label="worker")
 
-    wait_for(lambda: os.path.exists(f"{SP}/hb/project/stage1.txt"), 900, "stage1.txt on disk")
+    wait_for(lambda: os.path.exists(f"{PROJECT}/stage1.txt"), 900, "stage1.txt on disk")
     wait_for(lambda: (api("GET", f"/session/{worker}/todo") or []) and
                      any(x.get("status") == "completed" for x in api("GET", f"/session/{worker}/todo")),
              300, "first todo completed")
@@ -101,14 +109,14 @@ try:
             f"{len(open_todos)} open of {len(todos)}: {[x.get('content','')[:40] for x in open_todos]}")
     r.check("the predecessor changed files", len(files) >= 1, f"{files}")
     r.check("stage1.txt exists on disk (work really happened)",
-            os.path.exists(f"{SP}/hb/project/stage1.txt"))
+            os.path.exists(f"{PROJECT}/stage1.txt"))
 
     # ------------------------------------------------------------------ over threshold
     print("\n== the grid ==", flush=True)
     t.send("/healbot", 1.2)
     t.key("enter", 4.0)
     t.show("grid before retiring")
-    r.check("grid renders", t.find("Healbot"))
+    r.check("grid renders", on_grid(t))
     r.check("the worker is over the threshold and renders RETIRE", exact(t, "RETIRE"))
     r.check("the retire affordance is advertised", t.find("x retire"))
     before = {s["id"] for s in live_sessions()}
@@ -128,7 +136,7 @@ try:
     r.check("the predecessor was archived", bool(archived))
     r.check("the predecessor left the grid (archiving filters nothing server-side)",
             worker not in {s["id"] for s in live_sessions()})
-    r.check("still on the control terminal — retiring never navigated away", t.find("Healbot"))
+    r.check("still on the control terminal — retiring never navigated away", on_grid(t))
 
     # ------------------------------------------------------------------ continuity
     print("\n== continuity intact? ==", flush=True)
@@ -163,20 +171,49 @@ try:
     # remaining stage file" — all demonstrating continuity, none sharing a common substring.
     # A check that flips on phrasing measures the model's word choice, not whether context
     # survived. The reply is kept below as corroboration, not as the gate.
+    def section(document, heading):
+        """Body of one `## heading` block, up to the next `##`. Continuity legs assert against
+        the SECTION, not the whole document: the document echoes the predecessor's objective
+        verbatim, and that objective names the very files leg 3 is supposed to prove were
+        handed over separately. Checking `filename in seed` therefore passed through the echo
+        alone — verified by stripping the entire file section out of a recorded seed and
+        watching the predicate stay green. Section-scoping is what makes it discriminate."""
+        out, capturing = [], False
+        for line in document.splitlines():
+            if line.startswith("## "):
+                if capturing:
+                    break
+                capturing = heading.lower() in line.lower()
+                continue
+            if capturing:
+                out.append(line)
+        return "\n".join(out)
+
     predecessor_open = {x.get("content", "").strip() for x in open_todos}
     successor_todos = {x.get("content", "").strip() for x in (api("GET", f"/session/{sid}/todo") or [])}
+    objective_section = section(seed, "Original instruction")
+    files_section = section(seed, "Files already changed")
+
     r.check("CONTINUITY 1/3 — the successor was handed the objective",
-            bool(seed) and (objective_probe := "Original instruction") in seed,
-            "handoff carries the predecessor's original instruction")
+            OBJECTIVE_SENTINEL in objective_section,
+            f"sentinel {OBJECTIVE_SENTINEL} present in the objective section ({len(objective_section)} chars)")
     r.check("CONTINUITY 2/3 — the successor's OWN todo list carries the predecessor's open items",
             bool(predecessor_open) and predecessor_open.issubset(successor_todos),
             f"{len(predecessor_open & successor_todos)}/{len(predecessor_open)} carried")
     r.check("CONTINUITY 3/3 — the successor was handed a file the predecessor changed",
-            bool(files) and any(f.split("/")[-1] in seed for f in files), f"{files}")
+            bool(files) and any(f.split("/")[-1] in files_section for f in files),
+            f"{files} vs files section ({len(files_section)} chars)")
+    # Mutation check: the two legs above must FAIL on a document that lost the material they
+    # claim to detect. Without this the section-scoping is just a different shape of the same
+    # untested assumption, and this suite has already shipped one predicate that was true on
+    # every screen and one that was the literal constant True.
+    stripped = seed.replace(OBJECTIVE_SENTINEL, "")
+    r.check("leg 1 FAILS on a document with the objective removed (predicate discriminates)",
+            OBJECTIVE_SENTINEL not in section(stripped, "Original instruction"))
+    r.check("leg 3 FAILS on a document with the file section removed (predicate discriminates)",
+            not any(f.split("/")[-1] in section(seed.replace(files_section, ""), "Files already changed")
+                    for f in files))
     print(f"\n  corroboration — successor's first reply:\n    {reply.strip()[:400]}", flush=True)
-
-    r.check("the successor started at its OWN occupancy, not the predecessor's",
-            True, "see figure below")
 
     def occ(s):
         best = 0

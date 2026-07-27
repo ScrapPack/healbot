@@ -4,6 +4,7 @@ rather than a raw ANSI byte soup that a redrawing TUI makes meaningless."""
 import fcntl
 import os
 import pty
+import re
 import select
 import signal
 import struct
@@ -81,7 +82,24 @@ class Term:
         print("-" * 66)
 
     def find(self, needle):
+        """CASE-INSENSITIVE substring. Convenient and, for that reason, dangerous — three of
+        the four assertion failures across this project were substring collisions found with
+        this method. Notably `find("RETIRE")` also matches the header's `1 to retire`, and
+        `find("Healbot")` also matches any path containing the project directory name. Prefer
+        `exact()` for cell labels and `search()` for anything structural."""
         return needle.lower() in self.text().lower()
+
+    def exact(self, needle):
+        """Case-SENSITIVE substring. Cell labels are uppercase (`RETIRE`, `PERMISSION`,
+        `ERROR`) and header phrasing is lowercase (`1 to retire`, `2 blocked`); case is the
+        only thing that tells them apart."""
+        return needle in self.text()
+
+    def search(self, pattern):
+        """Case-sensitive regex over the rendered screen. Use when a predicate needs shape,
+        not just presence — e.g. `Healbot\\s+\\d+\\s+sessions?` is on the grid and nowhere
+        else, whereas the bare word `healbot` is also in the run's own directory path."""
+        return re.search(pattern, self.text()) is not None
 
     def close(self):
         try:

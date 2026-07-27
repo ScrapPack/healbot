@@ -16,11 +16,10 @@ Asserts, in order:
 import json
 import time
 
-from rig import Api, Results, boot, fire, wait_for
+from rig import Api, Results, boot, db, fire, on_grid, wait_for
 
 PORT = 4718
-SP = "/private/tmp/claude-501/-Users-brittonwerdell-Desktop-healbot/ac594553-97c7-4390-a005-9576eb0554eb/scratchpad"
-DB = f"{SP}/hb/retire.db"
+DB = db("retire")
 THRESHOLD = 20_000
 DEFAULT = 350_000
 
@@ -69,8 +68,10 @@ r.check("fork TUI up", wait_for(lambda: api("GET", "/session?scope=project") is 
 
 try:
     box = []
+    # Created FIRST so it lands in the LAST cell: the grid sorts session ids ascending,
+    # and ids are DESCENDING identifiers, so ascending order is newest-first.
+    grower = api("POST", "/session", {})["id"]
     quiet = [api("POST", "/session", {})["id"] for _ in range(2)]
-    grower = api("POST", "/session", {})["id"]  # created last -> last cell
     for i, sid in enumerate(quiet):
         fire(api, sid, f"Use the read tool on worker{i}.txt and reply with exactly the word it contains.",
              box=box, label=f"quiet{i}")
@@ -94,7 +95,7 @@ try:
     t.send("/healbot", 1.2)
     t.key("enter", 4.0)
     t.show("grid, one session over the retirement threshold")
-    r.check("grid renders", t.find("Healbot"))
+    r.check("grid renders", on_grid(t))
     r.check("the over-threshold cell renders as RETIRE", exact(t, "RETIRE"))
     r.check("the header counts it", t.find("1 to retire"))
     expected = f"{round(grown / THRESHOLD * 100)}%"
@@ -130,7 +131,7 @@ try:
     t.show("after answering")
     r.check("the cell reverted to RETIRE rather than done", exact(t, "RETIRE"),
             f"occupancy now {occupancy(grower):,}")
-    r.check("still on the control terminal", t.find("Healbot"))
+    r.check("still on the control terminal", on_grid(t))
     print(f"\n  final occupancy: grower={occupancy(grower):,}  quiet={[f'{occupancy(s):,}' for s in quiet]}",
           flush=True)
 finally:

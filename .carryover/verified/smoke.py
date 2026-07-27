@@ -5,10 +5,10 @@ exactly the failure the previous run papered over by reaching for a local model.
 import json
 import time
 
-from rig import Api, Results, boot, fire, wait_for
+from rig import Api, Results, boot, db, fire, wait_for
 
 PORT = 4711
-DB = "/private/tmp/claude-501/-Users-brittonwerdell-Desktop-healbot/ac594553-97c7-4390-a005-9576eb0554eb/scratchpad/hb/smoke.db"
+DB = db("smoke")
 
 r = Results()
 api = Api(PORT)
