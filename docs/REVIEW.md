@@ -57,14 +57,34 @@ parked on a `permission.asked` while three others ran plain turns. All three com
 (`finish: "stop"`); the blocked one never returned — confirming both that the premise holds and
 that a pending permission hangs forever with no timeout.
 
-### One new defect found while testing
+### One new defect found while testing — ~~defect~~ **REFUTED, 2026-07-27**
 
-**`POST /session/{id}/prompt_async` accepts a prompt and executes nothing.** The user message is
-stored; no assistant turn follows, no error is logged. The synchronous
-`POST /session/{id}/message` works on the same server, same session shape, same model.
-`PLAN.md:335` and `:341` build Phase 4's spawn-and-seed path on `prompt_async`. Not diagnosed
-further — flagged for Phase 4, which must either use the synchronous route or find the
-precondition `prompt_async` is missing.
+This section originally read: *"`POST /session/{id}/prompt_async` accepts a prompt and executes
+nothing. The user message is stored; no assistant turn follows, no error is logged."* It is
+**wrong**, and the way it is wrong is a trap worth keeping.
+
+`prompt_async` works. TESTED on `openai/gpt-5.6-sol`, side by side with the synchronous path on
+one server: it acks in **0.01 s** (against 5.1 s for `POST /message`), and the turn **completes
+2.0 s after the ack** with `finish: "stop"` and the same answer the sync control gave. It runs
+on the same model, accrues tokens normally, and publishes no `Session.Event.Error`. Spawn-and-
+seed works too: a fresh session seeded through it replied and started at its own occupancy.
+
+**Why it looked broken, and it will fool you the same way.** `prompt_async` creates the
+assistant message row within ~**20 ms** of the ack, and that row is **empty** until the turn
+actually runs. Poll for "an assistant message exists" and you get `true` almost immediately with
+no content; check once, shortly after firing, and you see a stored user message and a blank
+assistant row — exactly the description above. The completion signal is the assistant message's
+own `time.completed` / `finish`, not the existence of the row. This session made the identical
+mistake on its first attempt before catching it.
+
+Source agrees, and did all along: `handlers/session.ts:311-328` calls the **same**
+`promptSvc.prompt()` as the synchronous handler, wrapped in
+`Effect.forkIn(scope, {startImmediately: true})`, and `scope` is bound at `:62` inside the
+`HttpApiBuilder.group()` construction generator — the layer scope, which outlives any single
+request, so the fiber is not interrupted when the response returns.
+
+**Consequence for Phase 4:** `PLAN.md:335`/`:341` may build the spawn-and-seed path on
+`prompt_async` as written. No workaround is needed.
 
 ---
 
@@ -440,7 +460,8 @@ Items 1–8 of the original order are done (see Status above). What remains:
    state, keyboard ownership, and clearing both a permission and a question block from the grid
    without focusing the session. 90/91 assertions across four runs; the exit gate's
    blocked-permission clause is met. `docs/VERIFY.md`.
-6. **Diagnose `prompt_async`** (see above) before building the spawn path on it.
+6. ~~**Diagnose `prompt_async`**~~ **DONE** — it was never broken. REFUTED at TESTED tier; see
+   the retraction above. The spawn-and-seed path can be built on it as `PLAN.md` specifies.
 7. **Make the retirement threshold configurable** so the Phase 4 exit gate can be exercised at
    5K instead of 350K, and write down what "continuity intact" actually means.
 

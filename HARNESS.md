@@ -171,6 +171,14 @@ to exactly the parent's total within ~3s. `summarize` mutates in place and adds 
 `PATCH time.archived`, never `DELETE` (hard recursive delete) — **but see the trap below:
 archiving hides a session from nothing.**
 
+**`prompt_async` works — the audit's "defect" is REFUTED, TESTED.** It acks in 0.01s against
+5.1s for the synchronous `POST /session/{id}/message`, and the turn completes ~2s after the ack
+with `finish: "stop"` and the same answer, same model, tokens accrued, no error published. The
+spawn-and-seed path of `PLAN.md:341` can be built on it as written. See the row in Traps for the
+race that made it look broken. A freshly spawned + seeded session starts at its **own**
+occupancy — measured floor ~4.8K total on turn one, almost all `cache.read`, which is the
+standing-context prefix. Any retirement threshold set for testing must clear that floor.
+
 **Engine choice is load-bearing, not a preference.** v1 (`POST /session/{id}/message`) and v2
 (`POST /api/session/{id}/prompt`) have incompatible token accounting *and* incompatible event
 vocabularies. Both are mounted on the same port by the shipped binary. **Use v1.** See the two
@@ -224,6 +232,7 @@ Things that will silently cost correctness. All cited in the maps.
 | **The grid's roster renders OLDEST first, and its comment claims the opposite.** `healbot.tsx:203-204` says "ids are monotonic-ascending … newest first" and sorts `b.id.localeCompare(a.id)`. Session ids are **descending** identifiers (`schema/src/session-id.ts:8` → `identifier.ts:22`, `descending ? ~current : current`), so they already sort newest-first ascending and that comparator reverses them. TESTED both ways. Cosmetic, but cell order is what an operator builds muscle memory on | `docs/VERIFY.md` §7 |
 | **`escape` is destructive on both prompts and there is no back-out key** — `escapeKey="reject"` (`permission.tsx:406`) and question's escape calls `reject()` (`question.tsx:280`). TESTED: escape rejected, the tool never ran. Worse, the labels disagree on screen — the grid footer says `esc reject`, the question panel it docks says `esc dismiss` (`question.tsx:508`, upstream) | `docs/VERIFY.md` §5, §7 |
 | **The TUI cannot attach to an external server** — `--port` is "port to listen on" (`cli/network.ts:9`), so it always hosts its own. The cold-start reconcile is therefore unreachable, and two shipped defect fixes sit on that path untested | `docs/VERIFY.md` §6 |
+| **An assistant message row exists ~20 ms after `prompt_async` acks, and is EMPTY until the turn runs.** Polling "does an assistant message exist" returns true immediately with no content. The completion signal is the message's own `time.completed` / `finish`. This produced a false "prompt_async executes nothing" defect report in the audit, and fooled the verification session again before it was caught | `docs/REVIEW.md` |
 | **Scoped denies do NOT remove a tool schema** — only blanket `*` denies do, and a later narrow allow un-hides a blanket-denied tool | `permission/PERMISSION.MAP.md` |
 | **`tool/read.ts` attaches nearby `AGENTS.md` on every file read** — unbounded cost, invisible to standing-context measurement | `session/SESSION.MAP.md` |
 | **`bash`'s description is generated at runtime**, not stored — editing `shell.txt` looks like the fix and does almost nothing | `tool/TOOL.MAP.md` |
