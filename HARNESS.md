@@ -109,7 +109,7 @@ they resolve here and on GitHub; the same files sit at the matching paths inside
 | what text the model receives before you type | `session/SESSION.MAP.md` (assembly chain) + `tool/TOOL.MAP.md` |
 | how to cut standing token cost | `tool/TOOL.MAP.md` (biggest), then `agent/AGENT.MAP.md` (prompt replacement) |
 | how config is loaded / how to isolate it | `config/CONFIG.MAP.md` |
-| session token accounting / the 350K trigger | `core/session/SESSION.MAP.md` + `session/SESSION.MAP.md` |
+| session token accounting / the retirement trigger | `core/session/SESSION.MAP.md` + `session/SESSION.MAP.md` |
 | what drives a grid border color | `tui/context/CONTEXT.MAP.md` (store) + `session/SESSION.MAP.md` (event origins) |
 | how to register the grid route | `tui/plugin/PLUGIN.MAP.md` + `plugin/src/PLUGIN-API.MAP.md` |
 | what to copy when building the grid | `tui/feature-plugins/FEATURE-PLUGINS.MAP.md` |
@@ -170,8 +170,8 @@ Corrected; the earlier rule here was wrong for its own stated purpose.
   this provider path. Actual margin at a 350K threshold: **~10K, under 3%** — roughly one large
   tool result. Since `compaction.auto:false` disables opencode's own overflow check
   (`overflow.ts:28`), nothing catches it before the provider does, and by then the turn is lost.
-  **The 350K default fires too late to be a guard; lowering it is a live recommendation.**
-  (`docs/HARDEN.md` §7)
+  **The 350K default fired too late to be a guard. Lowered to 256,000**, with a second HARD gate
+  at 330,000 — see the retirement rows below. (`docs/HARDEN.md` §6, §8)
 - *`session.tokens` is still useful* — for cost, and it is genuinely cumulative and monotonic
   through compaction (VERIFIED + TESTED, 40/40 sessions match `SUM(step-finish)` exactly). Just
   not for retirement.
@@ -290,8 +290,8 @@ Things that will silently cost correctness. All cited in the maps.
 | Has `healbot.tsx` actually been **run**? | **Yes**, TESTED on `gpt-5.6-sol` — rendering, live session state, keyboard ownership, and clearing both a permission and a question block from the grid without focusing. 90/91 assertions (`docs/VERIFY.md`) |
 | Does a session need `permission: {question: "allow"}` to ask? | **No.** `question` is `"deny"` in the shared default block (`agent/agent.ts:127`), but `build` and `plan` each merge `question: "allow"` on top (`agent/agent.ts:141-152`). Only `general` and `explore` subagents inherit the deny |
 | Is `prompt_async` broken? | **No** — REFUTED, TESTED. Acks in 0.01s, turn completes ~2s later, same answer/model/tokens as the sync path. The audit polled a row that exists ~20ms before it fills. Build the spawn-and-seed path on it (`docs/VERIFY.md` §9) |
-| Make the retirement threshold configurable | **Done.** `HEALBOT_RETIRE_AT`, default 350,000; the grid renders `RETIRE` + `N to retire` + a share-of-threshold figure. TESTED at 20,000 against a session grown to 37,179 while quiet ones sat at 4,969. **Not 5K** — a fresh session's floor is ~4.8K, so 5K fires on turn one |
-| What counts as "continuity intact" for a handoff? | **Defined and TESTED.** The successor must be handed the objective, carry the predecessor's **open** todos in its own list, and be handed a file the predecessor changed — all asserted on artefacts, never on the successor's prose. Retirement is operator-initiated (`x`). 21/21, occupancy 90,310 → 5,649 (`docs/VERIFY.md` §10) |
+| Make the retirement threshold configurable | **Done.** `HEALBOT_RETIRE_AT`, default **256,000** (was 350,000); the grid renders `RETIRE` + `N to retire` + a share-of-threshold figure. TESTED at 20,000 against a session grown to 37,179 while quiet ones sat at 4,969. **Not 5K** — a fresh session's floor is ~4.8K, so 5K fires on turn one |
+| What counts as "continuity intact" for a handoff? | **Defined and TESTED.** The successor must be handed the objective, carry the predecessor's **open** todos in its own list, and be handed a file the predecessor changed — all asserted on artefacts, never on the successor's prose. Retirement is **automatic on the gate**, with `x` as the manual override (`docs/HARDEN.md` §8). 21/21, occupancy 90,310 → 5,649 (`docs/VERIFY.md` §10) |
 | Is the Phase 4 exit gate met? | **Yes**, both clauses, TESTED on `gpt-5.6-sol`. Four concurrent with one answered from the grid without focusing (§2–§5); one driven past the threshold and handed off with continuity intact (§10). Step 5's control agent is unbuilt but is **not** in the gate |
 
 ### The v2 token question — settled
@@ -328,7 +328,7 @@ multi-step turns.
 | **Step 5 — the control agent — is not built.** | The last non-optional step of `PLAN.md`'s Phase 4 build order: a session of its own with tools to spawn / prompt / abort / retire the others. Two of the three endpoints are already exercised inside `retire()`, and `/abort` landed in Phase 5, so what is missing is the agent shell and its tool definitions. It is **not** in the exit gate | medium |
 | **Focus (`enter` → the session route) has never been tested.** | Build-order step 4. The code is three lines and the gate is about *not* focusing, so nothing ever exercised it. `.carryover/verify_nav.py` is in the void set | ~20 min |
 | Does the grid handle the **remaining** traps? | Sessions created while the grid is open **do** appear (TESTED, VERIFY §5) — but that does not isolate the grid's `session.created → reload()` from the store's `session.updated` path, so the trap is mitigated in behaviour, not proven closed. Still unexercised: RED silent under `--auto`, and archived sessions never leaving the list. *(The project-scoped `session.list()` is now exercised on both the hosted and attached paths.)* | review |
-| **Should the 350K default be lowered?** | **Open, and it is a decision rather than a measurement.** The measurement is done: the ceiling is ~360K, so 350K leaves under 3% margin and one large tool result can cross it. The threshold's whole purpose is to fire *before* the hard error. A value in the 200–250K range would restore real headroom. Left at 350,000 because the number is the owner's to choose | decision |
+| Is 256,000 the right soft gate for *heavy-read* workloads? | **Decided at 256,000 by the owner and guarded, not closed.** One measured turn added ~170K to occupancy by itself, so a session sitting just under the soft gate can finish near 426K — past the ~360K ceiling. `RETIRE_HARD` (330,000) is what stops that, by retiring mid-turn. If a workload routinely trips the hard gate, the soft gate is too high for it | tune |
 | Is the `question.rejected` half of the cold reconcile exercised? | The permission half is TESTED (`verify_cold.py`). No rig rejects a *question* that predates the client | ~20 min |
 | **Phase 3's exit gate is still unmet** — `/code-review ultra` on the `harness/` diff | `PLAN.md:339` makes "code-review ultra findings triaged" an explicit clause. It is user-triggered and billed; it cannot be launched from an agent session. Run it from `~/Desktop/healbot` | user action |
 

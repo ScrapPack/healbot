@@ -22,6 +22,10 @@ const CELL_HEIGHT = 6
  * retirement threshold", and `REVIEW.md` §4.3 records that clause as unadjudicable precisely
  * because no threshold was configurable anywhere in the deliverable.
  *
+ * Default **256,000**, lowered from 350,000 on the owner's decision after the ceiling below was
+ * measured. 256K leaves ~104K of headroom under that ceiling — roughly the 30% reserve the
+ * threshold is meant to provide, and enough that no single tool result can cross it.
+ *
  * **The ceiling is ~360K, NOT the 922,000 `limit.input` the model registry advertises.** This
  * file used to claim "350K leaves ~570K of headroom". MEASURED, and it is false: a session
  * driven up at the shipped default took its last successful turn at occupancy **359,829** and
@@ -33,15 +37,62 @@ const CELL_HEIGHT = 6
  * session from "should be retired" to "cannot run another turn". The harness sets
  * `compaction.auto: false`, which makes `overflow.ts:28` disable opencode's own overflow check
  * entirely, so nothing upstream catches this first — the provider does, and by then the turn is
- * lost. **Retirement is the only guard, and at 350K it fires too late to be one.** Lowering
- * this default is a live recommendation; it is left at 350,000 because the number is the
- * project owner's to choose, not because the measurement supports it.
+ * lost. **Retirement is the only guard, and at 350K it fired too late to be one.**
+ *
+ * NOTE what is NOT happening here: nothing is truncated or dropped. There is no history
+ * slicing on the v1 prompt path, `compaction.auto:false` disables compaction, and
+ * `compaction.prune` is unset so `compaction.ts:245` returns early. opencode sends the ENTIRE
+ * history every turn until the provider refuses it. So context is not "lost" gradually as the
+ * window fills — the session works perfectly and then hits a wall. That is precisely why the
+ * threshold needs real headroom rather than a small margin.
  *
  * Floor, measured: a freshly spawned and seeded session reads ~4.8K on its very first turn,
  * almost all of it `cache.read` — the standing-context prefix. A threshold at or below that
  * fires on turn one and proves nothing. So the usable band is roughly 5K–360K.
  */
-const RETIRE_AT = Math.max(1, Number(process.env["HEALBOT_RETIRE_AT"]) || 350_000)
+const RETIRE_AT = Math.max(1, Number(process.env["HEALBOT_RETIRE_AT"]) || 256_000)
+
+/**
+ * Retire automatically when a session crosses the threshold, rather than waiting for `x`.
+ *
+ * This restores `PLAN.md:381`'s design. An earlier pass made retirement operator-initiated on
+ * the reasoning that the grid should never act on its own — defensible, but it leaves the
+ * threshold advisory, and an advisory threshold is not a guard. With the ceiling measured at
+ * ~360K there is no room for one: a session that crosses the gate and keeps working reaches a
+ * state where every further turn dies. That is not hypothetical — a 350K run produced **25
+ * consecutive `ContextOverflowError` turns** after the gate was met, because nothing stopped it.
+ *
+ * The rule this implements: **no turn consumption after the gate is met.** Cross the threshold,
+ * finish the turn in flight, hand off, retire. The successor is seeded through `prompt_async`
+ * and starts immediately.
+ *
+ * Kill switch because it spawns and archives without asking: `HEALBOT_AUTO_RETIRE=0`.
+ */
+const AUTO_RETIRE = process.env["HEALBOT_AUTO_RETIRE"] !== "0"
+
+/**
+ * The HARD gate. `RETIRE_AT` is the soft one.
+ *
+ * Two gates are needed because "let the agent finish what it is doing" has an overshoot cost,
+ * and the cost is much larger than it looks. MEASURED, on one ordinary turn: occupancy went
+ * 5,216 -> 70,898 on a single tool result, and that turn finished at **175,090**. So a turn can
+ * add ~170K by itself.
+ *
+ * Apply that to the soft gate: a session sitting just under 256,000 that starts one more
+ * read-heavy turn finishes near 426,000 — past the ~360K ceiling, dead, having obeyed the
+ * finish-first rule the whole way. The soft gate alone cannot prevent the failure it exists to
+ * prevent.
+ *
+ * So: cross `RETIRE_AT` and the turn in flight is allowed to complete. Cross `RETIRE_HARD`
+ * *during* a turn and it is retired immediately, aborting that turn. That abort is not a loss
+ * weighed against finishing — it is a loss weighed against `ContextOverflowError`, which
+ * discards the same work and spends the tokens first. Retiring early keeps the tokens and the
+ * handoff.
+ *
+ * Default 330,000: under the measured ceiling with room for the reply, and far enough above the
+ * 256,000 soft gate that ordinary turns finish normally and this never fires.
+ */
+const RETIRE_HARD = Math.max(RETIRE_AT, Number(process.env["HEALBOT_RETIRE_HARD"]) || 330_000)
 
 /**
  * How many user messages a handoff fans out over to collect changed files.
@@ -715,13 +766,18 @@ function Healbot(props: { api: TuiPluginApi; selected: () => number; setSelected
   const clamp = (n: number) => Math.max(0, Math.min(n, sessions().length - 1))
   const move = (delta: number) => props.setSelected(clamp(props.selected() + delta))
 
-  // Retirement. OPERATOR-INITIATED, not automatic on threshold as PLAN.md:369 reads — the
-  // rest of this grid never acts on its own (`a` answers, nothing answers for you), retiring
-  // spawns a session and archives another, and firing that mid-turn without a human is the
-  // kind of irreversible-feeling surprise a control terminal should not spring. The cell going
-  // RETIRE is the prompt; `x` is the act.
+  // Retirement. AUTOMATIC on threshold (PLAN.md:381), with `x` kept as the manual override.
+  //
+  // This reverses an earlier decision here that retirement should be operator-initiated so the
+  // grid never acts on its own. The reasoning was sound in isolation and wrong in context: it
+  // makes the threshold advisory, and an advisory threshold cannot do the one job it has. The
+  // ceiling is ~360K and there is no graceful degradation below it — a session that crosses the
+  // gate and keeps working eventually reaches a point where EVERY turn dies, which a 350K run
+  // demonstrated 25 times in a row.
   const [retiring, setRetiring] = createSignal<string | null>(null)
   const [retireNote, setRetireNote] = createSignal<string | null>(null)
+  // Sessions this client has already acted on, so a retire that fails is not retried forever.
+  const [handled, setHandled] = createSignal(new Set<string>())
 
   const retire = async (session: Roster) => {
     const client = gridClient(props.api)
@@ -740,6 +796,12 @@ function Healbot(props: { api: TuiPluginApi; selected: () => number; setSelected
       //
       // Unconditional and idempotent: aborting an idle session is a no-op, and checking
       // `session_status` first would race the turn that starts between the check and the call.
+      // Unconditional, and it is not in tension with "let the agent finish what it is doing".
+      // The AUTO path only fires on an idle session, so this is a no-op there — its purpose is
+      // the race: a turn that starts between the idle check and this call is a turn beginning
+      // AFTER the gate was met, and the rule is that no turn runs after the gate. On the manual
+      // path it is what stops `x` on a `RETIRE · working` cell from orphaning a live session
+      // that keeps editing the same directory as its own successor.
       ok(await client.session.abort({ sessionID }), "abort predecessor")
 
       const todoResult = ok(
@@ -826,7 +888,7 @@ function Healbot(props: { api: TuiPluginApi; selected: () => number; setSelected
       // arbitrary mid-conversation turn. `handoffDocument` then labels whatever it got
       // "## Original instruction" and tells the successor it is the statement of intent.
       //
-      // Retirement exists to fire on long sessions — 350,000 tokens by default — which are
+      // Retirement exists to fire on long sessions — 256,000 tokens by default — which are
       // exactly the sessions past 100 messages. The bug was invisible to the §10 verification
       // because that ran at `HEALBOT_RETIRE_AT=20000` against an 8-message session, i.e. the one
       // regime where the store still holds message one.
@@ -899,6 +961,45 @@ function Healbot(props: { api: TuiPluginApi; selected: () => number; setSelected
       setRetiring(null)
     }
   }
+
+  /**
+   * AUTO-RETIRE. The rule: no turn runs after the gate is met.
+   *
+   * Fires when a session is over the threshold AND its turn has finished — "let the agent
+   * finish what it is doing, then hand off" — and never while it is busy, blocked on a human,
+   * or already being retired. `handled` makes it once-per-session-per-client so a retire that
+   * fails surfaces in the footer instead of retrying in a loop.
+   *
+   * Serialised deliberately (`retiring()` guard + `break`): each retire spawns a session and
+   * archives another, and two interleaved would race `reload()` and land the cursor on a cell
+   * that no longer exists. Anything skipped this pass is picked up on the next, because the
+   * effect re-runs whenever occupancy or status changes.
+   *
+   * NOT retried against a session that is blocked: answering the block is the operator's call,
+   * and retiring underneath a pending permission would discard the decision they were making.
+   */
+  createEffect(() => {
+    if (!AUTO_RETIRE) return
+    if (retiring()) return
+    for (const session of sessions()) {
+      if (handled().has(session.id)) continue
+      if (occupancyOf(sync, session.id) < RETIRE_AT) continue
+      const status = sync.data.session_status[session.id]
+      const busy = status?.type === "busy" || status?.type === "retry"
+      // Let it finish — UNLESS it has also crossed the hard gate. Cutting a turn off throws
+      // away work the successor has to rediscover, which is the looping-discovery failure this
+      // handoff design exists to avoid, so the soft gate always waits. But a turn can add ~170K
+      // on its own (measured), and past RETIRE_HARD waiting means the turn dies of
+      // ContextOverflowError instead — same work lost, tokens spent first, and no handoff.
+      if (busy && occupancyOf(sync, session.id) < RETIRE_HARD) continue
+      // Never underneath a pending permission or question: answering it is the operator's
+      // decision and retiring would discard the one they were in the middle of making.
+      if (isBlocked(session.id)) continue
+      setHandled((prev) => new Set(prev).add(session.id))
+      void retire(session)
+      break
+    }
+  })
 
   const returnRoute = (): TuiRouteCurrent | undefined => {
     const current = props.api.route.current

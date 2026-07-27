@@ -21,7 +21,9 @@ venv/bin/python verify_surface.py    # 17/18 auto-surface, suppression, tab cycl
 venv/bin/python verify_retire.py     # 17/17 the retirement observable and threshold
 venv/bin/python verify_handoff.py    # 21/21 retire and hand off with continuity intact
 venv/bin/python verify_cold.py       # 21/21 the COLD-START reconcile, via serve + attach
-venv/bin/python verify_retire_350k.py# 25/25 retirement at the SHIPPED 350K default.
+venv/bin/python verify_auto_retire.py # 13/13 AUTOMATIC retirement: the gate fires by itself,
+                                     #       the turn finishes, no turn runs after it
+venv/bin/python verify_retire_350k.py# 25/25 retirement at a full-scale threshold.
                                      #       ~5M cumulative input tokens; run it deliberately
 ```
 

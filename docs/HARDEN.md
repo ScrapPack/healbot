@@ -291,11 +291,91 @@ session out of the run's own database — **10/10, and free**, because the expen
 
 ---
 
-## 7. Still open after Phase 5
+## 7. Two gates, and automatic retirement — 13/13
+
+The 350K run's 25 dying turns were not a rig artifact. Nothing in the code stopped them: the
+threshold was **advisory**, because a previous pass made retirement operator-initiated (`x`)
+against `PLAN.md:381`'s automatic design, reasoning that the grid should never act on its own.
+That reasoning is sound in isolation and wrong in context — an advisory threshold cannot do the
+one job it has, and the ceiling below it is a cliff rather than a slope.
+
+The lifecycle now implemented, in the owner's words: **the gate is met, the agent finishes what
+it is doing, a handoff goes to a fresh session, the old session is retired, and the successor
+picks the work up immediately — with no turn consumption after the gate.**
+
+`verify_auto_retire.py`, **13/13**, at a low threshold because the path is threshold-independent:
+
+| | |
+|---|---|
+| retired itself | `x` never pressed |
+| the turn was allowed to finish | `tool-calls` ×5 then **`stop`**, no error |
+| turns accepted after the gate | **1 user turn total** — nothing new was taken |
+| successor | seeded, ran unprompted, **2/2** open todos in its own list |
+| chaining | none — the successor starts near the ~5K floor |
+
+### Why one gate is not enough
+
+The same run measured the cost of "let it finish", and it is much larger than it looks:
+
+| step | occupancy |
+|---|---|
+| 3 | 5,216 |
+| 4 — one tool result | **70,898** |
+| 6 — `stop` | **175,090** |
+
+**One turn added ~170K.** Apply that to a 256,000 soft gate: a session sitting just under it
+that starts one more read-heavy turn finishes near **426,000** — past the ~360K ceiling, dead,
+having obeyed the finish-first rule the whole way. The soft gate alone cannot prevent the
+failure it exists to prevent.
+
+So there are two. `RETIRE_AT` (**256,000**) is soft: cross it and the turn in flight completes,
+then the handoff runs. `RETIRE_HARD` (**330,000**) is hard: cross it *during* a turn and the
+session is retired immediately, aborting it. That abort is not weighed against finishing — it is
+weighed against `ContextOverflowError`, which discards the same work, spends the tokens first,
+and produces no handoff.
+
+`HEALBOT_AUTO_RETIRE=0` restores the operator-initiated behaviour.
+
+### A limitation to know about
+
+The trigger is a `createEffect` **inside the route component**, so auto-retirement only runs
+while the grid is open. Under `harness/fleet.sh` that is the normal operating state — the
+control terminal is the thing you leave running — but it is not headless, and a fleet left
+running with no client attached will not retire anything. Moving the trigger to plugin scope
+(driven off `message.updated`, which carries the tokens) would fix it and is the natural next
+step. It is listed in *Still open*.
+
+### Correcting the premise this started from
+
+The question that prompted the change was whether original context is *lost* at 350K. **It is
+not, and the distinction matters for choosing a number.** There is no history truncation on the
+v1 prompt path, `compaction.auto:false` disables compaction, and `compaction.prune` is unset so
+`compaction.ts:245` returns early — opencode sends the **entire** history every turn until the
+provider refuses it. Nothing degrades; the session works perfectly and then hits a wall. The
+case for lowering the threshold is not context loss, it is that **~360K is a cliff and 350K left
+~10K of margin**.
+
+What *was* being lost is a different thing entirely: the **TUI store's** 100-message window,
+which is client-side and is what corrupted the handoff document. That is fixed by reading from
+the server (§2, §6), not by the threshold.
+
+---
+
+## 8. Still open after Phase 5
 
 Unchanged and honest, in `HARNESS.md`'s *Still open* table: the control agent (build-order step
-5) is not built; focus has never been tested; retirement has never run at the shipped 350K
-default; the `question.rejected` half of the cold reconcile is source-reading only; external
-plugin route registration is untested; and **Phase 3's exit gate is still unmet** — the
-`/code-review ultra` pass on the `harness/` diff is user-triggered and cannot be launched from
-an agent session.
+5) is not built; focus has never been tested; the `question.rejected` half of the cold reconcile
+is source-reading only; external plugin route registration is untested; and **Phase 3's exit
+gate is still unmet** — the `/code-review ultra` pass on the `harness/` diff is user-triggered
+and cannot be launched from an agent session.
+
+Added by this phase:
+
+- **Auto-retirement is not headless.** The trigger lives in the route component, so it only runs
+  while the grid is open (§7). Moving it to plugin scope off `message.updated` is the fix.
+- **The soft gate is workload-dependent.** 256,000 is right if turns add ~50K; a turn that adds
+  ~170K needs the hard gate to catch it. If `RETIRE_HARD` fires routinely for a given workload,
+  the soft gate is too high for that workload rather than the hard gate being too low.
+- **The 256K gate has not been exercised end to end at its real value.** Automatic retirement is
+  TESTED at 20,000 and the threshold comparison is a single `>=`, so the risk is low — but the
+  full-scale run at 256,000 has not been paid for.

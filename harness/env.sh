@@ -73,14 +73,32 @@ export OPENCODE_DISABLE_CLAUDE_CODE
 # HARNESS_TRIM_TOOLS=1; export HARNESS_TRIM_TOOLS
 
 # Healbot retirement threshold, in tokens of live context OCCUPANCY (not lifetime spend).
-# Defaults to 350000 inside the grid; set this only to exercise retirement cheaply, since
-# reaching 350K on a frontier model on purpose is expensive. TESTED at 20000.
+# Defaults to 256000 inside the grid. Set this only to exercise retirement cheaply, since
+# reaching the real gate on a frontier model on purpose is expensive. TESTED at 20000.
+#
+# WHY 256000 AND NOT 350000. The ceiling is ~360K, NOT the 922,000 limit.input the model
+# registry advertises: a session driven up took its last good turn at occupancy 359,829 and
+# then failed 25 turns in a row with the provider's ContextOverflowError. Nothing is truncated
+# on the way -- opencode sends the whole history every turn until the provider refuses it -- so
+# the failure is a cliff, not a slope, and the threshold needs real headroom rather than the
+# ~10K that 350K left. See docs/HARDEN.md §6.
 #
 # Do NOT set it below ~5000: a freshly spawned and seeded session measures ~4,800 on its very
 # first turn, almost all of it cache.read (the standing-context prefix), so anything at or
 # under that fires immediately and proves nothing. The 5K figure HARNESS.md once suggested is
 # below the floor.
 # HEALBOT_RETIRE_AT=20000; export HEALBOT_RETIRE_AT
+
+# The HARD gate, default 330000. Crossing HEALBOT_RETIRE_AT lets the turn in flight finish;
+# crossing this one retires mid-turn, aborting it. Both exist because "finish what you are
+# doing" overshoots: one measured turn took occupancy 5,216 -> 175,090 on its own, so a session
+# just under the soft gate can finish past the ceiling and die having followed the rule.
+# HEALBOT_RETIRE_HARD=330000; export HEALBOT_RETIRE_HARD
+
+# Automatic retirement is ON by default: cross the gate, finish the turn, hand off, retire, and
+# the successor picks the work up immediately. Set to 0 for the old operator-initiated behaviour
+# where the cell goes RETIRE and `x` performs the handoff.
+# HEALBOT_AUTO_RETIRE=0; export HEALBOT_AUTO_RETIRE
 
 # NOT SET, on purpose:
 #   OPENCODE_DISABLE_DEFAULT_PLUGINS -- BREAKS THE HARNESS. The "default plugins" are the 10
