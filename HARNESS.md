@@ -16,6 +16,7 @@ Phase docs, newest first:
 
 | Doc | Phase | Read it for |
 |---|---|---|
+| [NEXT.md](NEXT.md) | 6 | **Start here if you are a fresh session.** The prompt to continue the build, what Phase 6 is and why in that order, and the traps that silently produce wrong results instead of errors |
 | [docs/HARDEN.md](docs/HARDEN.md) | 5 | The Phase 4 audit and what it forced: six defects fixed, the rig's vacuous assertions replaced, and `serve` + `attach` built — which closed the cold-start reconcile that was recorded here as *blocked* |
 | [docs/VERIFY.md](docs/VERIFY.md) | 4 | The control terminal, verified on `gpt-5.6-sol`: answering a blocked session from the grid. What is TESTED, what is unreachable, and why the first attempt was void |
 | [docs/REVIEW.md](docs/REVIEW.md) | audit | **Read this before trusting any figure below.** Adversarial audit of every phase-0–3 assumption; what held, what did not |
