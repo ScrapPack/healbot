@@ -13,7 +13,7 @@ handoff that pastes ten thousand words of history is working against its own pre
 
 ```
 Continue the healbot build at ~/Desktop/healbot. Phase 7 is complete and committed; the fork
-overlay is pinned at 36f674109.
+overlay is pinned at 509f4c0b1.
 
 READ FIRST, in this order. Stop when you can name the file that owns any given behaviour:
   1. HARNESS.md          — root index: load-bearing facts, Traps, Closed, Still open
@@ -79,6 +79,14 @@ re-run, and one optional spend. Do not invent a ninth thing to build.
      server via `env_extra`, which `rig.serve()` applies LAST; its workload is one prompt capped
      at 50 KB by `read.ts:16` and it asserts `len(user_turns) == 1`. At 180,000 the gate never
      fires and the 900s wait times out. ASK ME FIRST.
+
+     Note what that rig DOES now buy, at 20,000: 22/22, and it finally discriminates per-turn
+     from per-step. Its prompt used to put the one large read on the FINAL model call, so the
+     only step over the gate was the last one and both predicates passed identically — a 20/20
+     that meant nothing, confirmed by reading the run's own per-step occupancies. The read was
+     moved FIRST and two assertions added: a NON-FINAL step must be over the gate, and the turn
+     must run on past it. Crossing now lands at step 1 (36,361 vs 20,000), steps 2 and 3 at
+     89,850 and 90,011, turn still running to `stop` at step 5. Do not "simplify" that prompt.
 
   5. NOT YOURS — Phase 3's exit gate, `/code-review ultra` on the `harness/` diff, is still
      unmet. It is user-triggered and billed; an agent session cannot launch it. Remind me.
@@ -204,9 +212,9 @@ Deliberately **not** in the prompt:
 
 ## Current state, for the maintainer of this file
 
-Phase 7 landed with the overlay re-pinned at fork **`36f674109`** (was `88f7ce8cf`, then briefly
+Phase 7 landed with the overlay re-pinned at fork **`509f4c0b1`** (was `88f7ce8cf`, then `6794bd581`, then briefly
 `6794bd581` — this file named that intermediate commit and it was wrong) and
-`fork/healbot-fork.patch` regenerated as `git diff 7534d23 36f674109`, verified to apply cleanly
+`fork/healbot-fork.patch` regenerated as `git diff 7534d23 509f4c0b1`, verified to apply cleanly
 to base `7534d23`.
 
 What changed: the double-retire race was closed by removing the second writer, not by narrowing a
