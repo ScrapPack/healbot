@@ -3594,10 +3594,10 @@ index b67923f3c..9003fb84a 100644
  }
 diff --git a/packages/tui/src/feature-plugins/system/healbot.tsx b/packages/tui/src/feature-plugins/system/healbot.tsx
 new file mode 100644
-index 000000000..b448a6ad6
+index 000000000..7437e96f8
 --- /dev/null
 +++ b/packages/tui/src/feature-plugins/system/healbot.tsx
-@@ -0,0 +1,643 @@
+@@ -0,0 +1,878 @@
 +/** @jsxImportSource @opentui/solid */
 +import type { TuiPlugin, TuiPluginApi, TuiRouteCurrent } from "@opencode-ai/plugin/tui"
 +import type { PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2"
@@ -3634,6 +3634,9 @@ index 000000000..b448a6ad6
 + */
 +const RETIRE_AT = Math.max(1, Number(process.env["HEALBOT_RETIRE_AT"]) || 350_000)
 +
++/** How many recent user messages a handoff fans out over to collect changed files. */
++const DIFF_LOOKBACK = 20
++
 +/**
 + * Border state, highest precedence first. RED/YELLOW outrank everything because they are the
 + * states that need a human *now*: the session is blocked until someone answers. RETIRE
@@ -3650,8 +3653,107 @@ index 000000000..b448a6ad6
 + */
 +type Cold = { permission: Map<string, PermissionRequest[]>; question: Map<string, QuestionRequest[]> }
 +
-+/** A grid cell's session, from either roster source. */
-+type Roster = { id: string; title?: string; parentID?: string; directory?: string }
++/**
++ * A grid cell's session, from either roster source. `time.archived` rides along because
++ * retirement has to be filtered by the grid itself — `PATCH time.archived` hides a session
++ * from **nothing** server-side (`ListInput` has no `archived` field, `listByProject` has no
++ * `time_archived` predicate, the v2 list does not filter, and `grep -rn archived
++ * packages/tui/src` finds no other consumer). A retired session keeps coming back from
++ * `GET /session` forever unless the caller drops it.
++ */
++type Roster = {
++  id: string
++  title?: string
++  parentID?: string
++  directory?: string
++  time?: { archived?: number }
++}
++
++/**
++ * The slice of the SDK client this grid needs that `TuiPluginApi["client"]` does not surface
++ * with types. Declared once and narrowly, so the file carries a single unsafe assertion
++ * instead of one per call site. Each response is the generated client's usual
++ * `{ data }` envelope, which some transports flatten — hence the unwrapping at the use sites.
++ */
++type GridClient = {
++  permission: { list(): Promise<unknown> }
++  question: { list(): Promise<unknown> }
++  session: {
++    todo(input: { sessionID: string }): Promise<{ data?: { content: string; status: string }[] } | undefined>
++    diff(input: {
++      sessionID: string
++      messageID: string
++    }): Promise<{ data?: { file?: string; path?: string }[] } | undefined>
++    create(input: { directory?: string }): Promise<{ data?: { id?: string }; id?: string } | undefined>
++    promptAsync(input: { sessionID: string; parts: { type: "text"; text: string }[] }): Promise<unknown>
++    update(input: { sessionID: string; time?: { archived?: number } }): Promise<unknown>
++  }
++}
++
++const gridClient = (api: TuiPluginApi) => api.client as unknown as GridClient
++
++/**
++ * The passover document handed to a successor session.
++ *
++ * DEVIATION FROM PLAN.md:371, which specifies `POST /session/{id}/summarize` as the source.
++ *
++ * That route is not the git-diff summariser its name suggests — there are TWO `summarize`s and
++ * the plan reads as though there is one. `handlers/session.ts:273-283` routes
++ * `POST /session/{id}/summarize` into `compactSvc.create(...)`: it is COMPACTION, an LLM turn,
++ * and it is what `HARNESS.md`'s "summarize mutates in place and adds tokens" describes. The
++ * git-diff one is `SessionSummary.summarize` (`summary.ts:102-127`, no LLM), which already runs
++ * automatically on the prompt path (`prompt.ts:1253`) and writes its result onto the *user*
++ * message. So the diff data the plan wanted is available without compacting anything.
++ *
++ * Two further reasons to skip the compaction route:
++ *
++ *  1. The project's stated position (`opencode.jsonc`, REVIEW) is that handing a fresh session
++ *     a passover prompt beats compacting, *because compaction loses specificity*. The sources
++ *     below lose none — they are the literal todos and the literal file list.
++ *  2. It costs an extra model turn, a wait and a failure mode, for material already available
++ *     synchronously and exactly.
++ *
++ * What it does NOT carry is narrative — what was tried and abandoned. The last assistant
++ * message is included as a partial substitute. If that proves too thin in practice, adding a
++ * `summarize` call back is a two-line change; it is deliberately not the default.
++ */
++function handoffDocument(input: {
++  title: string
++  objective?: string
++  open: { content: string }[]
++  files: string[]
++  lastMessage?: string
++}) {
++  const lines = [
++    "You are taking over a session that was retired because its context window was too full.",
++    "Continue its work now. Do not start over, and do not simply report status — the",
++    "outstanding items below are what is left to DO.",
++    "",
++    // Labelled as the ORIGINAL INSTRUCTION rather than "objective", and explicitly demoted
++    // below the outstanding list. TESTED and it matters: handed a verbatim first message that
++    // happened to contain step sequencing ("do only the first, leave the rest pending"), the
++    // successor obeyed that stale instruction and replied "No further work performed". The
++    // instruction is the best statement of intent available, but it is a historical record —
++    // the todo list is the live one.
++    "## Original instruction, for context only",
++    "It may contain sequencing that has already been carried out. Where the two disagree, the",
++    "outstanding list below wins.",
++    "",
++    input.objective?.trim() || input.title,
++    "",
++    "## Outstanding work — do this",
++    ...(input.open.length > 0
++      ? input.open.map((todo) => `- [ ] ${todo.content}`)
++      : ["- (no open todo items were recorded)"]),
++  ]
++  if (input.files.length > 0) {
++    lines.push("", "## Files already changed — read these before editing them", ...input.files.map((f) => `- ${f}`))
++  }
++  if (input.lastMessage?.trim()) {
++    lines.push("", "## Where it left off", input.lastMessage.trim().slice(0, 2000))
++  }
++  return lines.join("\n")
++}
 +
 +// Store first (live SSE), then the cold-start reconcile. The store's `permission` /
 +// `question` maps are populated ONLY by events observed in this process, so a client that
@@ -3893,7 +3995,7 @@ index 000000000..b448a6ad6
 +      }
 +      return out
 +    }
-+    const client = props.api.client as any
++    const client = gridClient(props.api)
 +    setCold({
 +      permission: await group<PermissionRequest>(() => client.permission.list()),
 +      question: await group<QuestionRequest>(() => client.question.list()),
@@ -3939,6 +4041,10 @@ index 000000000..b448a6ad6
 +    for (const item of [...roster(), ...[...sync.data.session].reverse()]) {
 +      if (seen.has(item.id)) continue
 +      seen.add(item.id)
++      // Retired sessions leave the grid HERE and nowhere else — archiving filters nothing
++      // server-side. Without this line a retired session keeps its cell forever, which
++      // defeats the entire point of freeing the slot.
++      if (item.time?.archived) continue
 +      out.push(item)
 +    }
 +    return out
@@ -3980,6 +4086,116 @@ index 000000000..b448a6ad6
 +
 +  const clamp = (n: number) => Math.max(0, Math.min(n, sessions().length - 1))
 +  const move = (delta: number) => props.setSelected(clamp(props.selected() + delta))
++
++  // Retirement. OPERATOR-INITIATED, not automatic on threshold as PLAN.md:369 reads — the
++  // rest of this grid never acts on its own (`a` answers, nothing answers for you), retiring
++  // spawns a session and archives another, and firing that mid-turn without a human is the
++  // kind of irreversible-feeling surprise a control terminal should not spring. The cell going
++  // RETIRE is the prompt; `x` is the act.
++  const [retiring, setRetiring] = createSignal<string | null>(null)
++  const [retireNote, setRetireNote] = createSignal<string | null>(null)
++
++  const retire = async (session: Roster) => {
++    const client = gridClient(props.api)
++    const sessionID = session.id
++    setRetiring(sessionID)
++    setRetireNote(null)
++    try {
++      const todoResult = await client.session.todo({ sessionID }).catch(() => undefined)
++      const todos = (todoResult?.data ?? []).filter(Boolean)
++      const open = todos.filter((todo) => todo.status !== "completed")
++
++      // `GET /session/{id}/diff` is a PER-USER-MESSAGE endpoint, not a session-wide one:
++      // `summary.ts:130` returns [] outright when no messageID is given, and `:133` returns []
++      // again unless that message is a USER message — the git diffs are written onto the user
++      // message's `summary.diffs` by `SessionSummary.summarize` (`prompt.ts:1253`, forked).
++      // PLAN.md:371 says "its /diff" as though one call covered the session; it does not.
++      // So: fan out over the session's user messages and union the file list.
++      const userMessages = (sync.data.message[sessionID] ?? []).filter((message) => message.role === "user")
++      // Bounded on purpose. The store caps at 100 messages anyway (CONTEXT.MAP.md), and a
++      // handoff wants the files touched recently, not an archaeological record.
++      const recent = userMessages.slice(-DIFF_LOOKBACK)
++      const files = [
++        ...new Set(
++          (
++            await Promise.all(
++              recent.map((message) =>
++                client.session
++                  .diff({ sessionID, messageID: message.id })
++                  .then((result) => result?.data ?? [])
++                  .catch(() => []),
++              ),
++            )
++          )
++            .flat()
++            .map((entry) => entry?.file ?? entry?.path)
++            .filter((value): value is string => Boolean(value)),
++        ),
++      ]
++
++      // PLAN.md:369-370 splits the two cases and they really are different: a session with
++      // nothing outstanding has nothing to hand over, so spawning a successor for it would
++      // burn a fresh window to say "there is no work".
++      if (open.length === 0) {
++        await client.session.update({ sessionID, time: { archived: Date.now() } })
++        setRetireNote(`retired ${truncate(session.title ?? sessionID, 40)} — nothing outstanding`)
++        await reload()
++        props.setSelected(clamp(props.selected()))
++        return
++      }
++
++      // Parts are keyed by messageID in their own map, not nested under the message
++      // (sync.tsx:96-98), so text has to be joined per message id.
++      const messages = sync.data.message[sessionID] ?? []
++      const textOf = (messageID: string) =>
++        (sync.data.part[messageID] ?? [])
++          .filter((part) => part.type === "text")
++          .map((part) => ("text" in part ? part.text : ""))
++          .join("\n")
++          .trim()
++      const objective = messages.filter((message) => message.role === "user").map((m) => textOf(m.id)).find(Boolean)
++      const lastMessage = [...messages]
++        .reverse()
++        .filter((message) => message.role === "assistant")
++        .map((m) => textOf(m.id))
++        .find(Boolean)
++
++      const document = handoffDocument({
++        title: session.title ?? sessionID,
++        objective,
++        open,
++        files,
++        lastMessage,
++      })
++
++      // POST /session + seed is the ONLY path that yields a zero-token successor: `fork`
++      // reports 0 at creation then climbs to exactly the parent's total within ~3s, and
++      // `summarize` mutates in place. Same directory, or the successor cannot see the work.
++      const created = await client.session.create({ directory: session.directory })
++      const successorID = created?.data?.id ?? created?.id
++      if (!successorID) throw new Error("session.create returned no id")
++
++      // prompt_async, per PLAN.md:341. It was reported broken by the audit and is not —
++      // it acks in ~10ms and the turn completes normally; the report polled an assistant row
++      // that exists ~20ms before it fills.
++      await client.session.promptAsync({
++        sessionID: successorID,
++        parts: [{ type: "text", text: document }],
++      })
++      await client.session.update({ sessionID, time: { archived: Date.now() } })
++      await reload()
++
++      // Hand the grid slot to the replacement, so the operator's cursor follows the work
++      // rather than the cell that just vanished.
++      const index = sessions().findIndex((item) => item.id === successorID)
++      props.setSelected(index === -1 ? clamp(props.selected()) : index)
++      setRetireNote(`handed off ${open.length} open item${open.length === 1 ? "" : "s"}, ${files.length} file${files.length === 1 ? "" : "s"}`)
++    } catch (error) {
++      setRetireNote(`retire failed: ${error instanceof Error ? error.message : String(error)}`)
++    } finally {
++      setRetiring(null)
++    }
++  }
 +
 +  const returnRoute = (): TuiRouteCurrent | undefined => {
 +    const current = props.api.route.current
@@ -4050,6 +4266,18 @@ index 000000000..b448a6ad6
 +      },
 +    },
 +    {
++      name: "healbot.retire",
++      title: "Retire selected session and hand off",
++      category: "Healbot",
++      run() {
++        const session = sessions()[props.selected()]
++        // One at a time: the flow spawns a session and archives another, and two of them
++        // interleaved would race `reload()` and leave the cursor on the wrong cell.
++        if (!session || retiring()) return
++        void retire(session)
++      },
++    },
++    {
 +      name: "healbot.next-blocked",
 +      title: "Select next blocked session",
 +      category: "Healbot",
@@ -4085,6 +4313,9 @@ index 000000000..b448a6ad6
 +      { key: "k,up", cmd: "healbot.up", desc: "Select up" },
 +      { key: "j,down", cmd: "healbot.down", desc: "Select down" },
 +      { key: "a", cmd: "healbot.answer", desc: "Answer blocked session" },
++      // `x`, not `R`: no letter binding anywhere in this package uses a shift modifier, and
++      // `r` is already refresh.
++      { key: "x", cmd: "healbot.retire", desc: "Retire session and hand off" },
 +      { key: "tab", cmd: "healbot.next-blocked", desc: "Select next blocked session" },
 +      { key: "return", cmd: "healbot.focus", desc: "Focus selected session" },
 +      { key: "r", cmd: "healbot.refresh", desc: "Refresh session list" },
@@ -4138,7 +4369,11 @@ index 000000000..b448a6ad6
 +            prompt's escape calls reject() (question.tsx:281). There is no back-out key, which
 +            is the same bargain the session route makes; naming it honestly is the guard.
 +          */}
-+          {answering() ? "answering · esc reject" : "a answer · tab next blocked · enter focus · r refresh · q close"}
++          {answering()
++            ? "answering · esc reject"
++            : retiring()
++              ? "retiring · handing off"
++              : (retireNote() ?? "a answer · x retire · tab next blocked · enter focus · r refresh · q close")}
 +        </text>
 +      </box>
 +

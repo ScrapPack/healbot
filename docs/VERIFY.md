@@ -336,7 +336,77 @@ session from nothing, so the grid must filter retired sessions itself.
 
 ---
 
-## 10. What this changes elsewhere
+## 10. Step 6b — retire and hand off (added 2026-07-27)
+
+The last clause of the exit gate. **21/21** on `openai/gpt-5.6-sol` at `HEALBOT_RETIRE_AT=20000`.
+
+### "Continuity intact", defined
+
+The gate never defined it. Adopted definition — a handoff counts only if the successor:
+
+1. is handed the objective,
+2. carries the predecessor's **open** todos in its own todo list, and
+3. is handed at least one specific file the predecessor changed.
+
+All three assert on **artefacts**, never on the successor's prose. Retirement is
+**operator-initiated**: the cell goes `RETIRE`, `x` performs the handoff.
+
+### Result
+
+A worker recorded three todos, completed one, read two 130 KB ledgers to occupancy **90,310**,
+and was aborted mid-task. Pressing `x`:
+
+| | |
+|---|---|
+| successor spawned, seeded via `prompt_async` | 1,096-char passover document |
+| open todos carried into the successor's own list | **2/2** |
+| completed work re-handed as outstanding | none |
+| changed file handed over | `stage1.txt` |
+| predecessor archived and gone from the grid | yes |
+| route changed | never |
+| occupancy | 90,310 → **5,649 (6%)** |
+
+### Three findings
+
+**`GET /session/{id}/diff` returns `[]` without a `messageID`.** `summary.ts:130` returns `[]`
+outright when none is given, and `:133` returns `[]` again unless that message is a **user**
+message — the git diffs are written onto the user message's `summary.diffs` by
+`SessionSummary.summarize` (`prompt.ts:1253`, forked). `PLAN.md:371` says "its `/diff`" as
+though one call covered the session. The handoff fans out over recent user messages instead.
+This took **two wrong guesses** first — the abort, then a missing git baseline — both refuted
+by a probe showing snapshots present 2/2 on a clean uninterrupted turn.
+
+**There are two `summarize`s and the plan conflates them.** `POST /session/{id}/summarize`
+routes into `compactSvc.create` (`handlers/session.ts:273-283`) — it is **compaction**, an LLM
+turn, and it is what `HARNESS.md`'s "summarize mutates in place and adds tokens" describes. The
+git-diff one is `SessionSummary.summarize` (`summary.ts:102-127`, no LLM), which already runs
+automatically on the prompt path. The diff data the plan wanted needs no compaction at all.
+
+**A verbatim first user message can carry stale instructions.** Handed an objective that
+happened to say *"do only the first, leave the rest pending"*, the successor obeyed it and
+replied *"No further work performed."* The document now labels it *"Original instruction, for
+context only"*, states that the outstanding list wins where the two disagree, and tells the
+successor to **do** the work rather than report on it.
+
+### On unsound assertions — the near-miss worth recording
+
+Continuity legs 1 and 3 were first written as substring checks on the successor's first reply.
+Across three runs it said *"verify `stage1.txt`"*, then *"the completed first stage"*, then
+*"each remaining stage file"* — every one demonstrating continuity, no two sharing a substring.
+The legs flipped pass/fail between runs while every deterministic check passed every time.
+
+A check that turns on the model's word choice measures phrasing, not whether context survived.
+Re-running until one came up green would have "passed" the exit gate on noise — the same
+species of error as the original local-model run this whole document exists to correct. The
+legs now assert on artefacts and the reply is printed as corroboration only.
+
+That makes **four** of the failures across this effort that were bad assertions rather than
+defects: `find("blocked")` matching the footer, `find("RETIRE")` matching the header, sampling
+a reply mid-turn, and these two.
+
+---
+
+## 11. What this changes elsewhere
 
 Per the process rule adopted in `docs/REVIEW.md` — every phase revises the artifacts it
 contradicts — this pass edits `HARNESS.md`:
