@@ -59,7 +59,7 @@ build.
      pins gpt-5.6-sol. probe_turn_growth.py asserts the pin.
 
   1. FREE, and start here — it has been the best value in each of the last two phases.
-     - Re-run the ELEVEN free probes (below). Expect 162/162. If probe_turn_growth.py's corpus counts
+     - Re-run the ELEVEN free probes (below). Expect 164/164. If probe_turn_growth.py's corpus counts
        have moved, that is EXPECTED and not a finding by itself: the suite writes to the corpus it
        measures (docs/CLONE.md §4). What would be a finding is a moved MAXIMUM, BOUND or
        CONDITIONAL — those held across +14% of corpus and are the load-bearing figures.
@@ -111,7 +111,7 @@ METHOD — this project's standard, and it is not decoration:
     much as the predicate needs a mutation check — losing the evidence and passing the test can be
     the same event.
   - A NUMBER IS NOT EVIDENCE, AND REPEATING IT DOES NOT MAKE IT MORE EVIDENCE (Phase 8's).
-  - Run the FREE probes before spending anything (162/162 total):
+  - Run the FREE probes before spending anything (164/164 total):
       cd .carryover/verified
       venv/bin/python probe_on_grid.py          # 4/4
       venv/bin/python probe_error_state.py      # 10/10
@@ -123,7 +123,7 @@ METHOD — this project's standard, and it is not decoration:
       venv/bin/python probe_request_channel.py  # 9/9
       venv/bin/python probe_turn_predicate.py   # 18/18
       venv/bin/python probe_turn_growth.py      # 16/16
-      venv/bin/python probe_rig_contract.py     # 20/20
+      venv/bin/python probe_rig_contract.py     # 22/22
   - Gates before you claim done, from ~/Desktop/healbot/opencode:
       ./node_modules/.bin/tsgo --noEmit -p packages/tui/tsconfig.json    # expect exit 0, no output
       ./node_modules/.bin/oxlint packages/tui/src/feature-plugins/system/healbot.tsx
@@ -242,12 +242,12 @@ Fixed: all twelve rigs now declare a floor, guard their crash, and exit on the v
 directions, not re-run). **Every paid-rig change is VERIFIED, not TESTED** — they cannot be executed
 without spending, so the floors are deliberately conservative.
 
-New guard: **`probe_rig_contract.py`**, free, 20/20. It reads all 23 entrypoints (itself included) as source and
+New guard: **`probe_rig_contract.py`**, free, 22/22. It reads all 23 entrypoints (itself included) as source and
 asserts the contract, with a mutation check per predicate and an inverted leg for the no-`try`
 shape. It caught two of this phase's own mistakes within a minute of existing — a false negative in
 its own `floor_of` (it matched `Results(...)` but not `rig.Results(...)`), and a scripted patch that
 destroyed 32 lines of `verify_retire.py`, which was restored from git and redone by hand.
 
-Free suite: 4/4, 10/10, 24/24, 10/10, 14/14, 23/23, 14/14, 9/9, 18/18, 16/16, **20/20** —
-**162 total**, every probe exit 0. Gates: `tsgo` exit 0 with no output, `oxlint` exit 0 with the
+Free suite: 4/4, 10/10, 24/24, 10/10, 14/14, 23/23, 14/14, 9/9, 18/18, 16/16, **22/22** —
+**164 total**, every probe exit 0. Gates: `tsgo` exit 0 with no output, `oxlint` exit 0 with the
 expected 3 warnings.

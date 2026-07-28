@@ -35,7 +35,7 @@ venv/bin/python probe_request_channel.py # 9/9 does `x`'s metadata write actuall
                                      #       no model turn — an empty session has no todos, so
                                      #       retire() takes its no-successor branch)
 venv/bin/python probe_control_wiring.py # 14/14 are the control tools and agent registered?
-venv/bin/python probe_rig_contract.py# 20/20 does every rig in this suite still report FAILURE as
+venv/bin/python probe_rig_contract.py# 22/22 does every rig in this suite still report FAILURE as
                                      #       failure? Reads all 23 entrypoints (itself included) as SOURCE and asserts
                                      #       the contract: a declared assertion FLOOR, a satisfiable
                                      #       one, no `finally` that exits without a crash guard, and

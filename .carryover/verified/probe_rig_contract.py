@@ -25,6 +25,7 @@ rig must satisfy:
   2. that floor is satisfiable — no greater than the assertions that cannot be skipped
   3. it carries the exception guard, so a crash becomes a failed row rather than a short green
   4. it ACTS on `summary()`'s verdict — a failing run must exit non-zero
+  5. and that verdict exit is the LAST thing its `finally` does, so nothing trails it unreachably
 
 Every predicate is mutation-checked against a corrupted copy of a real rig, and the corrupted
 copy is pushed through THE SAME function the live check calls — per this suite's rule that a
@@ -224,6 +225,33 @@ def _exit_calls(tree):
                 yield node.exc
 
 
+def _mentions_summary(node):
+    return any(
+        isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "summary"
+        for n in ast.walk(node)
+    )
+
+
+def _verdict_names(tree):
+    """Names bound to `r.summary()` — the `ok` in `ok = r.summary()`."""
+    out = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and _mentions_summary(node.value):
+            for t in node.targets:
+                if isinstance(t, ast.Name):
+                    out.add(t.id)
+    return out
+
+
+def _carries_verdict(call, bound):
+    for arg in call.args:
+        if _mentions_summary(arg):
+            return True
+        if any(isinstance(n, ast.Name) and n.id in bound for n in ast.walk(arg)):
+            return True
+    return False
+
+
 def acts_on_verdict(src):
     """Does the rig's exit status depend on `r.summary()`?
 
@@ -233,31 +261,33 @@ def acts_on_verdict(src):
     printed and thrown away, which is what six rigs did.
     """
     tree = ast.parse(src)
+    bound = _verdict_names(tree)
+    return any(_carries_verdict(c, bound) for c in _exit_calls(tree))
 
-    def mentions_summary(node):
-        return any(
-            isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "summary"
-            for n in ast.walk(node)
-        )
 
-    bound = set()
+def finally_ends_on_verdict(src):
+    """For every `try/finally`, is the LAST statement of the `finally` a verdict-bearing exit?
+
+    `acts_on_verdict` only asks whether such an exit exists ANYWHERE in the file, which a stray or
+    unreachable one would satisfy. This asks whether it is the thing that actually runs last — the
+    property that was verified by hand across all twenty rigs during the Phase 10 review and, being
+    verified by hand, was exactly the kind of thing that should not stay verified by hand.
+
+    Rigs with no `try/finally` are vacuously fine and say so by returning True: they exit at module
+    level and an escaping exception simply propagates (`probe_twin.py`, `probe_turn_growth.py`,
+    `probe_turn_predicate.py`).
+    """
+    tree = ast.parse(src)
+    bound = _verdict_names(tree)
     for node in ast.walk(tree):
-        if isinstance(node, ast.Assign) and mentions_summary(node.value):
-            for t in node.targets:
-                if isinstance(t, ast.Name):
-                    bound.add(t.id)
-
-    for call in _exit_calls(tree):
-        for arg in call.args:
-            if mentions_summary(arg):
-                return True
-            if any(isinstance(n, ast.Name) and n.id in bound for n in ast.walk(arg)):
-                return True
-    return False
+        if isinstance(node, ast.Try) and node.finalbody:
+            if not any(_carries_verdict(c, bound) for c in _exit_calls(node.finalbody[-1])):
+                return False
+    return True
 
 
 # ------------------------------------------------------------------------------------------
-r = Results(expect=20)
+r = Results(expect=22)
 
 try:
     names = rigs()
@@ -335,6 +365,15 @@ try:
         + (f"verdict discarded: {mute}" if mute else "all act on it"),
     )
 
+    trailing = [n for n in names if not finally_ends_on_verdict(src[n])]
+    r.check(
+        "…AND THE VERDICT EXIT IS THE LAST THING THE `finally` DOES",
+        not trailing,
+        "an exit that exists somewhere in the file is not the same as one that runs — cleanup after "
+        "it would never execute, and a stray unreachable exit satisfies the check above. "
+        + (f"trailing work after the exit: {trailing}" if trailing else "all twenty end on it"),
+    )
+
     # --- mutation checks -------------------------------------------------------------------
     # Each predicate is re-run against a CORRUPTED copy of a real rig and required to trip. The
     # corrupted copy goes through the same function the sweep above calls; a mutation check that
@@ -375,6 +414,11 @@ try:
         "MUTATION: discarding summary()'s verdict IS detected",
         not acts_on_verdict(good.replace("ok = r.summary()", "r.summary()").replace("sys.exit(0 if ok else 1)", "pass")),
         "this is what six rigs did, and it is why a permanently-red assertion survived five phases",
+    )
+    r.check(
+        "MUTATION: cleanup AFTER the verdict exit IS detected",
+        not finally_ends_on_verdict(good.replace("    sys.exit(0 if ok else 1)", "    sys.exit(0 if ok else 1)\n    t.close()")),
+        "code after the exit never runs; a rig written that way looks like it cleans up and does not",
     )
     r.check(
         "MUTATION: the INLINED verdict shape is still accepted",

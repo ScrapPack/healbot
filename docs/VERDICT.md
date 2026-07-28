@@ -9,12 +9,12 @@ value; **six of the paid rigs did not read it at all.**
 
 | | |
 |---|---|
-| **Six rigs always exited 0** | `finally: r.summary(); t.close()` — verdict discarded, no `sys.exit`. `verify_handoff`, `verify_permission`, `verify_question`, `verify_retire`, `verify_surface`, `smoke`. Three of them contain no `sys.exit` anywhere. §1 |
+| **Six rigs exited 0 on a failing run** | `finally: r.summary(); t.close()` — verdict discarded, no `sys.exit`. `verify_handoff`, `verify_permission`, `verify_question`, `verify_retire`, `verify_surface`, `smoke`; three had no `sys.exit` anywhere in the file. **Scope, measured:** this bites when assertions fail *without* an exception. A crash still exited 1, because the exception propagated through the `finally` — there was no `sys.exit` there to discard it. §1 |
 | **`smoke.py` is one of them** | The README tells you to run it FIRST to confirm the provider resolves. It returns success when the provider is broken. §1 |
 | **`verify_surface.py` carried a permanently-red assertion for five phases** | Recorded 17/18. `not t.find("blocked")` is False whenever the grid is open, because the footer says `tab next blocked`. Nothing ever surfaced it, because the rig exited 0. §1, §4 |
 | **`verify_handoff.py`'s recorded 21/21 is unreachable** | It has **22** unconditional assertions. Phase 5 swapped a vacuous check for two mutation legs and never re-ran it. The 21/21 is Phase **4**'s score, and four documents cite it as the evidence that the Phase 4 exit gate is met. §2 |
 | **Phase 8's "the one rig in the suite" was two rigs** | `docs/GROWTH.md:176` claims `verify_control_agent.py` was *the* rig whose recorded score did not match the file as it stood. `verify_handoff.py` had the same property at the same time. §2 |
-| **New guard: `probe_rig_contract.py`, free, 20/20** | Asserts the contract from source across all 23 rigs (itself included — a guard that exempts itself is the defect it hunts), so none of this can grow back. Free suite **142 → 162**. §3 |
+| **New guard: `probe_rig_contract.py`, free, 22/22** | Asserts the contract from source across all 23 rigs (itself included — a guard that exempts itself is the defect it hunts), so none of this can grow back. Free suite **142 → 164**. §3 |
 
 ---
 
@@ -30,7 +30,22 @@ finally:
 
 No `sys.exit`. The process falls off the end and the shell sees **0**, however many assertions
 failed. VERIFIED by reading all twelve paid entrypoints; three of them (`verify_retire.py`,
-`verify_surface.py`, `smoke.py`) contain no `sys.exit` or `SystemExit` anywhere in the file.
+`verify_surface.py`, `smoke.py`) had no `sys.exit` or `SystemExit` anywhere in the file at all.
+
+**The scope is narrower than "these rigs could not fail", and the narrower claim is the one to
+carry.** TESTED with a two-line A/B on the shipped `Results`: the old shape, given one failing
+assertion and no exception, prints `1/2 passed` and exits **0**; the new shape, same assertions,
+exits **1**. But a rig that *crashes* always exited 1 even before this phase — with no `sys.exit`
+in the `finally`, the exception simply propagates and Python sets the status itself. So the defect
+is exactly: **a clean failing assertion is invisible to the shell.** That is not a lesser bug here,
+because it is precisely the state `verify_surface.py` sat in for five phases (17/18, no exception)
+and precisely what a wrong model pin does to `smoke.py` — `:27`, `:45` and `:50` are plain
+assertions that go false without raising.
+
+This also means the four rigs that *did* exit on their verdict but had **no crash guard**
+(`verify_auto_retire`, `verify_cold_question`, `verify_control_agent`, `verify_headless_retire`)
+carried the *other* defect — Phase 9's — where a crash exits on a partial green. Two different
+faults, six rigs and four rigs, one fix each, and the two must ship together.
 
 Two of the six are worth naming individually.
 
@@ -64,8 +79,17 @@ All twelve now carry the three-part contract Phase 9 established for the probes:
 inside a `finally` discards the in-flight exception. Six rigs got both; four more got the guard
 they were missing.
 
-**These fixes are VERIFIED, not TESTED.** They are read-and-reasoned changes to files this phase
-could not execute without spending. What *is* TESTED is the mechanism — `Results`'s floor semantics
+**These fixes are VERIFIED, and three of them are now TESTED.** They are read-and-reasoned changes
+to files this phase cannot execute in a working environment without spending — but they *can* be
+executed in one where they fail fast. A fresh clone has no `opencode/` checkout, so a paid rig dies
+before it ever reaches a model call, and running one there costs nothing. TESTED that way on
+`smoke.py`, `verify_surface.py` and `verify_handoff.py`: each loads, the guard converts the crash
+into a FAILED row, the floor reports `SHORT RUN — only 2 of 6 / 18 / 22 assertions ran`, and each
+exits **1**. `verify_handoff.py` printing `expected at least 22` is also independent confirmation
+that the floor derived from the AST is the one the file now declares.
+
+What remains genuinely unbought is whether each rig, in a *working* environment, runs all the way
+to its floor. That needs the model. What *is* TESTED is the mechanism — `Results`'s floor semantics
 are driven directly in `probe_rig_contract.py` (§3), and the identical change was controlled in both
 directions on the free probes in Phase 9. What remains unproven is that each paid rig still runs to
 its floor. The floors are set conservatively for exactly that reason: each is the count of
@@ -130,7 +154,7 @@ on a score from a file that has since changed. That is now what the artifacts sa
 
 ## 3. `probe_rig_contract.py` — the guard that makes this unrepeatable
 
-Free, **20/20**, and it executes no rig. It parses all 23 entrypoints (itself included) and asserts the four
+Free, **22/22**, and it executes no rig. It parses all 23 entrypoints (itself included) and asserts the four
 properties above from source:
 
 1. every rig declares `Results(expect=N)`, and `N >= 1`
@@ -167,6 +191,29 @@ sweep that produced this phase's findings.
   it was redone by hand; the other five files were diffed line-by-line and lost nothing. The
   general point is the specific one this phase is about: **the check that catches you is the one
   that reads the artifact rather than the intent.**
+
+### What the review pass added
+
+Reviewing Phase 9 and 10 before moving on produced two corrections to this document and one to the
+probe, all of them the same species as the findings above.
+
+- **This document said the six rigs "always exited 0", and that over-claims.** TESTED with a
+  two-line A/B on the shipped `Results`: the old shape with one failing assertion and no exception
+  prints `1/2 passed` and exits **0**; the new shape exits **1**. But a rig that *crashes* always
+  exited 1 even before Phase 10 — with no `sys.exit` in the `finally` there was nothing to discard
+  the exception. The defect is exactly *a clean failing assertion is invisible to the shell*, which
+  is the state `verify_surface.py` sat in for five phases and what a wrong model pin does to
+  `smoke.py`. Narrower than first written, and unchanged in consequence.
+- **A fifth contract property, because the fourth was weaker than it read.** `acts_on_verdict` asks
+  only whether a verdict-bearing exit exists *anywhere* in the file — a stray or unreachable one
+  satisfies it. That all twenty rigs actually *end* their `finally` on that exit was verified by
+  hand during the review, and being verified by hand is precisely what should not stay that way.
+  `finally_ends_on_verdict` now asserts it, with a mutation check that appends `t.close()` after the
+  exit and requires the probe to trip. **22/22.**
+- **Mechanical audit of the scripted patch.** Every line removed across all twelve paid rigs was
+  diffed: only the intended `r = Results()`, `r.summary()` and the one `verify_surface` assertion.
+  Every handler chain is the uniform `SystemExit->raise | Exception->traceback`, and every `finally`
+  ends on `sys.exit(0 if ok else 1)`.
 
 A first version of predicate 3 demanded a guard unconditionally and flagged `probe_twin.py`, which
 has no `try` at all and is therefore safe — an exception simply propagates. Satisfying that check
