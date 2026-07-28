@@ -280,7 +280,7 @@ POST /api/session/:id/prompt
   → packages/core/src/session.ts:360-384                   V2Session.prompt
       SessionInput.admit                                   input.ts:41
       execution.wake(sessionID)          if resume !== false   session.ts:382
-  → SessionExecution.Service                               execution.ts:22 (unbound tag, :23)
+  → SessionExecution.Service                               execution.ts:21 (unbound tag, :23)
   → execution/local.ts:11-29                               drain → SessionRunner.Service.run
   → run-coordinator.ts:25                                  one active drain per sessionID
   → runner/llm.ts:383-406                                  run()

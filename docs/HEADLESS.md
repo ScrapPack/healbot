@@ -132,7 +132,9 @@ throws `TypeError: Plugin export is not a function` on any export that is not on
 exported constant would disable the whole guard at load time, in a log line nobody reads).
 
 > **Phase 7 erratum — "every string literal" is false, and the sentence was doing real work.**
-> `document_strings()` (`probe_twin.py:83`) is `re.findall(r'"((?:[^"\\]|\\.)*)"', body)` —
+> `document_strings()` (deleted in Phase 7; the history is kept in `probe_twin.py:14-24`'s module
+> docstring, and this citation used to point at line 83 of `probe_twin.py`) was
+> `re.findall(r'"((?:[^"\\]|\\.)*)"', body)` —
 > **double-quoted only**. The two lines that render every *variable* line of the handoff are
 > template literals (`` `- [ ] ${todo.content}` `` and `` `- ${f}` ``) and are invisible to it, as
 > is `MAX_DOCUMENT_TAIL`, which is declared 178 lines above `handoffDocument` and thus outside the

@@ -242,7 +242,7 @@ walks `.opencode` up from cwd. TESTED in the real fork with the full `env.sh` sw
 (`commit`, `changelog`, `translate`, …), an `effect` skill and 2 extra agents. In a neutral dir:
 1 / 3 / 7, as documented.
 
-Corollary: `docs/SCAN.md:188`'s "19 skills" figure was measured inside the fork, which is why it
+Corollary: `docs/SCAN.md:243`'s "19 skills" figure was measured inside the fork, which is why it
 never matched STRIP's 18.
 
 ### `PATCH time.archived` does not remove a session from anything
@@ -400,7 +400,7 @@ holds" is decision-relevant.
    done. P5 asked for a two-session measurement; `PROBE.md` F6 answered a different question
    (picked a hosted model) and declared risk (c) retired. **No concurrent-session observation
    exists in any document.** Encouraging but insufficient: no semaphore in the v1 session path,
-   fan-out sites use `concurrency: "unbounded"`. Untested interaction: `HARNESS.md:110` says an
+   fan-out sites use `concurrency: "unbounded"`. Untested interaction: `HARNESS.md`'s **Behavior → file** section says an
    approval is instance-wide with no `sessionID` filter — nobody has checked whether one blocked
    permission stalls the other three. ~15 minutes to settle.
 2. **Where 350K came from.** Nine mentions across the tree, not one sourcing it. Introduced at

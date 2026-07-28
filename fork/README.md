@@ -17,7 +17,7 @@ is why the wrong number looked plausible. The **17** is right, from three indepe
 | Base commit | `7534d23551f665e65080809975b4ca5c7d63807b` — *"chore: update nix node_modules hashes"* |
 | Version at base | **1.18.5** |
 | Overlay recorded at | fork branch `healbot` @ `509f4c0b1` — *"phase 7: per-turn gate, RETIRE_HARD deleted, threshold 180,000"* (the relay landed one commit earlier) |
-| Exact diff | [`healbot-fork.patch`](healbot-fork.patch) (`git diff 7534d23 509f4c0b1`) — TESTED: applies cleanly to the base, re-checked in a throwaway worktree |
+| Exact diff | [`healbot-fork.patch`](healbot-fork.patch) (`git diff 7534d23 509f4c0b1`) — TESTED, and in Phase 11 more strongly than "applies cleanly": in a throwaway worktree at the base, the tree is **6,330** files, the patch holds **17** `diff --git` headers, `git apply --check` and `git apply` both exit 0, **and every one of the 17 overlay files is byte-identical to `fork/` afterwards**. Applying cleanly would still be true of a patch producing something subtly different from the overlay this repo ships; it does not |
 
 ## What is here
 
@@ -71,6 +71,13 @@ This overlay is a snapshot pinned to `7534d23`. Two ways it goes stale:
    Re-run the overlay build from the checkout's `HEAD` when they diverge — build from `HEAD`,
    not the working tree, or you will capture someone's in-flight edits.
 
+   **Since Phase 11 this is also an ASSERTION, not only a command somebody remembers.**
+   `probe_twin.py` compares all **17** overlay files against the checkout with a mutation check,
+   where it previously compared exactly one (`healbot.tsx`). The gap was not hypothetical: Phase 11
+   corrected citations inside two of the maps and had to copy each into the checkout by hand, and
+   forgetting either would have left the probe green, the overlay right, and the checkout — which
+   every rig in the suite actually runs — wrong.
+
    **Two warnings about this check, both earned.**
 
    *It cannot see staleness that both copies share.* It compares `fork/` against `opencode/`,
@@ -94,6 +101,14 @@ This overlay is a snapshot pinned to `7534d23`. Two ways it goes stale:
 2. **Upstream moves and the `file:line` citations rot.** Every map cites 1.18.5. Re-verify
    before trusting a line number against a newer opencode; the audit
    ([../docs/REVIEW.md](../docs/REVIEW.md)) found citation drift of one or two lines already.
+
+   **This warning stood for eleven phases with nothing behind it, which is why every instance was
+   found by hand.** Since Phase 11 it has a check: `probe_citations.py` resolves ~930 citations
+   across 25 documents and asserts the file exists, the line exists, and it is not blank. It found
+   eight stale — three pointing past the end of `healbot.tsx` by ~140 lines, five landing on blank
+   lines, **three of those created by Phases 9 and 10** editing documents that other documents cite
+   into. It catches POSITIONAL rot only; a citation landing on a real line that says something else
+   is not mechanically checkable and is not claimed. See [../docs/CITE.md](../docs/CITE.md).
 
 ## Why this is not a fork repo
 

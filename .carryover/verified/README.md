@@ -35,6 +35,11 @@ venv/bin/python probe_request_channel.py # 9/9 does `x`'s metadata write actuall
                                      #       no model turn — an empty session has no todos, so
                                      #       retire() takes its no-successor branch)
 venv/bin/python probe_control_wiring.py # 14/14 are the control tools and agent registered?
+venv/bin/python probe_citations.py   # 14/14 do this repo's file:line citations still point at
+                                     #       code? Resolves ~930 citations across 25 documents and
+                                     #       asserts the file exists, the line exists, and it is not
+                                     #       blank. fork/README.md's "drift mode 2", which was named
+                                     #       as a risk for eleven phases with no check behind it
 venv/bin/python probe_rig_contract.py# 22/22 does every rig in this suite still report FAILURE as
                                      #       failure? Reads all 23 entrypoints (itself included) as SOURCE and asserts
                                      #       the contract: a declared assertion FLOOR, a satisfiable
@@ -218,7 +223,7 @@ thinner than the "~10K, under 3%" margin this project already rejected at the ol
 ~170K is the **tail** (p50 is 22,152), it just is not the **maximum**, which is what the derivation
 used it as. **And the threshold is MODEL-SPECIFIC**: the corpus holds a **223,258** turn on
 `gpt-5.6-terra`, which at 180,000 lands at 403,258 and dies — so the number is verified only while
-`opencode.jsonc:16` pins `gpt-5.6-sol`, and the probe asserts that pin. `docs/GROWTH.md` §1.
+`harness/config/opencode/opencode.jsonc:16` pins `gpt-5.6-sol`, and the probe asserts that pin. `docs/GROWTH.md` §1.
 
 **`RETIRE_AT` defaults to 180,000, down from 256,000, and the number is a consequence of the
 semantics above.** With one gate the requirement is `RETIRE_AT + worst_turn < ceiling`. Waiting for
@@ -290,6 +295,29 @@ never checked and is false. Counting `r.check(` per file and comparing against t
 reconciles every other rig in one command: `verify_cold.py` and `verify_retire_350k.py` differ by
 exactly their own crash guard, `verify_control_agent.py` by one conditional. **Re-run a rig before
 quoting its number, or say which execution the number came from.** `docs/VERDICT.md` §2.
+
+**A `file:line` CITATION IS AN UNTYPED COUPLING, AND THE DOCUMENTS ARE ARTIFACTS TOO — Phase 11's
+addition.** Nothing in this repo checked prose against the code it cites, for eleven phases, while
+`fork/README.md` named exactly that as "drift mode 2". MEASURED across 930 citations: eight stale.
+Three pointed past the end of `healbot.tsx`; five landed on blank lines, and **three of those were
+created by Phases 9 and 10** — editing `HARNESS.md` moved two section headings that other documents
+cite, and editing `probe_twin.py` moved a line `docs/HEADLESS.md` cites. Editing a file that other
+files point *into* is the failure, and it is the same untyped-coupling shape as the metadata request
+channel and the recorded-score-outliving-its-file of Phase 10.
+
+Three rules fall out, all of them earned within the phase:
+
+- **A citation quoted as BROKEN must not be written in live `file:line` form.** A reader cannot tell
+  a pointer from a specimen, and neither can the probe. `docs/CITE.md`'s first draft tripped its own
+  check nine times, every hit a stale citation being discussed. Write "line 1241 of `healbot.tsx`".
+  An escape marker was considered and rejected: it is a hole that silences real rot, and the person
+  most likely to reach for it is the one least inclined to fix the citation.
+- **Line numbers are for code; section NAMES are for living documents.** `HARNESS.md` gains rows
+  every phase, so every `HARNESS.md:NNN` is guaranteed to rot — demonstrated an hour after the fix,
+  when this phase's own index row re-broke the citation it had just corrected. Cite the section.
+- **Positional rot is checkable; semantic rot is not, and the probe does not claim it.** A citation
+  landing on a real, non-blank line that says something else entirely passes. 930 citations now
+  resolve; how many describe what they claim to is not a question a probe can answer.
 
 **A GREEN RUN IS NOT EVIDENCE THAT THE RUN HAPPENED — and every rule in this section was about
 predicates, not about execution.** `Results.summary()` returned `not failed` over whatever rows

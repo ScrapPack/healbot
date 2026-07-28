@@ -93,7 +93,7 @@ def default_of(source, name):
     return int(m.group(1).replace("_", "")) if m else None
 
 
-r = rig.Results(expect=23)
+r = rig.Results(expect=25)
 
 grid = read(GRID)
 plugin = read(PLUGIN)
@@ -107,6 +107,47 @@ r.check(
     "the fork overlay and the checkout hold the same healbot.tsx",
     overlay == grid,
     "otherwise this probe reads one file and the running TUI uses another",
+)
+
+# ...and the other SIXTEEN. `fork/README.md` calls this "drift mode 1" and prescribes a shell
+# command for it, which means it runs when somebody remembers. The check above covers exactly one
+# file of seventeen — 14 of the rest are the `.MAP.md` subsystem maps, which are the deliverable,
+# and `builtins.ts` is the two-line edit that registers the grid at all.
+#
+# The risk is not hypothetical and it is not upstream's: Phase 11 corrected stale citations inside
+# two of those maps and had to copy each into the checkout by hand. Forgetting either would have
+# left this probe green, the overlay right and the checkout wrong — and the checkout is what every
+# other rig in this suite actually runs.
+overlay_files = sorted(
+    os.path.relpath(os.path.join(dirpath, fn), f"{rig.HEALBOT}/fork")
+    for dirpath, _, filenames in os.walk(f"{rig.HEALBOT}/fork")
+    if ".git" not in dirpath
+    for fn in filenames
+    if fn not in ("README.md",) and not fn.endswith(".patch")
+)
+mismatched = [
+    rel
+    for rel in overlay_files
+    if not os.path.exists(f"{rig.HEALBOT}/opencode/{rel}")
+    or read(f"{rig.HEALBOT}/fork/{rel}") != read(f"{rig.HEALBOT}/opencode/{rel}")
+]
+r.check(
+    f"EVERY overlay file matches the checkout — {len(overlay_files)} files, not just the grid",
+    len(overlay_files) >= 17 and not mismatched,
+    "fork/README.md's drift mode 1, as an assertion instead of a shell command somebody remembers. "
+    + (f"DIVERGED: {mismatched}" if mismatched else "all identical"),
+)
+r.check(
+    "MUTATION: a diverged overlay file IS detected",
+    bool(
+        [
+            rel
+            for rel in overlay_files
+            if (read(f"{rig.HEALBOT}/fork/{rel}") + "\n// drift") != read(f"{rig.HEALBOT}/opencode/{rel}")
+        ]
+    ),
+    "the leg above is an absence assertion over a comparison; if the reader returned the same text "
+    "for both paths it would pass trivially, so the same predicate is re-run against a corrupted copy",
 )
 
 # ---------------------------------------------------------------------------------------------

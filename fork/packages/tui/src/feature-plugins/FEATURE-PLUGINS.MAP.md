@@ -221,7 +221,7 @@ Healbot *retirement confirmation* dialog (`api.ui.DialogConfirm` + toast on resu
 **This section used to document `system/healbot-spike.tsx` — "the working proof", 133 lines,
 "already registered (`builtins.ts:36`)". That file no longer exists.** It was deleted at fork
 `26c9316`, in the commit that landed the real grid; `find . -name 'healbot-spike*'` returns
-nothing, and `HARNESS.md:316` records the same resolution. Everything below is the shipped grid.
+nothing, and `HARNESS.md`'s **Traps** table records the same resolution. Everything below is the shipped grid.
 
 Shape B, built from `diff-viewer`'s skeleton. **No line or byte count is quoted here** — see the
 inventory note above and `HARNESS.md:130-132`. `wc` it.
@@ -294,7 +294,7 @@ this: the ~360K ceiling, the 256,000 default, and the handoff document.
 | F1 | `createBuiltinPlugins(options)` **ignores its `options` argument**. Anything flag-gated must read the flag itself. | `builtins.ts:22-38` |
 | F2 | Activation is **sequential and order-dependent** — commands registered earlier win keybind precedence; routes are **last-wins** on id collision. Array position in `builtins.ts:23-37` is meaningful. | `packages/opencode/src/plugin/tui/runtime.ts:1110-1117`; `plugin/api.ts:35` |
 | F3 | `enabled: false` (which-key) means the plugin never runs at boot; users flip it via `plugin_enabled` config or the plugin manager. | `which-key.tsx:604`; `runtime.ts:479,670-672,1102` |
-| F4 | Opening a route from a palette command **must** call `api.ui.dialog.clear()` or the dialog stays layered over the route. | `diff-viewer.tsx:1067`; `healbot.tsx:1241` |
+| F4 | Opening a route from a palette command **must** call `api.ui.dialog.clear()` or the dialog stays layered over the route. | `diff-viewer.tsx:1067`; `healbot.tsx:1090` |
 | F5 | Route params are read via `"params" in api.route.current ? …` and cast without validation. A missing param is `undefined`, not an error. | `diff-viewer.tsx:95-103` |
 | F6 | `notifications.ts` state is **plugin-local Sets, lost on restart**. Any "finished" signal derived from it — or from `session_status` — is process-local. | `notifications.ts:30-33`; `context/CONTEXT.MAP.md` G3 |
 | F7 | Feature-plugins freely import host internals with relative paths (`../../keymap`, `../../context/theme`, `../../ui/dialog-select`). This is builtin-only; external plugins get `api` and the `package.json` exports map. | `diff-viewer.tsx:11-20`; `plugins.tsx:5,7` |
@@ -303,8 +303,8 @@ this: the ~360K ceiling, the 256,000 default, and the handoff document.
 **F9 is gone.** It read: "`healbot-spike.tsx` is registered in `builtins.ts:36` and will keep
 appearing as `/healbot` in the palette until removed. Pick a **different** route name and slash
 name for the real grid, or delete the spike in the same change." The second option is what
-happened, at fork `26c9316`, so `/healbot` belongs to `healbot.tsx:1235` and there is nothing to
-collide with. `HARNESS.md:316` already carried this as struck-through and resolved.
+happened, at fork `26c9316`, so `/healbot` belongs to `healbot.tsx:1082-1084` and there is nothing to
+collide with. `HARNESS.md`'s **Traps** table already carried this as struck-through and resolved.
 
 ---
 
@@ -317,7 +317,7 @@ the table.
 
 | Step | Lift from | file:line |
 |---|---|---|
-| 1. Create `system/healbot.tsx` with shape B | `diff-viewer.tsx:1045-1072` | route + palette command + `dialog.clear()` → shipped at `healbot.tsx:1223-1245` |
+| 1. Create `system/healbot.tsx` with shape B | `diff-viewer.tsx:1045-1072` | route + palette command + `dialog.clear()` → shipped at `healbot.tsx:1072-1090` |
 | 2. Register it | `builtins.ts` | shipped: import at `:11`, last array entry at `:36`; `HealbotSpike` dropped in the same commit |
 | 3. All-session list | **direct import** `useSync` — precedent is the `useTheme` import | `diff-viewer.tsx:13`; store `context/sync.tsx:83` |
 | 4. Border: amber / green / dim | the `active` Set discriminator | `notifications.ts:59-78` (esp. `:68`) |

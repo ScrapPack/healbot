@@ -12,30 +12,35 @@ handoff that pastes ten thousand words of history is working against its own pre
 ## The prompt
 
 ```
-Continue the healbot build at ~/Desktop/healbot. Phase 10 is complete and committed; the fork
-overlay is pinned at 509f4c0b1 (unchanged — Phase 10 built nothing in the fork and spent nothing).
+Continue the healbot build at ~/Desktop/healbot. Phase 11 is complete and committed; the fork
+overlay is pinned at 509f4c0b1 (unchanged — Phase 11 changed no fork CODE and spent nothing; it did
+correct stale citations inside two of the overlay's .MAP.md files, resynced to the checkout).
 
 READ FIRST, in this order. Stop when you can name the file that owns any given behaviour:
   1. HARNESS.md          — root index: load-bearing facts, Traps, Closed, Still open
-  2. docs/VERDICT.md     — Phase 10: six PAID rigs printed summary()'s verdict and threw it away,
+  2. docs/CITE.md        — Phase 11: the maps had rotted and nothing checked them. 930 citations
+                           swept, eight stale — and THREE were created by Phases 9 and 10 editing
+                           documents that other documents cite into. Also: probe_twin guarded 1 of
+                           17 overlay files; the fork is verified to REPRODUCE from its patch
+  3. docs/VERDICT.md     — Phase 10: six PAID rigs printed summary()'s verdict and threw it away,
                            so a failing run exited 0 — including smoke.py, and verify_surface.py
                            which held a permanently-red assertion for five phases. Also
                            verify_handoff.py's recorded 21/21 is UNREACHABLE (22 assertions since
                            Phase 5) and is cited in four docs as the Phase 4 exit gate
-  3. docs/CLONE.md       — Phase 9: the suite could not tell "everything passed" from "almost
+  4. docs/CLONE.md       — Phase 9: the suite could not tell "everything passed" from "almost
                            nothing ran". From a FRESH CLONE three probes exited 0 having proven
                            nothing, and probe_turn_growth.py's two load-bearing assertions get
                            EASIER as their evidence disappears — 48.2% margin instead of 1.3%
-  4. docs/GROWTH.md      — Phase 8: `worst_turn` was ONE measurement and it was not the worst.
+  5. docs/GROWTH.md      — Phase 8: `worst_turn` was ONE measurement and it was not the worst.
                            The pinned model's worst is 175,148, the bound on RETIRE_AT is 184,852,
                            and the shipped 180,000 clears it by 1.3%. The threshold is
                            MODEL-SPECIFIC. Also: `healbot_*: deny` is a context control, NOT a
                            sandbox. (CLONE.md §4 annotates its corpus counts; its findings stand)
-  5. .carryover/verified/README.md — the test rig and its assertion discipline
+  6. .carryover/verified/README.md — the test rig and its assertion discipline
 
 Do NOT read the whole tree first. HARNESS.md indexes everything; follow it on demand.
 
-YOUR TASK — Phase 11. Everything in the build order is built and every known correctness hole is
+YOUR TASK — Phase 12. Everything in the build order is built and every known correctness hole is
 closed. There is NO decision pending on me and nothing is blocking you. Do not invent something to
 build.
 
@@ -55,11 +60,12 @@ build.
        derivation is stable under corpus growth, not a reason to revisit it.
      - NO STARTUP SWEEP. Retirement stays purely event-driven. A session parked over the gate when
        a server restarts stays there until its next turn ends. Decided in Phase 8 §5.
-     The one LIVE constraint out of all that: RETIRE_AT is verified only while opencode.jsonc:16
-     pins gpt-5.6-sol. probe_turn_growth.py asserts the pin.
+     The one LIVE constraint out of all that: RETIRE_AT is verified only while
+     harness/config/opencode/opencode.jsonc:16 pins gpt-5.6-sol (there are TWO files named
+     opencode.jsonc; the checkout's has a blank line 16). probe_turn_growth.py asserts the pin.
 
   1. FREE, and start here — it has been the best value in each of the last two phases.
-     - Re-run the ELEVEN free probes (below). Expect 164/164. If probe_turn_growth.py's corpus counts
+     - Re-run the TWELVE free probes (below). Expect 180/180. If probe_turn_growth.py's corpus counts
        have moved, that is EXPECTED and not a finding by itself: the suite writes to the corpus it
        measures (docs/CLONE.md §4). What would be a finding is a moved MAXIMUM, BOUND or
        CONDITIONAL — those held across +14% of corpus and are the load-bearing figures.
@@ -99,6 +105,12 @@ METHOD — this project's standard, and it is not decoration:
     workload that could have violated it.
   - A FAILING ASSERTION NEEDS THE SAME SCRUTINY AS A PASSING ONE (Phase 8's addition). Before
     writing down a red, ask whether it is an artifact of your own grouping or fixture.
+  - THE DOCUMENTS ARE ARTIFACTS TOO (Phase 11's addition). A `file:line` citation is an untyped
+    coupling between two files: edit either end and it rots silently. probe_citations.py checks
+    POSITIONAL rot only — semantic rot is not mechanically checkable and is not claimed. Two
+    editorial rules came with it: a citation quoted as BROKEN must not be written in live
+    `file:line` form, and line numbers are for CODE while section NAMES are for living documents
+    like HARNESS.md, which gains rows every phase and will rot any line citation into it.
   - A RECORDED SCORE IS A CLAIM ABOUT A FILE AT A MOMENT (Phase 10's addition). Re-run a rig
     before quoting its number, or say which execution the number came from. Phase 8 found one rig
     whose score did not match its file and called it "the one rig in the suite"; that uniqueness
@@ -111,19 +123,20 @@ METHOD — this project's standard, and it is not decoration:
     much as the predicate needs a mutation check — losing the evidence and passing the test can be
     the same event.
   - A NUMBER IS NOT EVIDENCE, AND REPEATING IT DOES NOT MAKE IT MORE EVIDENCE (Phase 8's).
-  - Run the FREE probes before spending anything (164/164 total):
+  - Run the FREE probes before spending anything (180/180 total):
       cd .carryover/verified
       venv/bin/python probe_on_grid.py          # 4/4
       venv/bin/python probe_error_state.py      # 10/10
       venv/bin/python probe_focus.py            # 24/24
       venv/bin/python probe_fleet.py            # 10/10
       venv/bin/python probe_control_wiring.py   # 14/14
-      venv/bin/python probe_twin.py             # 23/23
+      venv/bin/python probe_twin.py             # 25/25
       venv/bin/python probe_headless_arm.py     # 14/14
       venv/bin/python probe_request_channel.py  # 9/9
       venv/bin/python probe_turn_predicate.py   # 18/18
       venv/bin/python probe_turn_growth.py      # 16/16
       venv/bin/python probe_rig_contract.py     # 22/22
+      venv/bin/python probe_citations.py        # 14/14
   - Gates before you claim done, from ~/Desktop/healbot/opencode:
       ./node_modules/.bin/tsgo --noEmit -p packages/tui/tsconfig.json    # expect exit 0, no output
       ./node_modules/.bin/oxlint packages/tui/src/feature-plugins/system/healbot.tsx
@@ -141,8 +154,9 @@ rather than an error:
     harness/fleet.sh.
   - RETIRE_AT IS ONLY VALID FOR THE PINNED MODEL. `worst_turn` is a fact about a MODEL's
     tool-calling behaviour, not about opencode. The pinned gpt-5.6-sol's worst turn is 175,148;
-    the same corpus has 223,258 on gpt-5.6-terra. Changing opencode.jsonc:16 silently un-verifies
-    the threshold — probe_turn_growth.py asserts the pin so it goes red instead.
+    the same corpus has 223,258 on gpt-5.6-terra. Changing the pin at
+    harness/config/opencode/opencode.jsonc:16 silently un-verifies the threshold —
+    probe_turn_growth.py asserts the pin so it goes red instead.
   - `healbot_*: deny` SCOPES CONTEXT, NOT CAPABILITY. TESTED: the build agent, with all five tool
     definitions removed from its payload, ran `opencode run --auto ...` through bash and created a
     real top-level session. Do not build anything on the assumption that a denied agent cannot
@@ -186,68 +200,52 @@ Ask me before spending real API credits on anything beyond a few turns.
 
 ## Why this order
 
-**The one new item is at the top and it is a re-run, not a discovery.** `verify_handoff.py` is the
-only rig in the suite whose recorded score cannot be produced by the file that bears it, and four
-documents cite that score as the evidence for the Phase 4 exit gate. That is cheap to settle and it
-is the only thing Phase 10 opened.
+**Phase 11 emptied the free list and then found two more things in it**, which is now the third
+phase running where that happened. The pattern is stable enough to state: the free findings come
+from looking at a surface nobody has looked at *as an artifact* — the derivation under a number
+(8), the suite from a fresh clone (9), the paid rigs as source (10), the prose as pointers (11).
 
-**§0 stays, unchanged and unreopened for a third phase.** Both decisions have now survived two
-phases of adversarial work: Phase 9 showed `RETIRE_AT`'s derivation is stable under a 14% larger
-corpus, and nothing since has touched the sweep. The section exists to stop a fresh session
-treating settled policy as a bug, and it has earned its place.
+**§0 stays.** Both decisions have survived three phases of adversarial work.
 
-**1 is free and still first, on three phases of evidence.** Phase 8 re-derived `worst_turn` by
-reading a database already on disk. Phase 9 found three probes reporting success over nothing by
-running `git clone`. Phase 10 found six rigs that always exited 0 by reading twelve files. None
-cost a cent, and each found something the paid work would not have.
-
-**2 and 3 are last because they are confirmations, not discoveries**, and 2 was offered and
-declined in Phase 8 on exactly that reasoning.
-
-**The `/code-review ultra` reminder stays out of the prompt, and the open rows stay in the docs.**
-The review has been run; the stale rows are the owner's call to leave.
+**The one paid item is unchanged and still unbought.** `verify_handoff.py`'s 21/21 is still a Phase 4
+score against a file Phase 5 edited. Its floor is 22.
 
 Deliberately **not** in the prompt:
 
 - **Worktree isolation** (build-order step 7). `PLAN.md` marks it optional and nothing needs it.
 - **The startup sweep and the threshold**, except as §0's do-not-reopen list.
-- **Re-running every paid rig to validate its new floor.** The floors are set to each rig's
-  *unconditional* assertion count, which cannot false-fail a run whose conditional legs skip, so
-  paying to validate them ahead of need would be spending money to check arithmetic. They get
-  validated the next time each rig runs for its own reasons.
-- **Making the suite portable** — a fresh clone cannot rebuild `hb/*.db` without paying for the
-  rigs that wrote it. Recorded as a fact about the evidence in `docs/CLONE.md` §6.
+- **Semantic citation checking.** `probe_citations.py` proves a citation points somewhere real,
+  never that it points at the right thing. That is a reading task, not a probe, and pretending
+  otherwise would produce exactly the kind of guard this project keeps finding.
+- **Making the suite portable** — a fresh clone cannot rebuild `hb/*.db` without paying.
 
 ## Current state, for the maintainer of this file
 
-Phase 10 changed **no fork code** — the overlay stays pinned at `509f4c0b1` and
-`fork/healbot-fork.patch` is untouched. Nothing was paid for. What changed is all twelve paid rigs,
-one new probe, one new phase doc, and annotations on the four documents that cite `21/21`.
+Phase 11 changed **no fork code**. It corrected stale citations inside two `.MAP.md` files in the
+overlay and resynced both to the checkout; `healbot.tsx`, `builtins.ts` and the patch are untouched,
+so the overlay stays pinned at `509f4c0b1`. Nothing was paid for.
 
-What it found, in the order it found it:
+What it found:
 
-- **Zero of twelve paid rigs had an assertion floor and ten of twelve had no crash guard** — Phase
-  9's fix had been applied to the free half only.
-- **Six of them never read `summary()`'s return value.** `finally: r.summary(); t.close()`, no
-  `sys.exit`; three contain no exit call anywhere. A failing run exited **0**. `smoke.py` — the
-  provider check the README says to run first — is one, and `verify_surface.py` carried a
-  permanently-red assertion for five phases because nothing surfaced it.
-- **`verify_handoff.py`'s recorded 21/21 is unreachable.** 22 unconditional assertions since Phase
-  5 swapped a vacuous check for two mutation legs without re-running it.
-- **Phase 8's *"the one rig in the suite"* was two rigs**, and the uniqueness claim was never
-  checked — one `grep -c` away.
+- **Citation rot had no guard**, though `fork/README.md` named it as "drift mode 2". A sweep of 930
+  citations across 25 documents found **eight stale**: three pointing ~140 lines past the end of
+  `healbot.tsx` (pre-existing), five landing on blank lines.
+- **Three of the five were created by Phases 9 and 10** — editing `HARNESS.md` moved two section
+  headings other documents cite, and editing `probe_twin.py` moved a line `docs/HEADLESS.md` cites.
+  The phases about silent failure introduced silent doc rot while nothing was looking.
+- **The model-pin citation was ambiguous and resolved to a blank line.** Two files are named
+  `opencode.jsonc` and the checkout's has a blank line 16; it is the citation
+  `probe_turn_growth.py`'s `RETIRE_AT` argument depends on. All occurrences now carry the full path.
+- **`probe_twin` was guarding 1 of the 17 overlay files.** Now all 17, with a mutation check — and
+  the risk fired during the phase itself.
+- **The fork reproduces**, verified harder than recorded: base tree 6,330, patch applies, and
+  applying it yields all 17 overlay files byte-identically.
 
-Fixed: all twelve rigs now declare a floor, guard their crash, and exit on the verdict;
-`verify_surface.py`'s five-phase-old test bug is corrected (VERIFIED, statically controlled in both
-directions, not re-run). **Every paid-rig change is VERIFIED, not TESTED** — they cannot be executed
-without spending, so the floors are deliberately conservative.
+New guard: **`probe_citations.py`**, free, 14/14. Its own first draft manufactured **155 false
+findings** by resolving `prompt.ts:1295` to the 57-line schema file instead of the 1,631-line session
+one — seven files share that basename — and the resolver bug is pinned as an assertion so it cannot
+return.
 
-New guard: **`probe_rig_contract.py`**, free, 22/22. It reads all 23 entrypoints (itself included) as source and
-asserts the contract, with a mutation check per predicate and an inverted leg for the no-`try`
-shape. It caught two of this phase's own mistakes within a minute of existing — a false negative in
-its own `floor_of` (it matched `Results(...)` but not `rig.Results(...)`), and a scripted patch that
-destroyed 32 lines of `verify_retire.py`, which was restored from git and redone by hand.
-
-Free suite: 4/4, 10/10, 24/24, 10/10, 14/14, 23/23, 14/14, 9/9, 18/18, 16/16, **22/22** —
-**164 total**, every probe exit 0. Gates: `tsgo` exit 0 with no output, `oxlint` exit 0 with the
+Free suite: 4/4, 10/10, 24/24, 10/10, 14/14, **25/25**, 14/14, 9/9, 18/18, 16/16, 22/22, **14/14** —
+**180 total**, every probe exit 0. Gates: `tsgo` exit 0 with no output, `oxlint` exit 0 with the
 expected 3 warnings.
