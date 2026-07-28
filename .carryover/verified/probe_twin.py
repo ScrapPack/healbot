@@ -62,8 +62,24 @@ OVERLAY = f"{rig.HEALBOT}/fork/packages/tui/src/feature-plugins/system/healbot.t
 
 
 def read(path):
-    with open(path, encoding="utf-8") as fh:
-        return fh.read()
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+    except FileNotFoundError:
+        # `opencode/` is DERIVED and gitignored, so on a fresh clone this raises a bare
+        # FileNotFoundError from inside a module-level call and the reader gets a traceback
+        # instead of a cause. MEASURED in Phase 9 by actually cloning the repo. The exit code
+        # was already 1 — unlike the probes that crashed into a green 0 — so this is a
+        # legibility fix, not a correctness one.
+        if path == GRID:
+            print(
+                f"\n!! {path} not found.\n"
+                "   `opencode/` is the derived checkout and is gitignored — a fresh clone does not\n"
+                "   have it. Rebuild it from fork/README.md, then re-run.\n",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        raise
 
 
 def default_of(source, name):
@@ -77,7 +93,7 @@ def default_of(source, name):
     return int(m.group(1).replace("_", "")) if m else None
 
 
-r = rig.Results()
+r = rig.Results(expect=23)
 
 grid = read(GRID)
 plugin = read(PLUGIN)

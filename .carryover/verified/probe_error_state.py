@@ -36,7 +36,7 @@ PORT = 4736
 SOURCE = db("retire350")
 REPLAY = db("errorstate")
 
-r = Results()
+r = Results(expect=10)
 
 # ---------------------------------------------------------------- prepare the replay DB
 try:
@@ -102,6 +102,18 @@ try:
 
     t.send("q", 2.0)
     r.check("negative control: on_grid is FALSE after leaving the grid", not on_grid(t))
+except SystemExit:
+    raise
+except Exception:
+    # Failures must look like failures. `sys.exit()` inside a `finally` DISCARDS the escaping
+    # exception, so a probe that crashed still exits on summary()'s verdict over whatever ran
+    # first. probe_request_channel.py:151 named this and guarded against it; it was never
+    # backfilled. Phase 9 backfilled it, after a fresh clone crashed seven probes into green
+    # exit codes — see Results(expect=...) in rig.py for the other half of the fix.
+    import traceback
+
+    traceback.print_exc()
+    r.check("UNEXPECTED EXCEPTION", False, "see traceback above")
 finally:
     ok = r.summary()
     t.close()

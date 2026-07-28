@@ -54,7 +54,7 @@ LOG = f"{rig.WORK}/control-wiring.log"
 CONFIG = f"{rig.HEALBOT}/harness/config/opencode"
 TOOLS = ["healbot_list", "healbot_spawn", "healbot_prompt", "healbot_abort", "healbot_retire"]
 
-r = rig.Results()
+r = rig.Results(expect=14)
 server = None
 
 
@@ -179,6 +179,18 @@ try:
     )
     r.check("…and it armed", "[healbot]" in log, "the plugin's own log line")
 
+except SystemExit:
+    raise
+except Exception:
+    # Failures must look like failures. `sys.exit()` inside a `finally` DISCARDS the escaping
+    # exception, so a probe that crashed still exits on summary()'s verdict over whatever ran
+    # first. probe_request_channel.py:151 named this and guarded against it; it was never
+    # backfilled. Phase 9 backfilled it, after a fresh clone crashed seven probes into green
+    # exit codes — see Results(expect=...) in rig.py for the other half of the fix.
+    import traceback
+
+    traceback.print_exc()
+    r.check("UNEXPECTED EXCEPTION", False, "see traceback above")
 finally:
     if server:
         try:

@@ -15,7 +15,7 @@ from rig import Results, boot, db, on_grid
 PORT = 4731
 DB = db("probe_on_grid")
 
-r = Results()
+r = Results(expect=4)
 t = boot(PORT, DB, cols=120, rows=40, settle=30)
 try:
     t.show("home (nothing opened yet)")
@@ -33,6 +33,18 @@ try:
     t.send("q", 3.0)
     t.show("after q")
     r.check("on_grid is FALSE again after leaving the grid", not on_grid(t))
+except SystemExit:
+    raise
+except Exception:
+    # Failures must look like failures. `sys.exit()` inside a `finally` DISCARDS the escaping
+    # exception, so a probe that crashed still exits on summary()'s verdict over whatever ran
+    # first. probe_request_channel.py:151 named this and guarded against it; it was never
+    # backfilled. Phase 9 backfilled it, after a fresh clone crashed seven probes into green
+    # exit codes — see Results(expect=...) in rig.py for the other half of the fix.
+    import traceback
+
+    traceback.print_exc()
+    r.check("UNEXPECTED EXCEPTION", False, "see traceback above")
 finally:
     ok = r.summary()
     t.close()

@@ -25,7 +25,7 @@ HEALBOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file
 FLEET = f"{HEALBOT}/harness/fleet.sh"
 PORT = 4734
 
-r = Results()
+r = Results(expect=10)
 api = Api(PORT, PROJECT)
 
 
@@ -88,6 +88,18 @@ try:
     t2.send("/healbot", 1.5)
     t2.key("enter", 4.0)
     r.check("the reattached terminal has the grid too", on_grid(t2))
+except SystemExit:
+    raise
+except Exception:
+    # Failures must look like failures. `sys.exit()` inside a `finally` DISCARDS the escaping
+    # exception, so a probe that crashed still exits on summary()'s verdict over whatever ran
+    # first. probe_request_channel.py:151 named this and guarded against it; it was never
+    # backfilled. Phase 9 backfilled it, after a fresh clone crashed seven probes into green
+    # exit codes — see Results(expect=...) in rig.py for the other half of the fix.
+    import traceback
+
+    traceback.print_exc()
+    r.check("UNEXPECTED EXCEPTION", False, "see traceback above")
 finally:
     ok = r.summary()
     for t in (t1, t2):

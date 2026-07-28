@@ -38,7 +38,7 @@ SOFT = "37000"
 
 ARMED = r"\[healbot\] headless retirement armed"
 
-r = rig.Results()
+r = rig.Results(expect=14)
 servers = []
 
 
@@ -198,6 +198,18 @@ try:
         "arming is not firing",
     )
 
+except SystemExit:
+    raise
+except Exception:
+    # Failures must look like failures. `sys.exit()` inside a `finally` DISCARDS the escaping
+    # exception, so a probe that crashed still exits on summary()'s verdict over whatever ran
+    # first. probe_request_channel.py:151 named this and guarded against it; it was never
+    # backfilled. Phase 9 backfilled it, after a fresh clone crashed seven probes into green
+    # exit codes — see Results(expect=...) in rig.py for the other half of the fix.
+    import traceback
+
+    traceback.print_exc()
+    r.check("UNEXPECTED EXCEPTION", False, "see traceback above")
 finally:
     for proc in servers:
         try:

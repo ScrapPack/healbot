@@ -50,7 +50,7 @@ PORT = 4747
 DB = db("reqchan")
 LOG = f"{SP}/hb/request-channel.log"
 
-r = Results()
+r = Results(expect=9)
 api = Api(PORT, PROJECT)
 server = None
 

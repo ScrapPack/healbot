@@ -53,7 +53,7 @@ HOME = r"Ask anything\.\.\."
 # navigation rigs use to force cells onto multiple rows.
 SESSION = r"\d+% used"
 
-r = Results()
+r = Results(expect=24)
 
 try:
     shutil.copyfile(SOURCE, REPLAY)
@@ -172,6 +172,18 @@ try:
         "the two assertions are the same predicate with opposite expectations, so neither can be "
         "a tautology",
     )
+except SystemExit:
+    raise
+except Exception:
+    # Failures must look like failures. `sys.exit()` inside a `finally` DISCARDS the escaping
+    # exception, so a probe that crashed still exits on summary()'s verdict over whatever ran
+    # first. probe_request_channel.py:151 named this and guarded against it; it was never
+    # backfilled. Phase 9 backfilled it, after a fresh clone crashed seven probes into green
+    # exit codes — see Results(expect=...) in rig.py for the other half of the fix.
+    import traceback
+
+    traceback.print_exc()
+    r.check("UNEXPECTED EXCEPTION", False, "see traceback above")
 finally:
     ok = r.summary()
     t.close()

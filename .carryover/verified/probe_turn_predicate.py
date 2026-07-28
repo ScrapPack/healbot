@@ -95,7 +95,7 @@ CASES = [
     ("in-flight row with only time.completed", {"time": {"completed": 1}}, False),
 ]
 
-r = rig.Results()
+r = rig.Results(expect=18)
 source = open(PLUGIN, encoding="utf-8").read()
 
 try:

@@ -31,7 +31,13 @@ with the ceiling MEASURED at ~360K (`docs/HARDEN.md:227`). Until this phase `wor
 turn, measured once** (`docs/HARDEN.md` §6). The whole shipped number rested on it, and one data
 point cannot tell a tail from a middle.
 
-`probe_turn_growth.py` re-derives it from every session database on disk. **FREE, 15/15.**
+`probe_turn_growth.py` re-derives it from every session database on disk. **FREE, 15/15** (16/16 since
+Phase 9 added a fixture check on the pinned-model population — `docs/CLONE.md` §2).
+
+> **Phase 9 note.** The corpus below is 86 turns; it is **94** now, and the delta is `hb/control.db`,
+> written by `verify_control_agent.py` §2 *after* these figures were recorded. Every maximum, bound
+> and conditional in this section is unchanged across that growth. The counts are a snapshot — the
+> suite writes to the corpus it measures. `docs/CLONE.md` §4.
 
 ### What is measured, and why it is not what §6's table shows
 

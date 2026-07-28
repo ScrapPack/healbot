@@ -239,8 +239,34 @@ class Api:
 
 
 class Results:
-    def __init__(self):
+    """Assertion ledger. `expect` is a FLOOR on how many assertions must run, and it is not
+    bookkeeping — it is the only thing that can tell "everything passed" from "almost nothing ran".
+
+    Without it `summary()` returns `not failed` over whatever happened to be appended, so a probe
+    that died on its third line reports `2/2 passed` and exits 0. MEASURED in Phase 9 by cloning
+    this repo and running the suite in it: `probe_on_grid` reported **2/2**, `probe_control_wiring`
+    **7/7**, and `probe_headless_arm` printed `!! timed out waiting for server` and then **1/1** —
+    all three exit 0, all three having proven nothing. The opencode checkout is gitignored, so
+    `bun run --cwd` ENOENTs and no server ever starts; every screen predicate is then trivially
+    false and every `not on_grid` assertion passes vacuously.
+
+    Two distinct escape routes produce that, which is why the floor sits here rather than in a
+    per-probe guard:
+
+    - **A crash.** `sys.exit()` inside a `finally` DISCARDS the in-flight exception, so a probe
+      that raises still exits on `summary()`'s verdict. `probe_request_channel.py:151-153` names
+      this exactly and guards against it; nine other probes carried the identical `finally` and
+      seven had no guard at all.
+    - **A timeout.** `wait_for()` prints `!!` and returns None. Nothing raises, so the probe simply
+      runs fewer assertions and the summary never notices.
+
+    The floor is a MINIMUM, not an equality: adding an assertion must not turn a probe red, but
+    losing one must. Set it to the count the probe is recorded as producing.
+    """
+
+    def __init__(self, expect=None):
         self.rows = []
+        self.expect = expect
 
     def check(self, name, ok, detail=""):
         self.rows.append((name, bool(ok), detail))
@@ -252,8 +278,17 @@ class Results:
         for name, ok, detail in self.rows:
             print(f"  {'PASS' if ok else 'FAIL'}  {name}" + (f"   ({detail})" if detail else ""))
         failed = [n for n, ok, _ in self.rows if not ok]
-        print(f"\n  {len(self.rows) - len(failed)}/{len(self.rows)} passed", flush=True)
-        return not failed
+        short = self.expect is not None and len(self.rows) < self.expect
+        tail = f" (expected at least {self.expect})" if self.expect is not None else ""
+        print(f"\n  {len(self.rows) - len(failed)}/{len(self.rows)} passed{tail}", flush=True)
+        if short:
+            print(
+                f"  !! SHORT RUN — only {len(self.rows)} of {self.expect} assertions ran. The ones that\n"
+                f"     did are NOT evidence: a probe that stops early leaves every later claim\n"
+                f"     unmeasured, and screen predicates pass vacuously against a dead terminal.",
+                flush=True,
+            )
+        return not failed and not short
 
 
 def wait_for(fn, timeout, label, interval=1.0):

@@ -7,7 +7,11 @@ bug in the test, not the code (see below).
 ```sh
 python3 -m venv venv && venv/bin/pip install pyte
 
-# free — no model turns, no API credits
+# free — no model turns, no API credits.
+# FREE TO RE-RUN, not free to run the FIRST time: all but probe_turn_predicate.py need the
+# gitignored opencode/ checkout (rebuild from fork/README.md), and probe_error_state.py,
+# probe_focus.py and probe_turn_growth.py need hb/*.db, which only the PAID rigs below can
+# create. On a fresh clone this suite does not run — see docs/CLONE.md.
 venv/bin/python probe_on_grid.py     # 4/4   does the route predicate actually discriminate?
 venv/bin/python probe_fleet.py       # 10/10 does harness/fleet.sh do what it claims?
 venv/bin/python probe_error_state.py # 10/10 does a hard-errored session render ERROR?
@@ -31,7 +35,7 @@ venv/bin/python probe_request_channel.py # 9/9 does `x`'s metadata write actuall
                                      #       no model turn — an empty session has no todos, so
                                      #       retire() takes its no-successor branch)
 venv/bin/python probe_control_wiring.py # 14/14 are the control tools and agent registered?
-venv/bin/python probe_turn_growth.py # 15/15 is ~170K the TAIL or the MIDDLE of single-turn growth?
+venv/bin/python probe_turn_growth.py # 16/16 is ~170K the TAIL or the MIDDLE of single-turn growth?
                                      #       Re-derives the `worst_turn` that SIZES RETIRE_AT from
                                      #       every session DB on disk instead of the one turn it
                                      #       rested on. Runs the SHIPPED turnFinished() and
@@ -191,7 +195,7 @@ grep over both files, and asserted twice in the suite: `probe_twin.py:132-136` a
 the THRESHOLD being low enough to absorb a worst-case turn, which is why the default moved.
 
 **PHASE 8 RE-DERIVED `worst_turn`, AND THE PARAGRAPH BELOW RESTS ON ONE TURN.** `probe_turn_growth.py`
-(free, 15/15) groups every assistant message on disk into TURNS with the shipped `turnFinished()` —
+(free, 16/16) groups every assistant message on disk into TURNS with the shipped `turnFinished()` —
 86 completed turns, the rig DBs plus the same `~/.local/share/opencode/opencode.db` the 733-message
 figure comes from, fixture-checked at 677/56/733. Results: the worst single-turn growth on the pinned
 `gpt-5.6-sol` is **175,148**, so the bound on `RETIRE_AT` is **184,852**, not the ~190,000 stated
@@ -247,6 +251,54 @@ actually ran.
 **This suite's characteristic failure is passing.** Eight assertions across the effort were
 found to be incapable of failing, against four real defects that tests actually caught. Read
 that as the house style to guard against, not a historical note.
+
+**A GREEN RUN IS NOT EVIDENCE THAT THE RUN HAPPENED — and every rule in this section was about
+predicates, not about execution.** `Results.summary()` returned `not failed` over whatever rows
+happened to be appended and had no idea what should have been. MEASURED in Phase 9 by cloning this
+repo and running the ten probes in it: `probe_on_grid` reported **2/2**, `probe_control_wiring`
+**7/7**, and `probe_headless_arm` printed `!! timed out waiting for server … after 90s` and then
+**1/1** — three green exit codes over 10 of 52 assertions. `opencode/` is gitignored, so
+`bun run --cwd` ENOENTs and no server ever starts; every screen predicate is then trivially false
+and every `not on_grid` assertion passes **vacuously**.
+
+Two independent routes produce it, which is why the fix is in `Results` and not in a per-probe
+guard. **`sys.exit()` inside a `finally` DISCARDS the in-flight exception** — named at
+`probe_request_channel.py:151-153` since Phase 7, and present in only **3 of 10** probes until Phase
+9 backfilled it. And **a timeout raises nothing at all**: `wait_for()` (`rig.py:259-270`) prints
+`!!` and returns `None`, so no exception guard can see it and the probe simply runs fewer
+assertions. `Results(expect=N)` now catches both. It is a **floor, not an equality** — adding an
+assertion must not turn a probe red, losing one must. Controlled in both directions: **142/142 on
+the real repo**, **9 of 10 exit 1** on the same fresh clone.
+
+The generalisable form, and it is the sharper version of everything above: **the vacuous pass and
+the missing assertion are the same defect wearing different clothes.** An assertion that never ran
+is `True` on exactly the runs that did not evaluate it. It did not look like the familiar failure
+because the vacuity was in the *control flow* rather than in the predicate, and every rule on the
+books pointed at predicates.
+
+**WHEN A PREDICATE'S INPUTS COME FROM A CORPUS, THE CORPUS NEEDS A FIXTURE CHECK AS MUCH AS THE
+PREDICATE NEEDS A MUTATION CHECK.** `probe_turn_growth.py`'s two load-bearing assertions are both
+`retire_at + worst_sol < CEILING` in some form, so they get **easier as `worst_sol` gets smaller** —
+and `worst_turn = 175,148` exists only in `hb/*.db`, which `.gitignore:13` excludes. MEASURED on a
+fresh clone: the pinned population collapses to 6,643 and the probe reports the gate clearing its
+ceiling by **173,357 tokens, 48.2%**, and the bound as **353,357** — against the true 4,852 / 1.3% /
+184,852 — **in green**, with its own detail string still quoting 175,148. Losing the evidence and
+passing the test were the same event. The real corpus already had such a check (677/56/733, added in
+Phase 8, and it is why the missing-real-DB case fails loudly); the rig corpus did not, and now does
+(`worst_sol >= 175_148`, `>=` so that a *larger* turn is new evidence rather than a failure).
+
+**Both of `probe_turn_growth.py`'s corpora are REQUIRED**, and its docstring said the real one was
+optional until Phase 9 disproved it by running without the file: `r.check(…, have_real, …)` makes
+absence a **FAIL**, exit **1**, 12/14. The `[NOT EXERCISED: …]` text is the detail on a *failing*
+row. Note that the two fail in opposite directions — without the real corpus the probe goes loudly
+red; without the rig corpus it goes quietly *greener*.
+
+**The suite writes to the corpus it measures.** `probe_turn_growth.py` globs `hb/*.db` and every
+paid rig writes there, so its percentiles are a snapshot rather than a constant — the corpus moved
+86 → 94 turns between Phase 8 and Phase 9, entirely from `hb/control.db`, written by
+`verify_control_agent.py` six minutes after Phase 8 recorded its figures. Every maximum, bound and
+conditional was unchanged across that +14%, which is the first evidence the derivation is stable
+under corpus growth. Do not read drift here as a signal about the model.
 
 Navigation is asserted on the `▸` marker's `(line, column)`, never on cell text — cell text is
 present regardless of which cell is selected. The terminal is 120 cols on purpose: at 170 the

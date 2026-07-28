@@ -34,9 +34,19 @@ grouping were not doing anything, the two distributions would agree. They must n
 CORPORA. `hb/*.db` are this suite's own rig databases (engineered growth loops — a deliberate
 worst case). `~/.local/share/opencode/opencode.db` is the real one: it is where HARNESS.md's
 "733 real assistant messages" figure comes from, and this probe reproduces that 677/56 split as a
-fixture check that it is reading the same corpus. It is optional; if absent, this prints NOT
-EXERCISED rather than passing quietly. Only token counts, `finish` and roles are read from it —
-never message content.
+fixture check that it is reading the same corpus. Only token counts, `finish` and roles are read
+from it — never message content.
+
+BOTH CORPORA ARE REQUIRED, and this docstring said otherwise until Phase 9. It read "It is
+optional; if absent, this prints NOT EXERCISED rather than passing quietly", and `NEXT.md`
+inherited the claim. TESTED by running with the file absent: the check is
+`r.check(..., have_real, ...)`, so absence is a **FAIL** and the probe exits **1** — the
+`[NOT EXERCISED: …]` text is the detail on a failing row, not a pass. The model-specificity
+assertion goes red with it, because the 223,258-token off-pin turn lives in that file.
+
+The rig corpus is required for the opposite and more dangerous reason: `worst_turn = 175,148`
+exists ONLY in `hb/*.db`, which is gitignored. Absent, the derivation does not fail — it reports
+a 48.2% margin instead of 1.3%, in green. See the fixture check on `worst_sol` below.
 
   venv/bin/python probe_turn_growth.py
 """
@@ -241,7 +251,7 @@ def describe(label, ts):
     )
 
 
-r = rig.Results()
+r = rig.Results(expect=16)
 
 try:
     source = open(PLUGIN, encoding="utf-8").read()
@@ -448,6 +458,32 @@ try:
         "is the one the owner has to decide is enough"
         + ("" if len(near_gate) >= 10 else " [THIN: fewer than 10 observations carry it]"),
     )
+    # -------------------------------------------------------------------------------------------
+    # FIXTURE CHECK ON THE PINNED-MODEL POPULATION. The two assertions below are the load-bearing
+    # ones in this file, and BOTH get EASIER as `worst_sol` gets SMALLER:
+    #     retire_at + worst_sol < CEILING        and        retire_at < CEILING - worst_sol
+    # So losing the corpus that holds the big pinned-model turns does not make them fail — it makes
+    # them pass more comfortably, in green, while their own detail strings still quote 175,148.
+    #
+    # MEASURED in Phase 9 by cloning this repo and running the probe in it. `hb/*.db` is gitignored,
+    # so a fresh clone has NO rig corpus; `worst_sol` collapses from 175,148 to 6,643 (the real
+    # corpus's short gpt-5.6-sol sessions), and the probe reports the gate clearing its ceiling by
+    # **173,357 tokens, 48.2%** — against a true margin of 4,852, 1.3%. Both assertions PASSED and
+    # the summary read 13/15, so the two reds looked like the known "missing optional corpus".
+    #
+    # 175,148 is the figure docs/GROWTH.md §1, HARNESS.md and docs/RELAY.md §5 all derive the
+    # 184,852 bound from. `>=` is deliberate and the direction matters: a LARGER worst turn is new
+    # evidence and must not fail here — it correctly tightens the two assertions below instead. This
+    # only catches the corpus going missing, which is the direction nothing else guards.
+    # -------------------------------------------------------------------------------------------
+    r.check(
+        f"fixture check: the pinned-model worst turn is the one on record — {worst_sol:,.0f} >= 175,148",
+        worst_sol >= 175_148,
+        "175,148 lives ONLY in the gitignored hb/*.db. Without it the two assertions below pass with "
+        "a 48.2% margin that is an artifact of the absent corpus, not a fact about the gate. Rebuild "
+        "it with verify_retire_350k.py / verify_control_agent.py, or treat every figure below as void",
+    )
+
     # The pinned model is the narrowest defensible reading, and it is the one that makes the margin
     # legible. Its passing is NOT reassurance: HARNESS.md rejected the old 350,000 default for
     # leaving "~10K, under 3%", and this margin is thinner than the one that was called too thin.
