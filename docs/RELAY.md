@@ -105,6 +105,8 @@ provider's `ContextOverflowError`. `compaction.auto: false` means nothing upstre
 
 So the threshold came down with the predicate. With one gate the requirement is
 `RETIRE_AT + worst_turn < ceiling`, which puts the ceiling on the gate itself at roughly **190,000**
+— **re-measured in Phase 8 as 184,852; see `docs/GROWTH.md` §1, and note the input to this
+arithmetic was one turn** —
 — anything at or above that can be carried off the cliff by one ordinary read-heavy turn.
 **180,000 + ~170K = ~350K, just inside.** That derivation is now carried in the code
 (`healbot.ts:106-117`, `healbot.tsx:25-31`, which points back here), in `harness/env.sh:98`, and
@@ -396,7 +398,10 @@ every invocation. The `>=` remains the least interesting thing left to buy.
 - **The 180,000 threshold has a change-rule, not a tuning question.** It replaces the old "is
   256,000 right?" item, which was a preference. It is not one now: with a single gate the
   constraint is `RETIRE_AT + worst_turn < ceiling`, worst measured turn growth is ~170K and the
-  ceiling is ~360K MEASURED, so the number has a ceiling of its own at roughly 190,000. **Lower it
+  ceiling is ~360K MEASURED, so the number has a ceiling of its own at roughly 190,000. **PHASE 8
+  MADE THAT NEW MEASUREMENT AND IT POINTS DOWN**: 86 turns instead of one, worst on the pinned model
+  175,148, so the bound is **184,852** and 180,000 clears it by 1.3% of the ceiling — and the number
+  turns out to be MODEL-SPECIFIC (a 223,258 turn exists off-pin). `docs/GROWTH.md` §1. **Lower it
   freely. Raise it only with a new measurement of worst-case single-turn growth**, and change both
   copies — `healbot.ts:135` and `healbot.tsx:57` — since `probe_twin.py` asserts the two defaults
   are equal, with a mutation check that corrupts one side and requires the comparison to trip.

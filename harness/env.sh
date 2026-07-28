@@ -98,6 +98,18 @@ export OPENCODE_DISABLE_CLAUDE_CODE
 #      RETIRE_AT + worst_turn < ceiling, so anything at or above ~190000 can be carried off the
 #      cliff by one ordinary read-heavy turn. 180000 + ~170K = ~350K, just inside. See
 #      docs/RELAY.md.
+#   3. PHASE 8 RE-MEASURED worst_turn AND TIGHTENED (2). The ~170K above was ONE turn measured
+#      once. Across 86 completed turns from every session DB on disk (probe_turn_growth.py, free),
+#      the worst single-turn growth on the pinned model is 175,148 -- so the bound on this
+#      variable is 184,852, not ~190000, and 180000 clears it by 4,852 tokens: 1.3% of the
+#      ceiling. That is THINNER than the "~10K, under 3%" margin HARNESS.md rejects elsewhere as
+#      too late to be a guard. ~170K is the tail of the distribution, not the middle (the p50 is
+#      22,152) -- it just is not the maximum, which is what the derivation used it as.
+#   4. AND THIS NUMBER IS MODEL-SPECIFIC, which nothing said before Phase 8. worst_turn is a fact
+#      about a MODEL's tool-calling behaviour. The same corpus holds a 223,258-token turn on
+#      gpt-5.6-terra; at this gate that lands at 403,258 and the session dies. 180000 is verified
+#      only while opencode.jsonc pins openai/gpt-5.6-sol. Change the pin and re-measure.
+#      See docs/GROWTH.md §1.
 #
 # So: lower it freely, raise it only with a new measurement of worst-case single-turn growth.
 # Raising it to 256000 without restoring a second gate is the one change that silently

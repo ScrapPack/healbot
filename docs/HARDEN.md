@@ -342,6 +342,15 @@ The same run measured the cost of "let it finish", and it is much larger than it
 > With one per-turn gate the requirement is `RETIRE_AT + worst_turn < ceiling`, so `RETIRE_AT` came
 > down to **180,000**: 180,000 + ~170K = ~350K, inside the ~360K ceiling. Anything at or above
 > ~190,000 can be carried off the cliff by one turn like this one. See `docs/RELAY.md`.
+>
+> **PHASE 8 SUPERSEDES THE TWO NUMBERS ABOVE, though not the conclusion.** This table is one turn,
+> measured once, and it was the sole input to the shipped threshold. Re-derived from 86 completed
+> turns across every session DB on disk (`probe_turn_growth.py`, free): the worst single-turn growth
+> on the pinned `gpt-5.6-sol` is **175,148**, not ~170,000 — so the bound on `RETIRE_AT` is
+> **184,852**, not ~190,000, and 180,000 clears it by 4,852. ~170K is genuinely the tail of the
+> distribution (the p50 is 22,152); it simply is not the maximum, which is what the derivation used
+> it as. Worse, the same corpus holds a **223,258**-token turn on another model, which makes the
+> threshold model-specific for the first time. `docs/GROWTH.md` §1.
 
 **One turn added ~170K.** Apply that to a 256,000 soft gate: a session sitting just under it
 that starts one more read-heavy turn finishes near **426,000** — past the ~360K ceiling, dead,

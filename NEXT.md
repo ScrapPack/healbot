@@ -12,95 +12,82 @@ handoff that pastes ten thousand words of history is working against its own pre
 ## The prompt
 
 ```
-Continue the healbot build at ~/Desktop/healbot. Phase 7 is complete and committed; the fork
-overlay is pinned at 509f4c0b1.
+Continue the healbot build at ~/Desktop/healbot. Phase 8 is complete and committed; the fork
+overlay is pinned at 509f4c0b1 (unchanged — Phase 8 built nothing in the fork).
 
 READ FIRST, in this order. Stop when you can name the file that owns any given behaviour:
   1. HARNESS.md          — root index: load-bearing facts, Traps, Closed, Still open
-  2. docs/RELAY.md       — Phase 7: retirement collapsed into ONE implementation (the server
-                           plugin); the grid's `x` became a REQUEST written to
-                           `session.metadata.healbot.retireRequested`; the gate was found to fire
-                           per STEP, was made per TURN, `RETIRE_HARD` was DELETED, and the
-                           threshold came down 256,000 -> 180,000 as the direct consequence
-  3. .carryover/verified/README.md — the test rig and its assertion discipline
+  2. docs/GROWTH.md      — Phase 8: `worst_turn` was ONE measurement and it was not the worst.
+                           Re-derived from 86 real turns, the pinned model's worst is 175,148, so
+                           the bound on RETIRE_AT is 184,852 and the shipped 180,000 clears it by
+                           1.3% of the ceiling. The threshold is now MODEL-SPECIFIC. Also:
+                           `healbot_*: deny` is a context control and NOT a sandbox
+  3. docs/RELAY.md       — Phase 7: retirement collapsed into ONE implementation (the server
+                           plugin), the gate made per-TURN, RETIRE_HARD deleted, threshold
+                           256,000 -> 180,000. GROWTH.md corrects one figure in it, not its shape
+  4. .carryover/verified/README.md — the test rig and its assertion discipline
 
 Do NOT read the whole tree first. HARNESS.md indexes everything; follow it on demand.
 
-YOUR TASK — Phase 8. Every step of the build order is built and no known correctness hole is
-open. What is left is ONE decision that is mine to make, some verification that was never
-re-run, and one optional spend. Do not invent a ninth thing to build.
+YOUR TASK — Phase 9. Everything in the build order is built and every known correctness hole is
+closed. Phase 8 closed three open questions and took two decisions, so there is NO decision
+pending on me this time and nothing is blocking you. Do not invent something to build.
 
-  1. ASK ME THE DECISION IN YOUR FIRST MESSAGE, then do 2 while you wait. It is not a bug; it is
-     policy; it is small once decided. Present the branches, do NOT pick for me.
+  0. TWO THINGS ARE DECIDED. Do not re-open either as a defect, and do not "fix" them.
+     - RETIRE_AT STAYS AT 180,000. Phase 8 re-derived the worst_turn that sizes it (175,148 on the
+       pinned model, so the bound is 184,852, margin 1.3% of the ~360K ceiling) and offered four
+       options; the answer was leave it and correct the prose, which is done. What that ACCEPTS is
+       written down in docs/GROWTH.md §1 and is inherited knowingly.
+     - NO STARTUP SWEEP. Retirement stays purely event-driven. A session parked over the gate when
+       a server restarts stays there until its next turn ends. Decided in Phase 8, §5.
+     The one LIVE constraint out of all that: RETIRE_AT is verified only while opencode.jsonc:16
+     pins gpt-5.6-sol. probe_turn_growth.py asserts the pin.
 
-     The startup sweep. `consider()` (`plugin/healbot.ts:612`) has one call site, there is no
-     polling, so a server restarting with a session already over the gate does nothing until
-     that session's next event — then the gate catches it at the end of that turn. A sweep at
-     boot would close it properly and is small — list sessions, call the same `consider()`. It is
-     not built because a restart triggering mass retirement is a policy choice, not a defect.
-     Tell me which behaviour I want; the code is the easy part.
+  1. FREE, and start here — Phase 8's free work was worth more than anything paid.
+     - Re-run the ten free probes (below). probe_turn_growth.py is new; if its corpus figures
+       have moved, something changed under it and that is itself the finding.
+     - The suite has never been run from a FRESH CLONE. rig.fixtures() and rig.db() were built in
+       Phase 5 for exactly that, and probe_turn_growth.py newly depends on a file OUTSIDE the
+       repo (~/.local/share/opencode/opencode.db) which it treats as optional and prints NOT
+       EXERCISED for. Nobody has checked that claim by actually removing it.
 
-  2. FREE while you wait. All three are open questions, not builds.
-     - IS ~170K THE TAIL OR THE MIDDLE? `RETIRE_AT` = 180,000 is derived, not chosen: with one
-       gate the requirement is `RETIRE_AT + worst_turn < ceiling`, ceiling ~360K, and
-       `worst_turn` is ~170K — ONE measurement, one turn, `docs/HARDEN.md` §6 (occupancy 5,216 ->
-       70,898 on a single tool result, that turn finishing at 175,090). A second measurement
-       moves the number in either direction. The material is already on disk and costs nothing:
-       the session databases under `.carryover/verified/hb/*.db` (`retire350.db` is the largest,
-       104 messages to 359,829). Sample the largest single-turn occupancy DELTAS — group
-       assistant messages into turns with `turnFinished()`'s rule, not per message — and report
-       the distribution. If ~170K is the p50 rather than the max, 180,000 is too high.
-     - Can an EXTERNAL plugin register a route, or only a builtin? The grid is a builtin and
-       every measurement in this repo was taken on that path. It decides whether the grid must
-       live inside the fork.
-     - Why the session route does not render a DISMISSED question on screen. The text is in
-       the session's parts over HTTP (asserted, passing); it is not on the visible viewport.
-       Read the route first — scroll position and errored-tool-part rendering are the two
-       candidates and source may settle it without a run.
+  2. PAID and OPTIONAL — the 180,000 gate has still never been FIRED at its real value. Half is
+     closed free (probe_headless_arm.py asserts the shipped default arms; probe_turn_predicate.py
+     the predicate) and the remaining half is a single `>=` already exercised at 20,000. Costed at
+     ~$2.60, range $1.75-5, ~6-11 min in .carryover/verified/README.md. OFFERED IN PHASE 8 AND
+     DECLINED, on the grounds that a `>=` against a variable is threshold-independent by
+     inspection — so do not put it at the top of the list, but it is still the cheapest paid thing
+     available. NOT via verify_headless_retire.py: THRESHOLD = 20_000 (`:52`) is a bare literal it
+     forces into the server via env_extra, which rig.serve() applies LAST, and its workload is one
+     prompt capped at 50 KB by read.ts:16. Use verify_retire_350k.py's growth loop retargeted.
+     ASK ME FIRST.
 
-  3. CHEAP — re-run verify_control_agent.py (~4 turns). It recorded 15/16; the failure was a
-     mis-specified assertion, corrected TWICE and never re-executed. The current form asserts
-     the build agent "created NO top-level session" (`:229`) because the previous correction,
-     `all(s.get("parentID") for s in extras)`, passed VACUOUSLY whenever the build agent
-     answered directly instead of delegating. Verify the detail line says so out loud when the
-     case is not exercised, then run it.
+  3. ALSO PAID and OPTIONAL — an EXTERNAL plugin's route has never been RENDERED. Phase 8 settled
+     *can it* at VERIFIED (same PluginEntry, same activation loop, same pluginApi; the only
+     `source` discrimination in the path is a metadata display field) but not *does it, under a
+     real workload*. Everything TESTED in this repo was measured on the builtin path.
 
-  4. PAID and OPTIONAL — the gate has still only been exercised at 20,000. Half of it is closed
-     for free: probe_headless_arm.py asserts the SHIPPED 180,000 default actually arms
-     (`:176-177`), paired with the opposite assertion that the override's gate value is ABSENT
-     from that same line (`:187`). What remains unbought is FIRING at the real value, and the
-     comparison is a single `>=`. If you want it: verify_retire_350k.py's growth-loop workload
-     (70 x 35 KB chunks) retargeted to 180,000 — it already pops HEALBOT_RETIRE_AT and asserts
-     its absence. The costing in .carryover/verified/README.md was derived for a 256,000 target;
-     180,000 is fewer turns and less cumulative context, so it is CHEAPER — re-derive it there
-     before you spend, do not quote the old figure. 180,000 is comfortably under the provider's
-     272,000 context tier, which DOUBLES every rate, so base rates hold throughout. NOT via
-     verify_headless_retire.py: `THRESHOLD = 20_000` (`:52`) is a bare literal it hands the
-     server via `env_extra`, which `rig.serve()` applies LAST; its workload is one prompt capped
-     at 50 KB by `read.ts:16` and it asserts `len(user_turns) == 1`. At 180,000 the gate never
-     fires and the 900s wait times out. ASK ME FIRST.
-
-     Note what that rig DOES now buy, at 20,000: 22/22, and it finally discriminates per-turn
-     from per-step. Its prompt used to put the one large read on the FINAL model call, so the
-     only step over the gate was the last one and both predicates passed identically — a 20/20
-     that meant nothing, confirmed by reading the run's own per-step occupancies. The read was
-     moved FIRST and two assertions added: a NON-FINAL step must be over the gate, and the turn
-     must run on past it. Crossing now lands at step 1 (36,361 vs 20,000), steps 2 and 3 at
-     89,850 and 90,011, turn still running to `stop` at step 5. Do not "simplify" that prompt.
-
-  5. NOT YOURS — Phase 3's exit gate, `/code-review ultra` on the `harness/` diff, is still
-     unmet. It is user-triggered and billed; an agent session cannot launch it. Remind me.
+  4. NOT YOURS — Phase 3's exit gate, `/code-review ultra` on the `harness/` diff, is still unmet.
+     It is user-triggered and billed; an agent session cannot launch it. Remind me.
 
 METHOD — this project's standard, and it is not decoration:
   - Classify every claim VERIFIED (read code, cite file:line) / TESTED (ran it) / INFERRED /
     SUSPECTED. Never present a lower tier as a higher one. Cite file:line and open the file.
-  - This suite's characteristic failure is PASSING. Every new assertion needs a negative
-    control or a mutation check — prove it can fail before you trust it green. Phase 7's
-    probe_turn_predicate.py re-runs its whole table against the OLD per-step predicate and
-    requires it to FAIL, which it does on 4 cases; probe_request_channel.py was TESTED to fail by
-    renaming REQUEST_KEY in the plugin (9/9 -> 5/9, exactly the four channel assertions). Phase 7
-    also found an assertion that passed on an empty list, and Phase 6 caught three of its own.
-  - Run the FREE probes before spending anything:
+  - This suite's characteristic failure is PASSING, and every phase since 5 has caught more
+    instances of it — Phase 8 caught three, including a rig comment that had asserted an
+    impossibility since the day it was written and was disproved the first time anything ran
+    against it. GREEN IS NOT EVIDENCE UNTIL YOU KNOW WHAT WOULD HAVE MADE IT RED. Every new
+    assertion needs a negative control or a mutation check. An assertion about ORDERING needs a
+    workload that could have violated it.
+  - AND THE CONVERSE, which is Phase 8's addition: A FAILING ASSERTION NEEDS THE SAME SCRUTINY AS
+    A PASSING ONE. probe_turn_growth.py's first run reported a red derivation, and before that
+    could be written down it had to survive "is this an artifact of my grouping?" — an
+    unterminated turn mid-session would make the next delta span two turns and inflate it. It was
+    not. The check is why the number can be quoted.
+  - A NUMBER IS NOT EVIDENCE, AND REPEATING IT DOES NOT MAKE IT MORE EVIDENCE. `~170K` appeared in
+    five files and was one turn measured once, and the derivation that sized the shipped threshold
+    treated it as a bound. Re-deriving it cost nothing.
+  - Run the FREE probes before spending anything (141/141 total):
       cd .carryover/verified
       venv/bin/python probe_on_grid.py          # 4/4
       venv/bin/python probe_error_state.py      # 10/10
@@ -111,66 +98,57 @@ METHOD — this project's standard, and it is not decoration:
       venv/bin/python probe_headless_arm.py     # 14/14
       venv/bin/python probe_request_channel.py  # 9/9
       venv/bin/python probe_turn_predicate.py   # 18/18
-    The credit-spending rigs are listed in .carryover/verified/README.md.
+      venv/bin/python probe_turn_growth.py      # 15/15
   - Gates before you claim done, from ~/Desktop/healbot/opencode:
       ./node_modules/.bin/tsgo --noEmit -p packages/tui/tsconfig.json    # expect exit 0, no output
       ./node_modules/.bin/oxlint packages/tui/src/feature-plugins/system/healbot.tsx
                                                                         # expect exit 0, 3 warnings
   - Every phase revises the artifacts it contradicts. Write docs/<PHASE>.md, update HARNESS.md,
-    and fix any figure you disprove. Do not leave a stale number in a file that another session
-    will trust. Phase 7 rewrote three documents and one rig because one claim about the gate
-    turned out to be backwards — and then rewrote them AGAIN when the decision reversed.
+    fix any figure you disprove. Phase 8 corrected the same number in five files.
 
-TRAPS THAT COST REAL TIME — all measured, all in HARNESS.md, repeated here because each one
-silently produces a wrong belief rather than an error:
-  - The installed `opencode` binary has NO grid. The Healbot route is a builtin of the fork.
-    Run from source: rig.py's OC constant, or harness/fleet.sh which resolves it for you.
-  - RETIREMENT NOW HAPPENS IN EXACTLY ONE PROCESS — the server plugin. The grid's `x` no longer
-    retires anything; it writes `metadata.healbot.retireRequested` and the plugin acts on the
-    resulting `session.updated`. So running the fork WITHOUT the harness config means `x`
-    appears to work — the keypress lands, the PATCH succeeds — and nothing is ever retired.
-    Until Phase 7, `x` worked with no plugin loaded. Any note that says the grid retires is
-    describing deleted code.
-  - THRESHOLDS ARE READ BY THE SERVER PROCESS. A rig that exports HEALBOT_RETIRE_AT into its
-    own environment before attach() configures nothing. Use rig.serve(..., env_extra={...}) and
-    read what it did with rig.serve(..., log=path).
-  - EVERY COMPLETION-LOOKING FIELD ON AN ASSISTANT MESSAGE IS SET PER **STEP**. `finish` is
-    assigned at every `step-finish` in the same mutation as `tokens` (`processor.ts:443-445`,
-    and `:445` is the only site writing a non-zero `tokens`), and `time.completed` is set per
-    step in `cleanup()` (`processor.ts:595-596`). MEASURED on 733 real assistant messages with
-    occupancy > 0: 677 carried `finish: "tool-calls"` — mid-turn — and zero carried a null
-    `finish`. So any new code that reads either field directly to mean "the turn is over" is
-    wrong, and that exact defect survived two phases while five artifacts asserted the opposite.
-    `turnFinished()` (`plugin/healbot.ts:346-349`) is the only correct reader: it is opencode's
-    own predicate, `prompt.ts:1295`, and it deliberately ignores `time.completed`.
-    probe_turn_predicate.py evaluates the real source text against the measured distribution.
-  - THE GATE AND THE THRESHOLD ARE COUPLED — you cannot move one without the other. Per-turn
-    semantics with a single gate means the session accepts whatever the in-flight turn adds
-    (~170K measured worst case) before anything happens, against a ~360K ceiling. That is why
-    `RETIRE_AT` is 180,000 (`plugin/healbot.ts:135`, `healbot.tsx:57`) and why anything at or
-    above ~190,000 can be carried off the cliff by one ordinary read-heavy turn. Raising it
-    without restoring a second, mid-turn gate silently reintroduces the exact failure
-    `RETIRE_HARD` was drawn to catch — and `RETIRE_HARD` is gone: the constant, the guard, the
-    env var and its half of the arming log line were all deleted, not disabled.
-  - A server plugin gets the v1 SDK client, the TUI gets v2, and they diverge silently: v1 has
-    no permission/question sub-clients and its session.update body has no time.archived. The
-    SERVER accepts it; the generated types are narrower than the routes.
+TRAPS — all measured, all in HARNESS.md, repeated because each silently produces a wrong belief
+rather than an error:
+  - The installed `opencode` binary has NO grid. Run from source: rig.py's OC constant, or
+    harness/fleet.sh.
+  - RETIRE_AT IS ONLY VALID FOR THE PINNED MODEL. `worst_turn` is a fact about a MODEL's
+    tool-calling behaviour, not about opencode. The pinned gpt-5.6-sol's worst turn is 175,148;
+    the same corpus has 223,258 on gpt-5.6-terra. Changing opencode.jsonc:16 silently un-verifies
+    the threshold — probe_turn_growth.py asserts the pin so it goes red instead.
+  - `healbot_*: deny` SCOPES CONTEXT, NOT CAPABILITY. TESTED: the build agent, with all five tool
+    definitions removed from its payload, ran `opencode run --auto ...` through bash and created a
+    real top-level session. The CLI is on PATH in the tool sandbox and talks to the same DB. Do
+    not build anything on the assumption that a denied agent cannot reach a capability.
+  - AN EXTERNAL TUI PLUGIN CAN SILENTLY REPLACE THE GRID. Internal plugins are added before
+    external ones and the route map is last-wins (`plugin/api.ts:33-35`), which the activation
+    loop's own comment states. A third-party plugin registering `healbot` wins, with no error and
+    no log line. The name is neither pinned nor reserved.
+  - EVERY field that looks like "the turn is over" on an assistant message is set per STEP:
+    `finish`, `time.completed` (processor.ts:443, :445, :595-596; a new message per step at
+    prompt.ts:1186-1201). turnFinished() is the only correct reader; prompt.ts:1295 is why.
+  - THE GATE AND THE THRESHOLD ARE COUPLED. Per-turn with no second gate means RETIRE_AT must stay
+    below 184,852 on the pinned model. Raising it without restoring a hard gate silently
+    reintroduces the cliff.
+  - RETIREMENT HAPPENS IN EXACTLY ONE PROCESS. The grid's `x` only writes
+    metadata.healbot.retireRequested. Without the harness config loaded, `x` looks like it worked
+    and nothing retires — and the coupling is untyped in both directions.
+  - Automatic retirement is a SERVER plugin. Thresholds are read by the SERVER process, so
+    exporting HEALBOT_RETIRE_AT into a rig's own environment configures nothing. Use
+    rig.serve(..., env_extra={...}) and read rig.serve(..., log=path).
+  - A server plugin gets the v1 SDK client, the TUI gets v2, and they diverge silently. The
+    generated types are NARROWER than the routes (metadata, time.archived).
   - A plugin module may export ONLY functions. One exported constant throws at load time and
     leaves a healthy server with a missing feature.
-  - The rig's Api MUST send `x-opencode-directory`. Omit it and every call succeeds, the
-    sessions are there, and the grid shows `0 sessions` — you are addressing a different
-    instance (workspace-routing.ts:87 falls back to process.cwd()).
-  - The rig's project dir needs its own git repo (rig.git_baseline()). It is gitignored by this
-    repo, and session diffs are computed with git, so without it every changed file is invisible.
-  - Never set XDG_DATA_HOME. auth.json lives there and OpenAI is on oauth; redirecting it
-    strands the credentials and the model pin stops resolving. Isolate the DB only, via rig.db().
+  - The rig's Api MUST send `x-opencode-directory`, or you address a different instance and the
+    grid shows `0 sessions` while every call succeeds.
+  - The rig's project dir needs its own git repo (rig.git_baseline()) or every changed file is
+    invisible to the diff machinery.
+  - Never set XDG_DATA_HOME. auth.json lives there and OpenAI is on oauth. Isolate the DB only.
   - Term.find() is case-INSENSITIVE and the project path contains "healbot". Use rig.on_grid()
-    for route assertions and t.exact() for cell labels.
+    and t.exact().
   - The session-route sidebar is gated on width > 120 and is the only thing rendering a session
     id. The navigation rigs use exactly 120, so a focus assertion there measures geometry.
   - Session ids are DESCENDING identifiers, so ascending sort is newest-first.
   - The context ceiling is ~360K, NOT the 922,000 limit.input the model registry advertises.
-    Nothing is truncated on the way up — it is a cliff, not a slope.
 
 Ask me before spending real API credits on anything beyond a few turns.
 ```
@@ -179,57 +157,57 @@ Ask me before spending real API credits on anything beyond a few turns.
 
 ## Why this order
 
-**The one decision goes first because it is mine, not the agent's, and because everything else in
-the phase is independent of it.** Asking it in the first message costs one round trip and unblocks
-the rest; asking halfway through stalls a session that has already spent context.
+**For the first time since Phase 5 there is no decision of mine at the top.** Phase 7's was the gate
+semantics, Phase 8's was the startup sweep *and* the threshold, and both of Phase 8's were taken in
+the same session that raised them. So the prompt opens with a **§0 of things already decided**
+instead of a question. That section is doing real work: two of the three decisions on record were
+originally written up as open questions, and the failure mode now is a fresh session treating a
+settled policy as a bug and "fixing" it.
 
-This section used to carry a second decision, `RETIRE_HARD` — delete it or resurrect it — and it
-warned that the failure mode was an agent making the harness per-turn and trading a ~65K overshoot
-for a ~170K one. **Both halves are now settled and the warning is obsolete.** The predicate was
-made per-turn (`turnFinished()`, opencode's own), `RETIRE_HARD` was deleted outright, and because
-that combination reintroduces exactly the overshoot the hard gate existed to bound, the soft
-threshold came down with it: 256,000 -> 180,000. What the decision left open is narrower and now
-sits in the free block — `worst_turn` ~170K is a single data point, and the whole derivation rests
-on it.
+**1 is free, and Phase 8 is the argument for putting it first.** Everything of value that phase
+produced — the re-derived `worst_turn`, the model-specificity constraint, two open questions closed,
+one disproved rig premise — cost nothing but reading. The only paid work was a rig re-run that had
+been queued for two phases, and even that earned its money by *failing*.
 
-**2 is free and 3 is nearly free, so they precede anything billed.** `verify_control_agent.py` is
-the only rig in the suite whose recorded score does not correspond to an execution of the file as
-it stands; its assertion has now been rewritten twice without a run, which is exactly the state
-this suite punishes.
-
-**4 is last because half of what it used to buy is now free.** `probe_headless_arm.py` asserts the
-shipped default arms, and asserts the negative in the same run. What money buys is the firing half
-at the real value, over a `>=` already exercised at 20,000. The prompt does not quote a price: the
-one in the rig README was derived against a 256,000 target and 180,000 is cheaper, so it needs
-re-deriving rather than copying.
+**2 and 3 are last because they are confirmations, not discoveries.** The `>=` at 180,000 has been
+exercised at 20,000; the external route has been VERIFIED at source. Both buy a tier upgrade on a
+claim already believed, which is the least interesting thing money can do here — and 2 was offered
+to the owner in Phase 8 and declined on exactly that reasoning.
 
 Deliberately **not** in the prompt:
 
 - **Worktree isolation** (build-order step 7). `PLAN.md` marks it optional and nothing needs it.
+- **The startup sweep and the threshold**, except as §0's do-not-reopen list. Both DECIDED in
+  Phase 8: no sweep, and `RETIRE_AT` stays at 180,000. Re-opening either as a defect is the
+  specific mistake this handoff is shaped to prevent.
 - **The remaining grid traps** — RED silent under `--auto`, archived sessions never leaving the
-  list. They are review-tier rows in `HARNESS.md`; the index carries them and the prompt does not
-  need to.
+  list. Review-tier rows in `HARNESS.md`; the index carries them.
 
 ## Current state, for the maintainer of this file
 
-Phase 7 landed with the overlay re-pinned at fork **`509f4c0b1`** (was `88f7ce8cf`, then `6794bd581`, then briefly
-`6794bd581` — this file named that intermediate commit and it was wrong) and
-`fork/healbot-fork.patch` regenerated as `git diff 7534d23 509f4c0b1`, verified to apply cleanly
-to base `7534d23`.
+Phase 8 changed **no fork code** — the overlay stays pinned at `509f4c0b1` and
+`fork/healbot-fork.patch` is untouched. What changed is one new probe, one corrected rig, one new
+phase doc, and the same number in five files.
 
-What changed: the double-retire race was closed by removing the second writer, not by narrowing a
-window — the grid's `x` writes `metadata.healbot.retireRequested` and the server plugin performs
-every retirement, which deleted ~180 lines and the `handoffDocument` twin from `healbot.tsx` and
-shrank `GridClient` from ten members to three. `consider()` now claims `busy` synchronously before
-its first await. `retire()`'s todo read throws instead of `.catch(() => [])`, which used to make a
-failed read look identical to "no open todos" and archive a session with no successor. And the
-review found the gate fired per STEP, not per turn: the first decision kept the shipped behaviour
-and rewrote the prose to match (committed as `5bcdeab`), then reversed — the predicate is per-turn,
-`RETIRE_HARD` is deleted, and `RETIRE_AT` defaults to 180,000 in both the plugin and the grid.
+What it found, in the order it found it:
 
-Free suite: 4/4, 10/10, 24/24, 10/10, 14/14, 23/23, 14/14, 9/9, 18/18. `probe_twin.py` was
-rewritten (it no longer compares two handoff documents, because there is only one) and now asserts
-`HEALBOT_RETIRE_HARD` is absent from BOTH files; `probe_headless_arm.py` lost its hard-gate
-assertions and gained the 180,000 pair; `probe_request_channel.py` and `probe_turn_predicate.py`
-are new, free, and TESTED to fail. Paid results are unchanged from Phase 6 and listed in the rig
-README.
+- **`worst_turn` was one turn measured once**, quoted in `HARNESS.md`, `docs/HARDEN.md`,
+  `docs/RELAY.md`, `harness/env.sh` and this file until the repetition looked like corroboration.
+  Re-derived from 86 completed turns: ~170K is the **tail** (p50 22,152) but not the **maximum**,
+  which is what the derivation used it as. Pinned-model worst 175,148 → bound 184,852, margin 1.3%.
+- **The threshold is model-specific**, which nothing had said. A 223,258-token turn exists in the
+  corpus on `gpt-5.6-terra`.
+- **`healbot_*: deny` is not a sandbox.** Found by finally running `verify_control_agent.py`, whose
+  third-form assertion failed on first execution against a premise in its own comment.
+- **Two open questions closed at source, free**: the session route has no render site for a
+  dismissed question's text, and an external plugin can register a route (which produced a new trap
+  about last-wins route collisions).
+
+Two decisions were taken in the same session that raised them, and both are recorded as decisions
+rather than as open rows: **no startup sweep** (event-driven only) and **`RETIRE_AT` stays at
+180,000** with the prose corrected. The paid 180,000 firing run was offered and **declined**.
+
+Free suite: 4/4, 10/10, 24/24, 10/10, 14/14, 23/23, 14/14, 9/9, 18/18, **15/15** — 141 total, all
+re-run after the edits. `verify_control_agent.py` moved from a recorded 15/16 that no execution
+matched to a **15/15** that one does. Gates: `tsgo` exit 0 with no output, `oxlint` exit 0 with the
+expected 3 warnings.

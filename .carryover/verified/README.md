@@ -31,6 +31,12 @@ venv/bin/python probe_request_channel.py # 9/9 does `x`'s metadata write actuall
                                      #       no model turn — an empty session has no todos, so
                                      #       retire() takes its no-successor branch)
 venv/bin/python probe_control_wiring.py # 14/14 are the control tools and agent registered?
+venv/bin/python probe_turn_growth.py # 15/15 is ~170K the TAIL or the MIDDLE of single-turn growth?
+                                     #       Re-derives the `worst_turn` that SIZES RETIRE_AT from
+                                     #       every session DB on disk instead of the one turn it
+                                     #       rested on. Runs the SHIPPED turnFinished() and
+                                     #       occupancyOf() in node; negative control regroups the
+                                     #       same corpus with the OLD per-step predicate
 
 # these spend credits
 venv/bin/python smoke.py             # 6/6   provider/model/config sanity — run this first
@@ -48,8 +54,12 @@ venv/bin/python verify_headless_retire.py # 22/22 automatic retirement with NO T
                                      #       and the gate crossed MID-TURN so it discriminates
                                      #       Runs at a HARDCODED 20,000 and cannot be pointed at
                                      #       180,000 — there is no override to remove; see below
-venv/bin/python verify_control_agent.py   # 15/16 the control agent's tools, and the scoping that
-                                     #       keeps them out of every other session's prompt
+venv/bin/python verify_control_agent.py   # 15/15 the control agent's tools, and the scoping that
+                                     #       keeps them out of every other session's prompt.
+                                     #       Was 15/16 for two phases against an assertion that had
+                                     #       been rewritten twice and never run; Phase 8 ran it, the
+                                     #       assertion was DISPROVED on execution, and the fourth
+                                     #       form is what is now green — see below
 venv/bin/python verify_retire_350k.py# 25/25 retirement at a full-scale threshold.
                                      #       ~5M cumulative input tokens; run it deliberately —
                                      #       and read its docstring first, the 25/25 predates
@@ -112,14 +122,36 @@ estimate with them. At 180,000 the margin is 92,000, about ten turns, and base r
 whole run with room to spare. (The 350K run itself crossed into the 2× tier for its last ~8 turns,
 which is why its recorded cost is not simply 5M at base rates.) NOT BOUGHT.
 
-**`verify_control_agent.py` reports 15/16 and that is the recorded result.** The one failure was a
-mis-specified assertion — it counted the build agent's `@general` subagent, which `task`
-legitimately creates. The first correction, *every session the build agent created is a subagent*,
-was itself unsound: `all()` over a possibly-empty list, and that list is empty whenever the build
-agent does not delegate. Phase 7 restated it as the claim actually at stake — *it created NO
-top-level session* — and made non-exercise print itself (`:226-236`; see the bullet in **Assertion
-discipline**). The predicate was evaluated against the run's persisted database and is True where
-the original was False, but the file has NOT been re-executed end to end since either correction.
+**`verify_control_agent.py` now reports 15/15, and getting there DISPROVED the assertion Phase 7
+wrote.** It stood at 15/16 for two phases against a check that had been rewritten twice and never
+run. Phase 8 ran it. The third form — *it created NO top-level session* — **failed on its first
+execution**, and correctly: the build agent, with all five tool definitions removed from its payload,
+went looking with `opencode --help` / `session list` / `run --help` and then ran
+
+    opencode run --auto --format json --title "..." "Create a file named hello.txt ..."
+
+which created a real TOP-LEVEL session. The `opencode` CLI is on `PATH` inside the tool sandbox and
+talks to the same database.
+
+**So `healbot_*: deny` scopes CONTEXT, not CAPABILITY**, and the rig's own comment on `TASK` had
+asserted the opposite — *"a session cannot create ANOTHER session with `bash`"* — since the day it
+was written. That premise is now marked disproved in the file. What is untouched is the claim the rig
+is paid for: the tool definitions really are absent from the build agent's request payload, which is
+the token-budget claim, and it still passes.
+
+The fourth form asserts what the deny actually guarantees — **no healbot TOOL spawned anything**,
+checked against the server log, which only the server writes, so a leak produces a second
+`control: spawned` line. The containment finding itself is printed as an `[observation]` and
+deliberately is **not** an `r.check`: it has no failing case, and an assertion that cannot go red is
+this suite's characteristic failure. Both runs are on record and they took different branches — run 1
+shelled out (observation printed the command), run 2 delegated via `task` (observation printed
+`NOT EXERCISED this run`). The build agent's response to losing the tools is not deterministic, which
+is exactly why the finding is pinned to the recorded run rather than to the next execution.
+
+Note the shape of the sequence, because it is the point: form 2 (`all()` over a possibly-empty list)
+was too weak to fail; form 3 was strong enough to fail, and did, against a premise nobody had
+re-read in two phases. **A test that cannot fail is not merely useless — it is load-bearing in the
+wrong direction.** It was the reason the comment went unexamined.
 
 **The gate waits for the TURN, and the version of this paragraph written a few hours ago said the
 opposite.** It said *the gate fires per STEP, not per turn*, that *the turn in flight IS aborted*,
@@ -157,6 +189,18 @@ gone from `healbot.ts` and `healbot.tsx`, and `HEALBOT_RETIRE_HARD` now reads no
 grep over both files, and asserted twice in the suite: `probe_twin.py:132-136` and
 `probe_turn_predicate.py:162-166`. The margin the hard gate was supposed to provide now comes from
 the THRESHOLD being low enough to absorb a worst-case turn, which is why the default moved.
+
+**PHASE 8 RE-DERIVED `worst_turn`, AND THE PARAGRAPH BELOW RESTS ON ONE TURN.** `probe_turn_growth.py`
+(free, 15/15) groups every assistant message on disk into TURNS with the shipped `turnFinished()` —
+86 completed turns, the rig DBs plus the same `~/.local/share/opencode/opencode.db` the 733-message
+figure comes from, fixture-checked at 677/56/733. Results: the worst single-turn growth on the pinned
+`gpt-5.6-sol` is **175,148**, so the bound on `RETIRE_AT` is **184,852**, not the ~190,000 stated
+below and in three other files, and 180,000 clears it by **4,852 tokens — 1.3% of the ceiling**,
+thinner than the "~10K, under 3%" margin this project already rejected at the old 350,000 default.
+~170K is the **tail** (p50 is 22,152), it just is not the **maximum**, which is what the derivation
+used it as. **And the threshold is MODEL-SPECIFIC**: the corpus holds a **223,258** turn on
+`gpt-5.6-terra`, which at 180,000 lands at 403,258 and dies — so the number is verified only while
+`opencode.jsonc:16` pins `gpt-5.6-sol`, and the probe asserts that pin. `docs/GROWTH.md` §1.
 
 **`RETIRE_AT` defaults to 180,000, down from 256,000, and the number is a consequence of the
 semantics above.** With one gate the requirement is `RETIRE_AT + worst_turn < ceiling`. Waiting for

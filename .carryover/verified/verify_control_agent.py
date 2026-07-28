@@ -61,9 +61,24 @@ PORT = 4745
 DB = db("control")
 LOG = f"{WORK}/control-agent.log"
 
-# The instruction. Names no tool, and asks for something only the control tools can accomplish —
-# a session cannot create ANOTHER session with `bash`, so a build-agent turn has no way to satisfy
-# it and must say so.
+# The instruction. Names no tool, and asks for something the control tools accomplish directly.
+#
+# THE PREMISE UNDER THIS COMMENT WAS FALSE AND IS NOW DISPROVED, TESTED. It read: "asks for
+# something ONLY the control tools can accomplish — a session cannot create ANOTHER session with
+# `bash`, so a build-agent turn has no way to satisfy it and must say so." On the Phase 8 re-run the
+# build agent, denied the five tools, went looking with `opencode --help` / `session --help` /
+# `run --help` and then ran
+#
+#     opencode run --auto --format json --title "..." "Create a file named hello.txt ..."
+#
+# which created a real TOP-LEVEL session (`ses_05a078334ffe`, 1 user + 3 assistant messages, agent
+# `build`). The CLI is on PATH inside the tool sandbox, and it talks to the same DB.
+#
+# What that costs and what it does not. It does NOT touch the claim this file is paid for: the tool
+# DEFINITIONS are still absent from the build agent's request payload, which is the token-budget
+# claim, and it still passes. What it kills is a containment reading nobody should have had —
+# `healbot_*: deny` scopes CONTEXT, not CAPABILITY. Any agent with `bash` can reach the same
+# capability the long way round. See docs/GROWTH.md.
 TASK = (
     "Report how many other sessions are currently running in this project. Then start a new, "
     "separate session whose job is to create a file called hello.txt in the project directory "
@@ -201,42 +216,59 @@ try:
         if not plain_healbot
         else f"LEAKED: {plain_healbot}",
     )
-    # Excludes SUBAGENTS, and the exclusion is the finding rather than a convenience.
+    # THE FOURTH FORM OF THIS ASSERTION, and the first one that is both true and falsifiable. The
+    # three before it are kept in full because the sequence is the lesson: each was a sharper guess
+    # about what the deny guarantees, and the guarantee kept shrinking.
     #
-    # The first version of this assertion counted every new session and failed. The extra one was
-    # the build agent's own `@general` subagent: denied the healbot tools, it reached for `task`
-    # instead — `['skill', 'bash', 'bash', 'task']` — which is a legitimate and correct thing for it
-    # to do, and which creates a session with a parentID. So the check was measuring "did anything
-    # create a session" when the claim is "did the DENIED tools create a top-level session". A
-    # `task` subagent is not that, and counting it would have made the deny look broken for doing
-    # the right thing.
+    #   1. "the build agent created no new session" — FAILED on execution. The extra was its own
+    #      `@general` subagent, which `task` legitimately creates (`['skill','bash','bash','task']`).
+    #      It measured "did anything create a session" when the claim was about the DENIED tools, and
+    #      it made the deny look broken for doing the right thing.
+    #   2. "all(s.get('parentID') for s in extras)" — vacuously True on an empty list, and `extras`
+    #      is empty whenever the build agent answers directly instead of delegating. Caught in a
+    #      Phase 7 review before it ever ran; a re-run could have reported 16/16 having validated
+    #      nothing.
+    #   3. "it created NO top-level session" — DISPROVED ON EXECUTION, Phase 8. It created one, with
+    #      `bash` and the `opencode` CLI. See the note on TASK above. This is the interesting one:
+    #      form 2 was too weak to fail and form 3 was strong enough to fail, and did — against a
+    #      premise the rig had been carrying in a comment since it was written.
     #
-    # Stated the strong way instead: the build agent's delegation went through `task`, so every
-    # session it produced has a parent.
-    #
-    # THE CORRECTED FORM WAS STILL WEAK, and a Phase 7 review caught it before it was ever run.
-    # `all(s.get("parentID") for s in extras)` is True on an EMPTY list — and `extras` is empty
-    # whenever the build agent answers directly instead of delegating, which is a perfectly
-    # ordinary outcome. So a re-run could have reported 16/16 having validated nothing.
-    #
-    # Assert the actual claim instead: the denied tools are the only way to create a TOP-LEVEL
-    # session, so the build agent must have created none. That is False the moment a top-level
-    # session appears, and it does not quietly become vacuous — when the interesting case did not
-    # occur, the detail line says so out loud rather than reporting a silent pass.
+    # So state the claim the deny actually makes. It is a CONTEXT control: no top-level session was
+    # created by a healbot TOOL. The server logs every `healbot_spawn` it serves and only the server
+    # writes that line, so the log is independent of anything the model said or did — if the deny
+    # leaked and the build turn spawned through the tool, a second `control: spawned` appears here.
     extras = [s for s in live() if s["id"] not in before and s["id"] not in (control, spawned, plain)]
     top_level = [s for s in extras if not s.get("parentID")]
+    log = open(LOG, encoding="utf-8", errors="replace").read() if os.path.exists(LOG) else ""
+    spawn_lines = [ln for ln in log.splitlines() if "control: spawned" in ln]
     r.check(
-        "…and it created NO top-level session — the denied tools are the only way to make one",
-        not top_level,
-        f"{len(extras)} extra, {len(top_level)} top-level: "
-        f"{[(s['id'][:16], 'subagent' if s.get('parentID') else 'TOP-LEVEL') for s in extras]}"
-        + (
-            "  [NOT EXERCISED: the build agent created no sessions at all this run, so this "
-            "assertion held vacuously — the scoping claim rests on the tool-call check above]"
-            if not extras
-            else ""
-        ),
+        "…and no healbot TOOL spawned anything for it — the server logged exactly one spawn, the "
+        "control agent's",
+        len(spawn_lines) == 1 and spawned in spawn_lines[0],
+        f"{len(spawn_lines)} spawn line(s): {[ln.split('spawned ')[-1][:20] for ln in spawn_lines]}",
     )
+    # The finding itself, surfaced on every run so it cannot quietly stop being exercised without
+    # anyone noticing. When the build agent takes the bash route, the command is printed verbatim;
+    # when it does not, that is said out loud rather than reading as though the case were covered.
+    bash_cmds = [
+        ((p.get("state") or {}).get("input") or {}).get("command", "")
+        for p in parts_of(plain)
+        if p.get("type") == "tool" and p.get("tool") == "bash"
+    ]
+    escaped = [c for c in bash_cmds if c and ("opencode run" in c or "/session" in c)]
+    # NOT an r.check. It has no failing case — a run where the build agent behaves is as consistent
+    # with the finding as one where it does not — and an assertion that cannot go red is the exact
+    # thing this suite's README calls its characteristic failure. Printed, counted by nobody.
+    if escaped and top_level:
+        detail = f"{len(top_level)} top-level session(s) created with no healbot tool, via {escaped[0][:90]!r}"
+    else:
+        detail = (
+            f"NOT EXERCISED this run ({len(extras)} extra, {len(top_level)} top-level, "
+            f"{len(escaped)} session-creating bash call(s)) — the build agent did not take the bash "
+            "route this time, so this run adds no evidence either way. The finding rests on the "
+            "Phase 8 run recorded in the TASK note above, not on this line"
+        )
+    print(f"\n  [observation] CONTAINMENT IS NOT WHAT THE DENY BUYS: {detail}", flush=True)
 
     # The pair, stated as one fact. This is the assertion the token budget rests on.
     r.check(
