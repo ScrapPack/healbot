@@ -67,8 +67,9 @@ pending on me this time and nothing is blocking you. Do not invent something to 
      `source` discrimination in the path is a metadata display field) but not *does it, under a
      real workload*. Everything TESTED in this repo was measured on the builtin path.
 
-  4. NOT YOURS — Phase 3's exit gate, `/code-review ultra` on the `harness/` diff, is still unmet.
-     It is user-triggered and billed; an agent session cannot launch it. Remind me.
+  DO NOT remind me about `/code-review ultra`. It has been run. HARNESS.md and two phase docs
+  still carry it as an open row; leave them, that is deliberate and it is my business, not a
+  documentation defect for you to tidy.
 
 METHOD — this project's standard, and it is not decoration:
   - Classify every claim VERIFIED (read code, cite file:line) / TESTED (ran it) / INFERRED /
@@ -173,6 +174,14 @@ been queued for two phases, and even that earned its money by *failing*.
 exercised at 20,000; the external route has been VERIFIED at source. Both buy a tier upgrade on a
 claim already believed, which is the least interesting thing money can do here — and 2 was offered
 to the owner in Phase 8 and declined on exactly that reasoning.
+
+**The `/code-review ultra` reminder is gone from the prompt, and the open rows it referred to are
+not.** The review has been run. The Still-open rows in `HARNESS.md`, `docs/RELAY.md` §5 and
+`docs/GROWTH.md` §6 still describe the Phase 3 exit gate as unmet and still say an agent session
+cannot launch it — that is stale, knowingly, and the owner's call to leave. The prompt carries an
+explicit instruction not to touch them, because the alternative is every fresh session either
+nagging about a completed review or "correcting" a row it has no evidence about. Whoever next
+reconciles the gate should do it from the review's own findings, not from this file.
 
 Deliberately **not** in the prompt:
 
