@@ -28,7 +28,7 @@ failure is a bug in the test, not the code (§6).
 | `verify_question.py` | 27/27 | the question clause, **unforced** |
 | `verify_surface.py` | 17/18 | auto-surface, both suppression rules, `tab` cycling |
 | `verify_retire.py` | 17/17 | §9 — the retirement observable and a reachable threshold |
-| `verify_handoff.py` | 21/21 | §10 — retire and hand off with continuity intact |
+| `verify_handoff.py` | 21/21 ⚠ | §10 — retire and hand off with continuity intact. **Phase 10: this score predates Phase 5's edit**, which took the file to 22 unconditional assertions. Unreachable as recorded; needs a re-run. `docs/VERDICT.md` §2 |
 
 The rig is at `.carryover/verified/`, with a README covering how to re-run it. The four
 `.carryover/verify*.py` at the level above are the void ones; they are kept only as a record.
@@ -363,6 +363,11 @@ session from nothing, so the grid must filter retired sessions itself.
 ## 10. Step 6b — retire and hand off (added 2026-07-27)
 
 The last clause of the exit gate. **21/21** on `openai/gpt-5.6-sol` at `HEALBOT_RETIRE_AT=20000`.
+
+> **Phase 10 caveat.** That run was of the file as it stood at `cdd1096`, which had 21 assertions.
+> Phase 5 (`823d7a2`) removed a vacuous check and added two mutation legs — the file now has **22**,
+> all unconditional, so no execution of it can produce 21/21. The result below is a true record of a
+> Phase 4 execution; it is not a record of the current rig. `docs/VERDICT.md` §2.
 
 ### "Continuity intact", defined
 

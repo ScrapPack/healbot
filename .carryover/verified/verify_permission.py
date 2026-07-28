@@ -20,6 +20,7 @@ keyboard-gating assertion would pass vacuously.
 """
 
 import json
+import sys
 import time
 
 from rig import Api, Results, boot, db, fire, on_grid, wait_for
@@ -28,7 +29,7 @@ PORT = 4713
 DB = db("perm2")
 EXTERNAL = "/etc/shells"
 
-r = Results()
+r = Results(expect=35)
 api = Api(PORT)
 
 
@@ -224,6 +225,18 @@ try:
     r.check("on_grid is FALSE again after closing the grid", not on_grid(t))
 
     t.show("final screen")
+except SystemExit:
+    raise
+except Exception:
+    # Failures must look like failures. `sys.exit()` inside a `finally` DISCARDS the escaping
+    # exception, so a rig that crashed still exits on summary()'s verdict over whatever ran
+    # first. Backfilled in Phase 10 with the exit-code fix below: the two MUST ship together,
+    # because adding sys.exit() to a finally without this guard CREATES that defect.
+    import traceback
+
+    traceback.print_exc()
+    r.check("UNEXPECTED EXCEPTION", False, "see traceback above")
 finally:
-    r.summary()
+    ok = r.summary()
     t.close()
+    sys.exit(0 if ok else 1)

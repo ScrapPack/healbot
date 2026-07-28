@@ -8,6 +8,7 @@
 Everything is asserted on the position of the selection marker, never on cell text.
 """
 
+import sys
 import time
 
 from rig import Api, Results, boot, db, fire, on_grid, wait_for
@@ -15,7 +16,7 @@ from rig import Api, Results, boot, db, fire, on_grid, wait_for
 PORT = 4715
 DB = db("surf")
 
-r = Results()
+r = Results(expect=18)
 api = Api(PORT)
 
 
@@ -48,7 +49,20 @@ try:
     t.key("enter", 3.5)
     t.show("grid, three idle sessions, nothing blocked")
     r.check("grid open", on_grid(t))
-    r.check("nothing is blocked yet", not t.find("blocked") and not t.find("PERMISSION"))
+    # `not t.find("blocked")` is what stood here, and it was the suite's one recorded failing
+    # assertion (17/18) for five phases — a TEST bug, never a code one. The grid's FOOTER is
+    # `a answer · x retire · tab next blocked · enter focus · …` (`healbot.tsx:997`), so the
+    # substring "blocked" is on screen whenever the grid is open and the predicate was False by
+    # construction. Until Phase 10 this rig discarded `summary()`'s verdict and exited 0
+    # regardless, which is why a permanently-red assertion could sit here that long.
+    #
+    # The header is the thing that actually counts blocks, and it is rendered inside
+    # `<Show when={blocked() > 0}>` (`healbot.tsx:963`) — VERIFIED at source — so `\d+ blocked`
+    # is absent exactly when nothing is blocked. That is the shape `search()` exists for, and
+    # `1 blocked` / `2 blocked` / `3 blocked` are what the later legs of this rig assert.
+    # `exact()` for the cell label: labels are uppercase, `find()` is case-INSENSITIVE, and it
+    # is strictly narrower — if the old `find` half passed, this passes too.
+    r.check("nothing is blocked yet", not t.search(r"\d+ blocked") and not t.exact("PERMISSION"))
     start = marker(t)
     r.check("initial cursor position recorded", start is not None, f"marker={start}")
 
@@ -114,6 +128,18 @@ try:
             f"{before} pending -> {npending(api)}")
     r.check("still on the control terminal", on_grid(t))
     t.show("final")
+except SystemExit:
+    raise
+except Exception:
+    # Failures must look like failures. `sys.exit()` inside a `finally` DISCARDS the escaping
+    # exception, so a rig that crashed still exits on summary()'s verdict over whatever ran
+    # first. Backfilled in Phase 10 with the exit-code fix below: the two MUST ship together,
+    # because adding sys.exit() to a finally without this guard CREATES that defect.
+    import traceback
+
+    traceback.print_exc()
+    r.check("UNEXPECTED EXCEPTION", False, "see traceback above")
 finally:
-    r.summary()
+    ok = r.summary()
     t.close()
+    sys.exit(0 if ok else 1)

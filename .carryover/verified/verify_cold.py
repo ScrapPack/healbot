@@ -36,7 +36,7 @@ PORT = 4732
 DB = db("cold")
 EXTERNAL = "/etc/shells"
 
-r = Results()
+r = Results(expect=17)
 api = Api(PORT)
 
 

@@ -173,7 +173,9 @@ written into `HARNESS.md`'s Traps, `harness/env.sh` and this file.
 
 ## 2. `healbot_*: deny` is a context control, not a sandbox
 
-`verify_control_agent.py` was the one rig in the suite whose recorded score did not correspond to an
+`verify_control_agent.py` was — **so this section claimed, and Phase 10 disproved it; see
+`docs/VERDICT.md` §2, where `verify_handoff.py` turns out to have had the identical property two
+phases longer** — the one rig in the suite whose recorded score did not correspond to an
 execution of the file as it stood — its single failing assertion had been rewritten **twice** without
 a run. Re-running it was the cheap item on this phase's list.
 

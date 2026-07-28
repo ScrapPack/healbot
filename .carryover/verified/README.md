@@ -35,6 +35,12 @@ venv/bin/python probe_request_channel.py # 9/9 does `x`'s metadata write actuall
                                      #       no model turn — an empty session has no todos, so
                                      #       retire() takes its no-successor branch)
 venv/bin/python probe_control_wiring.py # 14/14 are the control tools and agent registered?
+venv/bin/python probe_rig_contract.py# 20/20 does every rig in this suite still report FAILURE as
+                                     #       failure? Reads all 23 entrypoints (itself included) as SOURCE and asserts
+                                     #       the contract: a declared assertion FLOOR, a satisfiable
+                                     #       one, no `finally` that exits without a crash guard, and
+                                     #       an exit status that depends on summary(). Six paid rigs
+                                     #       failed the last of those and always exited 0
 venv/bin/python probe_turn_growth.py # 16/16 is ~170K the TAIL or the MIDDLE of single-turn growth?
                                      #       Re-derives the `worst_turn` that SIZES RETIRE_AT from
                                      #       every session DB on disk instead of the one turn it
@@ -46,9 +52,17 @@ venv/bin/python probe_turn_growth.py # 16/16 is ~170K the TAIL or the MIDDLE of 
 venv/bin/python smoke.py             # 6/6   provider/model/config sanity — run this first
 venv/bin/python verify_permission.py # 40/40 the exit-gate permission clause at N=4
 venv/bin/python verify_question.py   # 27/27 the question clause, UNFORCED
-venv/bin/python verify_surface.py    # 17/18 auto-surface, suppression, tab cycling
+venv/bin/python verify_surface.py    # 18/18 auto-surface, suppression, tab cycling. Was 17/18 for
+                                     #       five phases on a TEST bug that Phase 10 fixed — and
+                                     #       that could sit there because this rig discarded
+                                     #       summary()'s verdict and exited 0. VERIFIED, not yet
+                                     #       re-run. docs/VERDICT.md §4
 venv/bin/python verify_retire.py     # 17/17 the retirement observable and threshold
 venv/bin/python verify_handoff.py    # 21/21 retire and hand off with continuity intact
+                                     #       ** STALE: 21/21 is a PHASE 4 score. Phase 5 took the
+                                     #       file to 22 unconditional assertions and never re-ran
+                                     #       it, so 21/21 is unreachable. Floor is 22; re-run it
+                                     #       before quoting the number. docs/VERDICT.md §2
 venv/bin/python verify_cold.py       # 21/21 the COLD-START reconcile, via serve + attach
 venv/bin/python verify_cold_question.py # 22/22 the question.rejected half of that reconcile
 venv/bin/python verify_auto_retire.py # 13/13 automatic retirement WITH THE GRID OPEN. Superseded
@@ -251,6 +265,31 @@ actually ran.
 **This suite's characteristic failure is passing.** Eight assertions across the effort were
 found to be incapable of failing, against four real defects that tests actually caught. Read
 that as the house style to guard against, not a historical note.
+
+**AND A GREEN RUN IS NOT EVIDENCE WHEN THERE WAS NO RUN AT ALL — Phase 10's addition, and it is
+about the PAID half.** Phase 9 fixed the ten free probes and touched none of the eleven rigs that
+cost money, where the same defect was older and worse. **Six of them never read `summary()`'s
+return value**: `finally: r.summary(); t.close()`, no `sys.exit`, so the process ended normally and
+the shell saw 0 however many assertions had failed. Three contain no `sys.exit` anywhere. Among
+them `smoke.py` — the provider check this file tells you to run FIRST — and `verify_surface.py`,
+which carried a permanently-red assertion for five phases precisely because nothing surfaced it.
+
+A fresh clone could not have caught this the way it caught Phase 9's: a paid rig cannot be run
+from a clone, so the paid half never executed, never crashed, and never got the chance to report a
+false green. **It was only ever visible in the source.** Hence `probe_rig_contract.py`, which reads
+all 23 entrypoints (itself included) as artifacts and asserts the contract — floor declared, floor satisfiable, no
+`finally` that exits without a crash guard, exit status dependent on `summary()` — with a mutation
+check per predicate and an inverted leg so a module with no `try` is not flagged.
+
+**A RECORDED SCORE IS A CLAIM ABOUT A FILE AT A MOMENT, AND NOTHING TIED THE TWO TOGETHER.**
+`verify_handoff.py` is cited as **21/21** in four documents as the evidence for the Phase 4 exit
+gate's second clause. It holds **22** unconditional assertions: Phase 5 replaced a vacuous check
+with two mutation legs and never re-ran it, so 21/21 is unreachable. Phase 8 had found the same
+shape in `verify_control_agent.py` and called it *"the one rig in the suite"* — that uniqueness was
+never checked and is false. Counting `r.check(` per file and comparing against the recorded scores
+reconciles every other rig in one command: `verify_cold.py` and `verify_retire_350k.py` differ by
+exactly their own crash guard, `verify_control_agent.py` by one conditional. **Re-run a rig before
+quoting its number, or say which execution the number came from.** `docs/VERDICT.md` §2.
 
 **A GREEN RUN IS NOT EVIDENCE THAT THE RUN HAPPENED — and every rule in this section was about
 predicates, not about execution.** `Results.summary()` returned `not failed` over whatever rows
@@ -467,9 +506,21 @@ grid and these rigs were corrected together, so the interesting session is now c
 to land in the last cell. Fixing only one side would have made three assertions pass for the
 wrong reason.
 
-## The one failure
+## The one failure — fixed in Phase 10, and the reason it lasted
 
-`verify_surface.py`'s "nothing is blocked yet" precondition asserts `not t.find("blocked")`.
-The grid footer is literally `a answer · tab next blocked · …` (`healbot.tsx:464`), so that
-substring is always present while the grid is open. Test bug; the same run's `1 blocked` /
-`2 blocked` / `3 blocked` checks are the ones that carry the meaning, and they passed.
+`verify_surface.py`'s "nothing is blocked yet" precondition asserted `not t.find("blocked")`. The
+grid footer is literally `a answer · x retire · tab next blocked · …` (`healbot.tsx:997`), so that
+substring is present whenever the grid is open and the predicate was False **by construction** —
+`find()` is case-insensitive substring. Test bug, never a code one; the same run's `1 blocked` /
+`2 blocked` / `3 blocked` checks carry the meaning and they passed.
+
+It is now `not t.search(r"\d+ blocked") and not t.exact("PERMISSION")`. The header that counts
+blocks is wrapped in `<Show when={blocked() > 0}>` (`healbot.tsx:963`, VERIFIED at source), so
+`\d+ blocked` is on screen exactly when something is blocked. The regex was checked both ways —
+it matches `Healbot  4 sessions  3 blocked`, it does not match the footer alone — but the rig is
+paid and has not been re-run, so this is **VERIFIED, not TESTED**.
+
+**The interesting part is why a permanently-red assertion survived five phases.** This rig ended
+`finally: r.summary(); t.close()` — the verdict computed, printed, and discarded, with no
+`sys.exit` anywhere in the file. It exited **0** every time. Five other paid rigs did the same,
+including `smoke.py`, the provider check this README tells you to run first. `docs/VERDICT.md` §1.

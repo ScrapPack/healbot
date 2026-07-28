@@ -89,7 +89,7 @@ SENTINEL = "ORCHID-7742-THREEFIFTY"
 # previous rig or a shell export, the whole run measures nothing.
 os.environ.pop("HEALBOT_RETIRE_AT", None)
 
-r = Results()
+r = Results(expect=25)
 api = Api(PORT, PROJECT)
 
 

@@ -58,7 +58,7 @@ ASKS = [
     "write the config.",
 ]
 
-r = Results()
+r = Results(expect=22)
 api = Api(PORT)
 
 
@@ -266,6 +266,17 @@ try:
         f"{'dismissed' in parts_blob(asker).lower()}; visible on the focused screen = {bool(t.find('dismissed'))}",
         flush=True,
     )
+except SystemExit:
+    raise
+except Exception:
+    # Failures must look like failures. `sys.exit()` inside a `finally` DISCARDS the escaping
+    # exception, so a rig that crashed still exits on summary()'s verdict over whatever ran
+    # first. Backfilled in Phase 10 with the exit-code fix below: the two MUST ship together,
+    # because adding sys.exit() to a finally without this guard CREATES that defect.
+    import traceback
+
+    traceback.print_exc()
+    r.check("UNEXPECTED EXCEPTION", False, "see traceback above")
 finally:
     if t:
         t.close()

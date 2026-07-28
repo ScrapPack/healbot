@@ -33,7 +33,7 @@ THRESHOLD = 20_000
 os.environ["HEALBOT_RETIRE_AT"] = str(THRESHOLD)
 os.environ.pop("HEALBOT_AUTO_RETIRE", None)  # default is ON; make sure nothing disabled it
 
-r = Results()
+r = Results(expect=13)
 api = Api(PORT, PROJECT)
 
 
@@ -167,6 +167,17 @@ try:
             f"{len(chain)} extra session(s)")
     r.check("still on the control terminal throughout", on_grid(t))
     t.show("after automatic retirement")
+except SystemExit:
+    raise
+except Exception:
+    # Failures must look like failures. `sys.exit()` inside a `finally` DISCARDS the escaping
+    # exception, so a rig that crashed still exits on summary()'s verdict over whatever ran
+    # first. Backfilled in Phase 10 with the exit-code fix below: the two MUST ship together,
+    # because adding sys.exit() to a finally without this guard CREATES that defect.
+    import traceback
+
+    traceback.print_exc()
+    r.check("UNEXPECTED EXCEPTION", False, "see traceback above")
 finally:
     ok = r.summary()
     t.close()

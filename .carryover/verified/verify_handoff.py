@@ -13,6 +13,7 @@ Retirement is OPERATOR-INITIATED: the cell goes RETIRE, `x` performs the handoff
 
 import json
 import os
+import sys
 import time
 
 from rig import Api, PROJECT, Results, boot, db, fire, on_grid, wait_for
@@ -21,7 +22,7 @@ PORT = 4719
 DB = db("handoff")
 THRESHOLD = 20_000
 
-r = Results()
+r = Results(expect=22)
 api = Api(PORT)
 
 
@@ -232,6 +233,18 @@ try:
     r.check("the successor's window is materially emptier than the predecessor's", post < pre,
             f"predecessor {pre:,} -> successor {post:,} ({round(post / pre * 100)}%)")
     t.show("final")
+except SystemExit:
+    raise
+except Exception:
+    # Failures must look like failures. `sys.exit()` inside a `finally` DISCARDS the escaping
+    # exception, so a rig that crashed still exits on summary()'s verdict over whatever ran
+    # first. Backfilled in Phase 10 with the exit-code fix below: the two MUST ship together,
+    # because adding sys.exit() to a finally without this guard CREATES that defect.
+    import traceback
+
+    traceback.print_exc()
+    r.check("UNEXPECTED EXCEPTION", False, "see traceback above")
 finally:
-    r.summary()
+    ok = r.summary()
     t.close()
+    sys.exit(0 if ok else 1)

@@ -14,6 +14,7 @@ Asserts, in order:
 """
 
 import json
+import sys
 import time
 
 from rig import Api, Results, boot, db, fire, on_grid, wait_for
@@ -23,7 +24,7 @@ DB = db("retire")
 THRESHOLD = 20_000
 DEFAULT = 350_000
 
-r = Results()
+r = Results(expect=17)
 api = Api(PORT)
 
 
@@ -134,6 +135,18 @@ try:
     r.check("still on the control terminal", on_grid(t))
     print(f"\n  final occupancy: grower={occupancy(grower):,}  quiet={[f'{occupancy(s):,}' for s in quiet]}",
           flush=True)
+except SystemExit:
+    raise
+except Exception:
+    # Failures must look like failures. `sys.exit()` inside a `finally` DISCARDS the escaping
+    # exception, so a rig that crashed still exits on summary()'s verdict over whatever ran
+    # first. Backfilled in Phase 10 with the exit-code fix below: the two MUST ship together,
+    # because adding sys.exit() to a finally without this guard CREATES that defect.
+    import traceback
+
+    traceback.print_exc()
+    r.check("UNEXPECTED EXCEPTION", False, "see traceback above")
 finally:
-    r.summary()
+    ok = r.summary()
     t.close()
+    sys.exit(0 if ok else 1)

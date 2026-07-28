@@ -3,6 +3,7 @@ and complete a real turn? Everything downstream is void if this does not hold â€
 exactly the failure the previous run papered over by reaching for a local model."""
 
 import json
+import sys
 import time
 
 from rig import Api, Results, boot, db, fire, wait_for
@@ -10,7 +11,7 @@ from rig import Api, Results, boot, db, fire, wait_for
 PORT = 4711
 DB = db("smoke")
 
-r = Results()
+r = Results(expect=6)
 api = Api(PORT)
 
 print("== boot ==", flush=True)
@@ -52,6 +53,18 @@ try:
 
     tok = [(m.get("info") or m).get("tokens") for m in assistant]
     print(f"  tokens: {json.dumps(tok)[:400]}", flush=True)
+except SystemExit:
+    raise
+except Exception:
+    # Failures must look like failures. `sys.exit()` inside a `finally` DISCARDS the escaping
+    # exception, so a rig that crashed still exits on summary()'s verdict over whatever ran
+    # first. Backfilled in Phase 10 with the exit-code fix below: the two MUST ship together,
+    # because adding sys.exit() to a finally without this guard CREATES that defect.
+    import traceback
+
+    traceback.print_exc()
+    r.check("UNEXPECTED EXCEPTION", False, "see traceback above")
 finally:
-    r.summary()
+    ok = r.summary()
     t.close()
+    sys.exit(0 if ok else 1)

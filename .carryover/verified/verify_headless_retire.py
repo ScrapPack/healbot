@@ -51,7 +51,7 @@ DB = db("headless")
 LOG = f"{WORK}/headless-serve.log"
 THRESHOLD = 20_000
 
-r = Results()
+r = Results(expect=22)
 api = Api(PORT, PROJECT)
 server = None
 
@@ -323,6 +323,17 @@ try:
     r.check("the server is still healthy afterwards", api("GET", "/session?scope=project") is not None)
     r.check("the guard did not report a failure", "retire FAILED" not in server_log(), "no failure lines")
 
+except SystemExit:
+    raise
+except Exception:
+    # Failures must look like failures. `sys.exit()` inside a `finally` DISCARDS the escaping
+    # exception, so a rig that crashed still exits on summary()'s verdict over whatever ran
+    # first. Backfilled in Phase 10 with the exit-code fix below: the two MUST ship together,
+    # because adding sys.exit() to a finally without this guard CREATES that defect.
+    import traceback
+
+    traceback.print_exc()
+    r.check("UNEXPECTED EXCEPTION", False, "see traceback above")
 finally:
     if server:
         try:
