@@ -249,10 +249,35 @@ rig created instead of hardcoding it. Doing that *after* paying for a run would 
 new score describes, which is precisely the defect Phase 10 recorded. The rigs are frozen at the
 version that produced this phase's score, and the repair is handed to Phase 13 with the sites named.
 
-*Archiving, not deleting, is the right move when clearing one:* `hb/*.db` is the corpus
+*Archiving, not deleting, is the right move when clearing a DB:* `hb/*.db` is the corpus
 `probe_turn_growth.py` derives `worst_turn` from (`docs/CLONE.md` §4), so a cleared DB should be
 renamed to something that still matches the glob — `quest.db` → `quest-phase12a.db` — or the act of
 making a rig re-runnable quietly deletes the evidence that sizes `RETIRE_AT`.
+
+### The fixture was restored at the end of the phase — 94 MB → 1.8 MB
+
+Done **after** the re-derivation and the commit that recorded it, on the owner's instruction, so no
+number in this document depends on it. `hb/project` is back to exactly the seven entries the rig
+declares: `worker0-2.txt`, `ledger0-2.txt` and `.git`. Seventy-nine were removed — 70 `chunk*.txt`,
+`node_modules`, and the `package.json` / `package-lock.json` / `vitest.config.ts` / `biome.json` /
+`findings.txt` / `hello.txt` / `notes.txt` a model created during a run.
+
+**It deleted no measurement, and that was verified rather than assumed:** `probe_turn_growth.py`
+re-run afterwards reports every figure unchanged — 107 turns, in-scope maximum 70,704, out-of-scope
+maximum 299,326, 19/19. The evidence was always in `hb/*.db`; the project directory only ever held
+the *workload*. Free suite 190/190 after the clean, ledgers verified at 130,025 bytes (above
+`fixtures()`'s 130,000 regeneration threshold, so it left them alone) and worker payloads intact.
+`git_baseline()` re-ran to commit the deletions, so the worktree is clean and a session's diffs
+start from a known tree again.
+
+**One consequence, introduced deliberately and worth knowing.** The removed set included a
+`.gitignore` holding `node_modules/`, which was itself model-created residue and not declared. If a
+future rig run shells out to `npm install`, `git_baseline()`'s `git add -A` will now commit
+`node_modules` into `hb/project/.git` and bloat it — the old `.gitignore` was the only thing
+preventing that, and it is gone because it was never part of the fixture. The principled repair is
+to make it declared: `rig.fixtures()` should write the `.gitignore` alongside the other six files.
+Not done here for the reason in §7 — `rig.py` is imported by the rigs whose scores this phase
+records.
 
 ## 8. A third thing, found while diagnosing — `wait_for`'s timeout does not bound
 

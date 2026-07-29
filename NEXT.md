@@ -123,6 +123,13 @@ build.
        from what the rig created. TESTED — this is how Phase 12 found it. When clearing a rig DB,
        ARCHIVE it under a name that still matches `hb/*.db` (quest.db -> quest-phase12a.db); that
        glob is probe_turn_growth.py's corpus and deleting it removes the evidence sizing RETIRE_AT.
+     - MAKE THE `.gitignore` DECLARED. hb/project was restored to its declared fixture at the end of
+       Phase 12 (94 MB -> 1.8 MB, seven entries, verified to have deleted no measurement). The
+       residue removed included a model-created `.gitignore` holding `node_modules/`, which was
+       never part of the fixture — so a future run that shells out to `npm install` will now have
+       git_baseline()'s `git add -A` commit node_modules into hb/project/.git and bloat it. Fix:
+       rig.fixtures() writes the `.gitignore` alongside the six files, which also makes the thing
+       that was silently protecting the baseline into something declared and checkable.
      - `wait_for`'s TIMEOUT DOES NOT BOUND. It checks its deadline only between calls to `fn`
        (rig.py:296) and Api.__call__ defaults to timeout=900 (rig.py:225), so a 300s budget can be
        held for 900. VERIFIED by reading, never fired. Likely repair: Api takes its timeout from the
