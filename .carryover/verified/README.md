@@ -40,13 +40,30 @@ venv/bin/python probe_citations.py   # 14/14 do this repo's file:line citations 
                                      #       asserts the file exists, the line exists, and it is not
                                      #       blank. fork/README.md's "drift mode 2", which was named
                                      #       as a risk for eleven phases with no check behind it
-venv/bin/python probe_rig_contract.py# 22/22 does every rig in this suite still report FAILURE as
-                                     #       failure? Reads all 23 entrypoints (itself included) as SOURCE and asserts
-                                     #       the contract: a declared assertion FLOOR, a satisfiable
-                                     #       one, no `finally` that exits without a crash guard, and
-                                     #       an exit status that depends on summary(). Six paid rigs
-                                     #       failed the last of those and always exited 0
-venv/bin/python probe_turn_growth.py # 16/16 is ~170K the TAIL or the MIDDLE of single-turn growth?
+venv/bin/python probe_rig_contract.py# 29/29 does every rig in this suite still report FAILURE as
+                                     #       failure — and can it SEE one? Reads all 24 entrypoints
+                                     #       (itself included) as SOURCE and asserts six contracts:
+                                     #       a declared assertion FLOOR, a satisfiable one, no
+                                     #       `finally` that exits without a crash guard, an exit
+                                     #       status that depends on summary(), that verdict exit
+                                     #       LAST in the finally — and (Phase 12) that no assertion
+                                     #       decides a turn COMPLETED by counting fire()'s box.
+                                     #       Six paid rigs failed the fourth and always exited 0;
+                                     #       four rows failed the sixth and could not fail at all
+venv/bin/python probe_turn_growth.py # 13/16 RED SINCE PHASE 12, exit 1, AND THE RED IS CORRECT.
+                                     #       A single turn measured 299,326 on the pinned model —
+                                     #       71% above the 175,148 RETIRE_AT is derived from — so
+                                     #       180,000 + 299,326 = 479,326 against a ~360K ceiling and
+                                     #       the margin is -119,326. Cause: hb/project is an
+                                     #       UNDECLARED variable in the derivation. It has grown to
+                                     #       84 entries / 94 MB / node_modules across every paid run
+                                     #       ever, because sessions create files nobody cleans and
+                                     #       git_baseline() commits them into the baseline. Exclude
+                                     #       Phase 12's two runs and the maximum is still 175,148.
+                                     #       DO NOT clear hb/project or drop a DB to make this green
+                                     #       — that deletes the measurement to restore the number.
+                                     #       docs/OUTCOME.md §10; the decision is the owner's.
+                                     #       (was 16/16) is ~170K the TAIL or the MIDDLE of single-turn growth?
                                      #       Re-derives the `worst_turn` that SIZES RETIRE_AT from
                                      #       every session DB on disk instead of the one turn it
                                      #       rested on. Runs the SHIPPED turnFinished() and
@@ -56,7 +73,18 @@ venv/bin/python probe_turn_growth.py # 16/16 is ~170K the TAIL or the MIDDLE of 
 # these spend credits
 venv/bin/python smoke.py             # 6/6   provider/model/config sanity — run this first
 venv/bin/python verify_permission.py # 40/40 the exit-gate permission clause at N=4
-venv/bin/python verify_question.py   # 27/27 the question clause, UNFORCED
+venv/bin/python verify_question.py   # 27/30 the question clause, UNFORCED. THREE KNOWN REDS since
+                                     #       Phase 5, found by Phase 12's run — its FIRST execution
+                                     #       since Phase 4. Phase 5 built auto-surface (the cursor
+                                     #       lands ON the blocked cell) and left three assertions
+                                     #       assuming it does not: "'a' on an unblocked cell",
+                                     #       "tab moved the cursor onto the blocked cell", and
+                                     #       `t.find("4 sessions")` — which cannot hold at all, since
+                                     #       extra ask attempts and model-spawned SUBAGENTS both add
+                                     #       cells (this run rendered 6). The recorded 27/27 was a
+                                     #       PHASE 4 score, and it reconciled perfectly under Phase
+                                     #       10's count-the-sites check: 27 sites, 27 recorded.
+                                     #       Counting proves a score is REACHABLE, not ACHIEVABLE
 venv/bin/python verify_surface.py    # 18/18 auto-surface, suppression, tab cycling. Was 17/18 for
                                      #       five phases on a TEST bug that Phase 10 fixed — and
                                      #       that could sit there because this rig discarded
@@ -271,6 +299,38 @@ actually ran.
 found to be incapable of failing, against four real defects that tests actually caught. Read
 that as the house style to guard against, not a historical note.
 
+**A COUNT IS NOT AN OUTCOME — Phase 12's addition, and it cost four assertion rows.** `fire()`
+appends a turn that THREW and a turn that FINISHED in the same 3-tuple `(label, elapsed, payload)`,
+and until Phase 12 **nothing in this suite read element `[2]`** — the one that says which. So
+`len(box)` answered *how many turns ended*, while four `r.check` rows spent it as *how many turns
+ran*. TESTED: three `fire()` calls at a port with nothing listening filled a box with three
+`URLError`s in **9 milliseconds**, and that satisfied `len(box) == 3`, `len(workers) == 3` and
+`any(b[0] == "blocker" for b in box)` — every completion predicate the suite owned.
+
+The rule is **gate on ENDED, assert on RAN**:
+
+```python
+wait_for(lambda: len([b for b in box if b[0].startswith("worker")]) == 3, 300, "worker turns")
+workers = completed(box, "worker")          # <- NOT len(box)
+r.check("the workers ran to completion", len(workers) == 3, ...)
+```
+
+Waiting on the raw box is right — a thrown turn should release the gate *fast* so the assertion
+goes red immediately instead of timing out. Asserting on the raw box is what could not fail. And the
+DETAIL string should still print the exceptions: that is what a human reads when the row goes red.
+`rig.completed()` uses `isinstance(b[2], BaseException)` rather than truthiness on purpose — `None`
+and `[]` are what this API returns for an empty body and an empty list, and a truthy filter would
+throw away two real completions. **Contract 6 in `probe_rig_contract.py` enforces this from source**
+across all 24 entrypoints, with the pre-Phase-12 files from git as its negative control.
+
+**A RIG THAT CANNOT BE RUN TWICE IS A RIG WITH ONE RECORDED SCORE.** `db(name)` never resets, and
+the grid header counts *every session in the DB* — so the four sites that compare it to a literal
+(`verify_permission.py:116` and `:143`, `verify_question.py:135`, `verify_cold.py:102`) pass only on
+a pristine database. Before re-running one of those, **archive its DB under a name that still
+matches `hb/*.db`** (`quest.db` → `quest-phase12a.db`). Never delete it: that glob is the corpus
+`probe_turn_growth.py` derives `worst_turn` from, and clearing it to make a rig re-runnable would
+quietly remove the evidence that sizes `RETIRE_AT`.
+
 **AND A GREEN RUN IS NOT EVIDENCE WHEN THERE WAS NO RUN AT ALL — Phase 10's addition, and it is
 about the PAID half.** Phase 9 fixed the ten free probes and touched none of the eleven rigs that
 cost money, where the same defect was older and worse. **Six of them never read `summary()`'s
@@ -282,8 +342,9 @@ which carried a permanently-red assertion for five phases precisely because noth
 A fresh clone could not have caught this the way it caught Phase 9's: a paid rig cannot be run
 from a clone, so the paid half never executed, never crashed, and never got the chance to report a
 false green. **It was only ever visible in the source.** Hence `probe_rig_contract.py`, which reads
-all 23 entrypoints (itself included) as artifacts and asserts the contract — floor declared, floor satisfiable, no
-`finally` that exits without a crash guard, exit status dependent on `summary()` — with a mutation
+all 24 entrypoints (itself included) as artifacts and asserts the contract — floor declared, floor satisfiable, no
+`finally` that exits without a crash guard, exit status dependent on `summary()`, and since Phase 12
+no completion claim decided by counting `fire()`'s box — with a mutation
 check per predicate and an inverted leg so a module with no `try` is not flagged.
 
 **A RECORDED SCORE IS A CLAIM ABOUT A FILE AT A MOMENT, AND NOTHING TIED THE TWO TOGETHER.**

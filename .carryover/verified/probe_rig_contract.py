@@ -26,6 +26,16 @@ rig must satisfy:
   3. it carries the exception guard, so a crash becomes a failed row rather than a short green
   4. it ACTS on `summary()`'s verdict — a failing run must exit non-zero
   5. and that verdict exit is the LAST thing its `finally` does, so nothing trails it unreachably
+  6. no assertion decides that a TURN COMPLETED by counting `fire()`'s box (Phase 12)
+
+Contract 6 is a different animal from 1–5 and is worth saying why. Those five are about whether a
+rig can REPORT a failure. The sixth is about whether it can SEE one. `fire()` appends a turn that
+threw and a turn that finished in the same 3-tuple, so `len(box)` counts turns that ENDED, never
+turns that RAN — and no rig in the suite had ever read the third element. TESTED in Phase 12:
+three `fire()` calls at a dead port filled a box in **9 milliseconds** and satisfied every
+completion predicate in the suite. Four `r.check` rows were affected, and the one in
+`verify_question.py` had no independent evidence anywhere else in its file. `rig.completed()` is
+the fix; this contract is what stops the raw-count idiom coming back.
 
 Every predicate is mutation-checked against a corrupted copy of a real rig, and the corrupted
 copy is pushed through THE SAME function the live check calls — per this suite's rule that a
@@ -43,7 +53,7 @@ import sys
 
 SP = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SP)
-from rig import Results  # noqa: E402
+from rig import Results, completed  # noqa: E402
 
 # Entrypoints only. `rig.py` and `term.py` are libraries and own no assertions; `diagnose_*.py`
 # are scratch tools that make no claims. If this list ever silently narrows, the sweep below
@@ -286,8 +296,102 @@ def finally_ends_on_verdict(src):
     return True
 
 
+def _reads(node, names):
+    return [n for n in ast.walk(node) if isinstance(n, ast.Name) and n.id in names]
+
+
+def _calls(node, fname):
+    for n in ast.walk(node):
+        if isinstance(n, ast.Call):
+            f = n.func
+            if (isinstance(f, ast.Name) and f.id == fname) or (isinstance(f, ast.Attribute) and f.attr == fname):
+                return True
+    return False
+
+
+def _box_tainted(tree):
+    """Names carrying data derived from `fire()`'s box WITHOUT passing through `completed()`.
+
+    `ended = [b for b in box if ...]` is tainted; `threw = [... for ... in ended ...]` is tainted
+    through it; `workers = completed(box, "worker")` is NOT, because that call is exactly the
+    thing that separates a turn that ran from a turn that threw. Iterated to a fixpoint rather
+    than done in one pass — `ast.walk` is not source order, and chaining is two deep in this suite.
+    """
+    tainted = {"box"}
+    for _ in range(8):
+        grew = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and _reads(node.value, tainted) and not _calls(node.value, "completed"):
+                for t in node.targets:
+                    if isinstance(t, ast.Name) and t.id not in tainted:
+                        tainted.add(t.id)
+                        grew = True
+        if not grew:
+            break
+    return tainted
+
+
+def _absence_only(pred, tainted):
+    """Is every tainted read in this predicate underneath a `not`?
+
+    `not any(b[0] == "blocker" for b in box)` claims the turn has NOT ended yet. A turn that threw
+    puts an entry in the box, which makes that predicate FALSE — red, which is the correct
+    outcome. Only POSITIVE completion claims are the defect, so negated reads are exempt. The
+    exemption is COUNTED OUT LOUD in the sweep below rather than left to widen silently, and a
+    mutation leg strips the `not` to prove it does not swallow the positive form.
+    """
+    reads = {id(n) for n in _reads(pred, tainted)}
+    if not reads:
+        return False
+    negated = set()
+    for n in ast.walk(pred):
+        if isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.Not):
+            negated |= {id(x) for x in _reads(n, tainted)}
+    return reads <= negated
+
+
+def _check_calls(tree):
+    for n in ast.walk(tree):
+        if (
+            isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Attribute)
+            and n.func.attr == "check"
+            and isinstance(n.func.value, ast.Name)
+            and n.func.value.id == "r"
+            and len(n.args) >= 2
+        ):
+            yield n
+
+
+def box_claims(src):
+    """Every `r.check` PREDICATE that decides turn completion by counting `fire()`'s box.
+
+    Returns `[(lineno, predicate_source)]`; empty is the contract. Scoped to `args[1]` — the
+    predicate — deliberately: the DETAIL string (`args[2]`) should absolutely mention the raw box
+    and the exceptions in it, because that is what a human reads when the row goes red.
+    """
+    tree = ast.parse(src)
+    tainted = _box_tainted(tree)
+    out = []
+    for call in _check_calls(tree):
+        pred = call.args[1]
+        if not _reads(pred, tainted) or _calls(pred, "completed") or _absence_only(pred, tainted):
+            continue
+        out.append((call.lineno, (ast.get_source_segment(src, pred) or "?").replace("\n", " ")))
+    return out
+
+
+def box_exemptions(src):
+    """The absence claims contract 6 lets through — counted so the exemption cannot widen quietly."""
+    tree = ast.parse(src)
+    tainted = _box_tainted(tree)
+    return [c.lineno for c in _check_calls(tree) if _absence_only(c.args[1], tainted)]
+
+
 # ------------------------------------------------------------------------------------------
-r = Results(expect=22)
+# 22 through Phase 11; Phase 12's contract 6 adds seven — the sweep, the exemption count, a clean
+# baseline, three mutation legs and one runtime leg on `completed()` itself.
+r = Results(expect=29)
 
 try:
     names = rigs()
@@ -371,7 +475,7 @@ try:
         not trailing,
         "an exit that exists somewhere in the file is not the same as one that runs — cleanup after "
         "it would never execute, and a stray unreachable exit satisfies the check above. "
-        + (f"trailing work after the exit: {trailing}" if trailing else "all twenty end on it"),
+        + (f"trailing work after the exit: {trailing}" if trailing else f"all {len(names)} end on it"),
     )
 
     # --- mutation checks -------------------------------------------------------------------
@@ -427,6 +531,68 @@ try:
         ),
         "`sys.exit(0 if r.summary() else 1)` is the other legitimate shape — a predicate that "
         "only recognised the two-line form would force a pointless rewrite of four probes",
+    )
+
+    # --- contract 6: an assertion must SEE a failed turn, not just count a finished thread ---
+    claims = {n: box_claims(src[n]) for n in names}
+    offenders = {n: v for n, v in claims.items() if v}
+    r.check(
+        "NO RIG ASSERTS THAT A TURN COMPLETED BY COUNTING fire()'s BOX",
+        not offenders,
+        "`fire()` appends a thrown turn and a finished turn in the same 3-tuple, so a count "
+        "cannot tell them apart. TESTED: three fire() calls at a dead port satisfied every "
+        "completion predicate in the suite in 9ms. Use rig.completed(). "
+        + (f"OFFENDERS: {offenders}" if offenders else "none — all completion claims read the payload"),
+    )
+    exempt = {n: v for n, v in {n: box_exemptions(src[n]) for n in names}.items() if v}
+    r.check(
+        "…and the ABSENCE exemption is exercised, and is small enough to name",
+        0 < sum(len(v) for v in exempt.values()) <= 3,
+        f"{exempt} — `not any(b[0] == 'blocker' for b in box)` claims a turn has NOT ended, and a "
+        "turn that threw makes it red, which is correct. An exemption nobody exercises is dead "
+        "text; one that grows without being counted is how a guard stops guarding",
+    )
+    sample_box = "verify_question.py"
+    fixed = src[sample_box]
+    r.check(
+        f"the contract-6 mutation sample is CLEAN first — {sample_box}",
+        not box_claims(fixed) and "completed(box" in fixed,
+        "a mutation check whose baseline already fails proves nothing about the mutation. This is "
+        "the file whose worker row had no independent evidence anywhere else in it",
+    )
+    r.check(
+        "MUTATION: reverting a row to the raw-box count IS detected",
+        bool(box_claims(fixed.replace('completed(box, "worker")', '[b for b in box if b[0].startswith("worker")]'))),
+        "this is the exact source state of four assertion rows before Phase 12 — the shape that "
+        "three connection errors satisfy",
+    )
+    r.check(
+        "MUTATION (inverted): routing the SAME claim through completed() is NOT reported",
+        not box_claims(
+            'class R: pass\nr=R()\nfrom rig import completed\n'
+            'box=[]\nw=completed(box,"worker")\nr.check("x", len(w)==3, f"{box}")\n'
+        ),
+        "a predicate that fires on the fixed form too would force every rig to stop using the box "
+        "at all, including in the DETAIL string where the raw exceptions belong",
+    )
+    r.check(
+        "MUTATION: the absence exemption does NOT swallow a positive claim",
+        bool(box_claims(
+            'class R: pass\nr=R()\nbox=[]\nr.check("x", any(b[0]=="blocker" for b in box))\n'
+        ))
+        and not box_claims(
+            'class R: pass\nr=R()\nbox=[]\nr.check("x", not any(b[0]=="blocker" for b in box))\n'
+        ),
+        "same predicate, `not` stripped: exempt with it, reported without it. Without this leg the "
+        "exemption could be widening to cover everything and the sweep above would still read green",
+    )
+    r.check(
+        "RUNTIME: completed() rejects an exception and keeps a falsy-but-VALID result",
+        completed([("w0", 1.0, RuntimeError("boom")), ("w1", 1.0, None), ("w2", 1.0, [])]) ==
+        [("w1", 1.0, None), ("w2", 1.0, [])]
+        and completed([("w0", 1.0, {}), ("a0", 1.0, {})], "w") == [("w0", 1.0, {})],
+        "`None` and `[]` are what this API returns for an empty body and an empty list — a "
+        "truthiness test would discard two real completions, so the predicate is isinstance",
     )
 
     # --- runtime: the floor mechanism itself ----------------------------------------------

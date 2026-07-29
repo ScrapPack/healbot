@@ -23,7 +23,7 @@ import json
 import sys
 import time
 
-from rig import Api, Results, boot, db, fire, on_grid, wait_for
+from rig import Api, Results, boot, completed, db, fire, on_grid, wait_for
 
 PORT = 4713
 DB = db("perm2")
@@ -79,11 +79,17 @@ try:
         raise SystemExit(1)
     r.check("the block belongs to the intended session", pending.get("sessionID") == blocker)
 
+    # Gate on ENDED, assert on RAN — see rig.completed(). Before Phase 12 this counted the raw
+    # box, which cannot tell a completed turn from a thrown one; the `payload-{i}` rows below are
+    # what actually carried this claim, and this row was a restatement of the gate.
     wait_for(lambda: len([b for b in box if b[0].startswith("worker")]) == 3, 420, "3 worker turns")
     elapsed = time.time() - t0
-    workers = [b for b in box if b[0].startswith("worker")]
+    ended = [b for b in box if b[0].startswith("worker")]
+    workers = completed(box, "worker")
+    threw = [(n, repr(p)) for n, _, p in ended if isinstance(p, BaseException)]
     r.check("the other three sessions completed while one stayed blocked", len(workers) == 3,
-            f"{len(workers)}/3, wall {elapsed:.1f}s: " + ", ".join(f"{n}={d:.1f}s" for n, d, _ in workers))
+            f"{len(workers)}/3 completed of {len(ended)} ended, wall {elapsed:.1f}s: "
+            + ", ".join(f"{n}={d:.1f}s" for n, d, _ in workers) + (f" || THREW: {threw}" if threw else ""))
     r.check("the blocked session is still hanging (blocked one does not stall the others)",
             not any(b[0] == "blocker" for b in box) and api("GET", "/permission") != [])
     for i, sid in enumerate(quiet):
@@ -175,9 +181,14 @@ try:
 
     # ---------------------------------------------------------------- reached the model
     print("\n== did the answer reach the model, or only clear the block? ==", flush=True)
-    finished = wait_for(lambda: any(b[0] == "blocker" for b in box), 420, "blocked turn to finish")
-    r.check("the previously blocked turn ran to completion", finished is not None,
-            f"{[(n, round(d, 1)) for n, d, _ in box if n == 'blocker']}")
+    # Gate on ENDED, assert on RAN — see rig.completed(). A blocker turn that threw satisfied the
+    # old `finished is not None`, which made this row unable to distinguish "the answer reached
+    # the model and it resumed" from "the request blew up".
+    wait_for(lambda: any(b[0] == "blocker" for b in box), 420, "blocked turn to finish")
+    ran = completed(box, "blocker")
+    r.check("the previously blocked turn ran to completion", bool(ran),
+            f"{[(n, round(d, 1)) for n, d, _ in ran]} completed; "
+            f"threw: {[(n, repr(p)) for n, _, p in box if n == 'blocker' and isinstance(p, BaseException)]}")
     msgs = api("GET", f"/session/{blocker}/message") or []
     blob = json.dumps(msgs)
     r.check("the approved tool actually executed (file content is in the transcript)",

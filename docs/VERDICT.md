@@ -14,7 +14,7 @@ value; **six of the paid rigs did not read it at all.**
 | **`verify_surface.py` carried a permanently-red assertion for five phases** | Recorded 17/18. `not t.find("blocked")` is False whenever the grid is open, because the footer says `tab next blocked`. Nothing ever surfaced it, because the rig exited 0. §1, §4 |
 | **`verify_handoff.py`'s recorded 21/21 is unreachable** | It has **22** unconditional assertions. Phase 5 swapped a vacuous check for two mutation legs and never re-ran it. The 21/21 is Phase **4**'s score, and four documents cite it as the evidence that the Phase 4 exit gate is met. §2 |
 | **Phase 8's "the one rig in the suite" was two rigs** | `docs/GROWTH.md:176` claims `verify_control_agent.py` was *the* rig whose recorded score did not match the file as it stood. `verify_handoff.py` had the same property at the same time. §2 |
-| **New guard: `probe_rig_contract.py`, free, 22/22** | Asserts the contract from source across all 23 rigs (itself included — a guard that exempts itself is the defect it hunts), so none of this can grow back. Free suite **142 → 164**. §3 |
+| **New guard: `probe_rig_contract.py`, free, 22/22** | Asserts the contract from source across all 23 rigs (itself included — a guard that exempts itself is the defect it hunts), so none of this can grow back. Free suite **142 → 164**. §3. *(Phase 11's `probe_citations.py` made the sweep 24; Phase 12 added contract 6 and took the probe to 29/29 — `docs/OUTCOME.md` §4.)* |
 
 ---
 
@@ -155,7 +155,9 @@ on a score from a file that has since changed. That is now what the artifacts sa
 ## 3. `probe_rig_contract.py` — the guard that makes this unrepeatable
 
 Free, **22/22**, and it executes no rig. It parses all 23 entrypoints (itself included) and asserts the four
-properties above from source:
+properties above from source. *(Both figures moved after this phase: Phase 11's `probe_citations.py` made
+the sweep 24 entrypoints, and Phase 12 added a sixth contract — no assertion may decide a turn completed by
+counting `fire()`'s box — taking the probe to **29/29**. See `docs/OUTCOME.md` §4.)*
 
 1. every rig declares `Results(expect=N)`, and `N >= 1`
 2. every statically boundable floor is satisfiable

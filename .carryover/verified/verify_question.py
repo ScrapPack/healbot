@@ -19,7 +19,7 @@ import json
 import sys
 import time
 
-from rig import Api, Results, boot, db, fire, on_grid, wait_for
+from rig import Api, Results, boot, completed, db, fire, on_grid, wait_for
 
 PORT = 4714
 DB = db("quest")
@@ -34,7 +34,9 @@ ASKS = [
     "write the config.",
 ]
 
-r = Results(expect=27)
+# 27 through Phase 11; Phase 12 added the three `payload-{i}` transcript rows that give this file
+# its own evidence that the worker turns ran, rather than inferring it from a thread count.
+r = Results(expect=30)
 api = Api(PORT)
 
 
@@ -82,10 +84,27 @@ try:
     chosen = options[0] if options else None
     r.check("the question carries selectable options", bool(options), f"{options}")
 
+    # `wait_for` counts turns that ENDED, so a thrown turn releases the gate fast; the assertion
+    # then counts turns that RAN, so it goes red fast instead of green. Before Phase 12 this row
+    # was `len(workers) == 3` over the raw box, which three connection errors satisfy in 9ms
+    # (rig.completed()). This file is where that mattered most: nothing else in it looked at the
+    # worker sessions at all, so this was the ONLY evidence they ran, and it could not fail.
     wait_for(lambda: len([b for b in box if b[0].startswith("worker")]) == 3, 300, "worker turns")
-    workers = [b for b in box if b[0].startswith("worker")]
+    ended = [b for b in box if b[0].startswith("worker")]
+    workers = completed(box, "worker")
+    threw = [(n, repr(p)) for n, _, p in ended if isinstance(p, BaseException)]
     r.check("the other sessions ran to completion alongside the blocked one", len(workers) == 3,
-            ", ".join(f"{n}={d:.1f}s" for n, d, _ in workers))
+            f"{len(workers)}/3 completed of {len(ended)} ended — "
+            + ", ".join(f"{n}={d:.1f}s" for n, d, _ in workers) + (f" || THREW: {threw}" if threw else ""))
+    # The independent backstop this file never had. `verify_permission.py` proves its workers ran
+    # by finding the fixture payload in the transcript; the same claim here rested entirely on a
+    # count of threads that had stopped. A turn that threw leaves no payload, so these three rows
+    # cannot be satisfied by the failure mode the row above was blind to.
+    for i, sid in enumerate(quiet):
+        blob = json.dumps(api("GET", f"/session/{sid}/message") or [])
+        r.check(f"worker{i} really ran a tool-using turn", f"payload-{i}" in blob,
+                "the fixture word is in the transcript — evidence from the SERVER, not from the "
+                "rig's own thread bookkeeping")
 
     # ---------------------------------------------------------------- the grid
     print("\n== open the control terminal ==", flush=True)
@@ -146,9 +165,15 @@ try:
 
     # ---------------------------------------------------------------- reached the model
     print("\n== did the answer reach the model? ==", flush=True)
-    finished = wait_for(lambda: any(b[0].startswith("asker") for b in box), 420, "asker turn to finish")
-    r.check("the previously blocked turn ran to completion", finished is not None,
-            f"{[(n, round(d, 1)) for n, d, _ in box if n.startswith('asker')]}")
+    # Gate on ENDED, assert on RAN. `any(b[0].startswith("asker") ...)` was true for a turn that
+    # threw, and this row is the one that carries "the answer reached the model" — the claim the
+    # project exists for. The row below it (the tool result in the transcript) is real evidence
+    # and always was; this row is now evidence too rather than a restatement of the gate.
+    wait_for(lambda: any(b[0].startswith("asker") for b in box), 420, "asker turn to finish")
+    ran = completed(box, "asker")
+    r.check("the previously blocked turn ran to completion", bool(ran),
+            f"{[(n, round(d, 1)) for n, d, _ in ran]} completed; "
+            f"threw: {[(n, repr(p)) for n, _, p in box if n.startswith('asker') and isinstance(p, BaseException)]}")
     msgs = api("GET", f"/session/{asker}/message") or []
     blob = json.dumps(msgs)
     r.check("the question tool reported the chosen answer back to the model",

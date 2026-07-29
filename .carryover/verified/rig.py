@@ -339,7 +339,13 @@ def marker_col(t):
 
 def fire(api, sid, text, tools=None, box=None, label=""):
     """POST /session/{id}/message blocks until the turn completes, so prompts go on a
-    thread. `box` collects (elapsed, result_or_exception)."""
+    thread. `box` collects `(label, elapsed, result_or_exception)` — a THREE-tuple, and the
+    third element is the one that matters. See `completed()` below; do not count `box`.
+
+    A turn that threw and a turn that finished are appended in the SAME shape, so `len(box)`
+    answers "how many turns ENDED", never "how many turns RAN". This docstring said
+    `(elapsed, result_or_exception)` — the wrong arity, and the right warning — from the day it
+    was written, and no rig in the suite ever read element [2]."""
 
     def run():
         started = time.time()
@@ -357,3 +363,26 @@ def fire(api, sid, text, tools=None, box=None, label=""):
     th = threading.Thread(target=run, daemon=True)
     th.start()
     return th
+
+
+def completed(box, prefix=""):
+    """The entries in a `fire()` box whose turn actually RAN — payload is not an exception.
+
+    Use this for any ASSERTION about a turn having completed. `len(box)` is still correct for
+    SEQUENCING — "wait until all three have ended, however they ended" — and the distinction is
+    the whole point: `fire()` swallows every exception into the same 3-tuple, so a count cannot
+    tell the two apart.
+
+    Phase 12, TESTED: three `fire()` calls at a port with nothing listening filled a box with
+    three `URLError`s in **9 milliseconds**, and that satisfied every completion predicate in
+    the suite — `len(box) == 3`, `len(workers) == 3`, `any(b[0] == "blocker" for b in box)`.
+    Four `r.check` rows were phrased as claims about turns completing and were really counting
+    turns that ended; one of them (`verify_question.py`, the concurrency row) had no independent
+    evidence anywhere else in its file. The hazard was named in `fire()`'s own docstring as
+    "result_or_exception" and no rig had ever read that element.
+
+    This is Phase 9's defect — an assertion that is True on exactly the runs that did not
+    evaluate it — living in the PAID half, which is why a fresh clone could not reach it: a paid
+    rig cannot run from a clone, so it never got the chance to report its false green.
+    """
+    return [b for b in box if b[0].startswith(prefix) and not isinstance(b[2], BaseException)]
