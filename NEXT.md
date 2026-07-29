@@ -25,8 +25,10 @@ READ FIRST, in this order. Stop when you can name the file that owns any given b
                            the suite in 9ms). §7: three paid rigs are SINGLE-USE. §8: wait_for's
                            timeout does not bound. §9: verify_question.py has been three assertions
                            RED since Phase 5 and Phase 10's count-the-sites check cannot see it.
-                           §10: worst_turn is a fact about the WORKLOAD too — READ THIS ONE FIRST,
-                           it is why the suite is red and it is the open decision
+                           §10-11: a 299,326 turn took probe_turn_growth RED and forced the corpus
+                           to get a DECLARED SCOPE — which showed the derivation had been answering
+                           a question the gate never asks. READ §11: the bound is 289,296 and the
+                           margin 30.4%, not 184,852 and 1.3%
   3. docs/CITE.md        — Phase 11: the maps had rotted and nothing checked them. 930 citations
                            swept, eight stale — and THREE were created by Phases 9 and 10 editing
                            documents that other documents cite into. Also: probe_twin guarded 1 of
@@ -41,36 +43,35 @@ READ FIRST, in this order. Stop when you can name the file that owns any given b
                            nothing, and probe_turn_growth.py's two load-bearing assertions get
                            EASIER as their evidence disappears — 48.2% margin instead of 1.3%
   6. docs/GROWTH.md      — Phase 8: `worst_turn` was ONE measurement and it was not the worst.
-                           The pinned model's worst is 175,148, the bound on RETIRE_AT is 184,852,
-                           and the shipped 180,000 clears it by 1.3%. The threshold is
+                           Its 175,148 / 184,852 / 1.3% are SUPERSEDED by Phase 12 §11 — it fixed the
+                           input to the derivation and inherited its unconditioned population — but
+                           its OTHER finding stands and now matters more: the threshold is
                            MODEL-SPECIFIC. Also: `healbot_*: deny` is a context control, NOT a
                            sandbox. (CLONE.md §4 annotates its corpus counts; its findings stand)
   7. .carryover/verified/README.md — the test rig and its assertion discipline
 
 Do NOT read the whole tree first. HARNESS.md indexes everything; follow it on demand.
 
-YOUR TASK — Phase 13. Everything in the build order is built. Do not invent something to build.
-
-  READ THIS FIRST: unlike every prior handoff, THE SUITE IS NOT GREEN and there IS one decision
-  pending on me. probe_turn_growth.py is RED at 13/16 because Phase 12 measured a single turn at
-  299,326 on the pinned model — 71% above the number RETIRE_AT is derived from — and the cause is an
-  undeclared fixture, not a code defect. §0 has it. Nothing else is blocking you, and the red is not
-  yours to clear: making it green requires either my decision on the threshold or deleting the
-  evidence, and the second is not an option.
+YOUR TASK — Phase 13. Everything in the build order is built and every known correctness hole is
+closed. There is NO decision pending on me and nothing is blocking you. Do not invent something to
+build.
 
   0. THREE THINGS ARE DECIDED. Do not re-open any as a defect, and do not "fix" them.
-     - RETIRE_AT STAYS AT 180,000 — the DECISION stands, but its EVIDENCE has been contradicted and
-       that is now an open question WITH THE OWNER, not with you. Phase 8 re-derived worst_turn
-       (175,148 pinned, bound 184,852, margin 1.3%) and the answer was leave it and correct the
-       prose; docs/GROWTH.md §1 has what that accepts. Phase 9 strengthened it — corpus +14%, every
-       maximum unchanged. **PHASE 12 BROKE IT.** A single turn measured 299,326 on the pinned model,
-       71% above 175,148, so 180,000 + 299,326 = 479,326 against a ~360K ceiling: margin -119,326,
-       and probe_turn_growth.py is RED. The cause is that the rig's project directory is an
-       UNDECLARED variable in the derivation — 84 entries, 94 MB, node_modules, grown across every
-       paid run ever — and excluding Phase 12's two runs the maximum is still exactly 175,148.
-       DO NOT change RETIRE_AT and DO NOT clear the fixture to make the probe green. Both are the
-       owner's call and the second one is evidence destruction. docs/OUTCOME.md §10 states the two
-       readings and costs them.
+     - RETIRE_AT STAYS AT 180,000, and after Phase 12 it is BETTER supported than when the decision
+       was made — margin 30.4%, not 1.3%. Phase 8 re-derived worst_turn (175,148 pinned, bound
+       184,852) and the answer was leave it and correct the prose. Phase 12 found a 299,326 turn,
+       went red, and re-derived properly: THE CORPUS NOW HAS A DECLARED SCOPE. A turn is in scope
+       for sizing RETIRE_AT iff it (1) completed, (2) STARTED at or above GATE_FLOOR = 100,000, and
+       (3) ran with compaction off. Condition 2 is the one that was missing, and it is decisive:
+       the gate only ever faces a turn that BEGINS on a session already near RETIRE_AT, and ALL FOUR
+       largest turns in the corpus start at ZERO — as does 175,148. A turn that starts at 0 and
+       grows 299,326 ENDS at 299,326, under the ceiling, and is retired at its end. It was never a
+       cliff. In scope: max 70,704, bound 289,296, 180,000 clears it by 109,296.
+       Do not re-open, and note the scope rule is asserted to be honest rather than argued to be —
+       probe_turn_growth.py checks that it throws out 175,148 too, since a scope invented to protect
+       a number would have kept it. docs/OUTCOME.md §11.
+       WHAT THE OLD RULE WAS CONFLATING, now named and still unaddressed: a single turn from an
+       EMPTY session larger than the ~360K ceiling dies at ANY value of RETIRE_AT. No gate fixes it.
      - NO STARTUP SWEEP. Retirement stays purely event-driven. A session parked over the gate when
        a server restarts stays there until its next turn ends. Decided in Phase 8 §5.
      - THE FIVE `wait_for` GATES THAT READ THE RAW BOX STAY AS THEY ARE. Phase 12 fixed the four
@@ -83,14 +84,11 @@ YOUR TASK — Phase 13. Everything in the build order is built. Do not invent so
      opencode.jsonc; the checkout's has a blank line 16). probe_turn_growth.py asserts the pin.
 
   1. FREE, and start here — it has been the best value in each of the last FIVE phases.
-     - Re-run the TWELVE free probes (below). Expect 184/187 — ELEVEN GREEN AND ONE RED, and the red
-       is REAL. probe_turn_growth.py is 13/16, exit 1. DO NOT "fix" it by clearing hb/project or
-       dropping a rig DB: that buys a green by deleting the measurement, which is the exact failure
-       docs/CLONE.md §1 exists to name. Read §0 and docs/OUTCOME.md §10 before touching anything.
-     - The MAXIMUM moved, which docs/CLONE.md §4 says is the thing that counts as a finding (a moved
-       corpus COUNT is expected — the suite writes to the corpus it measures — but a moved maximum,
-       bound or conditional is not). A single turn on the pinned model measured 299,326, 71% above
-       the 175,148 the threshold is derived from, so the margin is now -119,326.
+     - Re-run the TWELVE free probes (below). Expect 190/190, every probe exit 0. If
+       probe_turn_growth.py's corpus counts have moved, that is EXPECTED and not a finding by itself:
+       the suite writes to the corpus it measures (docs/CLONE.md §4). What would be a finding is a
+       moved IN-SCOPE maximum, bound or conditional — the UNCONDITIONED maximum moving is now
+       expected too, and the probe prints both populations side by side so neither can hide.
      - probe_rig_contract.py is the guard for all of this: it reads all 24 rigs (itself included — a
        guard that exempts itself is the defect it hunts) as SOURCE and asserts SIX contracts — a
        satisfiable assertion floor, no `finally` that exits without a crash guard, an exit on
@@ -129,16 +127,28 @@ YOUR TASK — Phase 13. Everything in the build order is built. Do not invent so
        (rig.py:296) and Api.__call__ defaults to timeout=900 (rig.py:225), so a 300s budget can be
        held for 900. VERIFIED by reading, never fired. Likely repair: Api takes its timeout from the
        budget wrapping it, or defaults well below the smallest budget in use.
-     Both are free to WRITE and paid to TEST, so pair them with whichever paid rig runs next.
+     All three are free to WRITE and paid to TEST, so pair them with whichever paid rig runs next.
 
-  3. PAID and OPTIONAL, and it is the cheapest thing left: verify_handoff.py must be RE-RUN before
+  3. PAID, OPTIONAL, and it is now the MOST VALUABLE measurement available — it is the one real gap
+     Phase 12's re-derivation left. NO REAL NEAR-GATE TURN HAS EVER BEEN MEASURED ON THE PINNED
+     MODEL. RETIRE_AT now rests on the in-scope maximum of 70,704, and that is a gpt-5.5 turn: of the
+     twelve in-scope gpt-5.6-sol turns, ELEVEN are verify_retire_350k.py's fixed 22,152-per-turn
+     synthetic loop and the twelfth is 109 tokens. Using the cross-model maximum is the conservative
+     choice and the probe asserts that direction — but Phase 8 established the threshold is
+     MODEL-SPECIFIC, so the population carrying the derivation has almost no pinned-model evidence in
+     it. What is needed: drive a gpt-5.6-sol session to ~150,000 occupancy, then give it ONE
+     read-heavy turn (the 130 KB ledgers, not a synthetic fixed chunk) and record the delta. That is
+     a variant of verify_retire_350k.py's growth loop with a different final turn. ASK ME FIRST.
+     Do it in a CLEAN hb/project or the measurement inherits the §2 fixture problem.
+
+  4. PAID and OPTIONAL, and it is the cheapest thing left: verify_handoff.py must be RE-RUN before
      its 21/21 can be quoted again. Phase 5 took it from 21 to 22 unconditional assertions and never
      executed it, so the recorded score is unreachable, and HARNESS.md / docs/VERIFY.md §10 / the rig
      README all cite it as the Phase 4 exit gate's second clause. Its floor is now 22. Offered in
      Phase 12 and not taken. Its workload is three ~130 KB ledgers read in full plus file creation,
      so it is not free but it is not the 350K rig either. ASK ME FIRST.
 
-  4. ALSO PAID and OPTIONAL — the 180,000 gate has still never been FIRED at its real value. Half is
+  5. ALSO PAID and OPTIONAL — the 180,000 gate has still never been FIRED at its real value. Half is
      closed free (probe_headless_arm.py asserts the shipped default arms; probe_turn_predicate.py
      the predicate) and the remaining half is a single `>=` already exercised at 20,000. Costed at
      ~$2.60, range $1.75-5, ~6-11 min in .carryover/verified/README.md. OFFERED IN PHASE 8 AND
@@ -148,7 +158,7 @@ YOUR TASK — Phase 13. Everything in the build order is built. Do not invent so
      server via env_extra, which rig.serve() applies LAST, and its workload is one prompt capped at
      50 KB by read.ts:16. Use verify_retire_350k.py's growth loop retargeted. ASK ME FIRST.
 
-  5. ALSO PAID and OPTIONAL — an EXTERNAL plugin's route has never been RENDERED. Phase 8 settled
+  6. ALSO PAID and OPTIONAL — an EXTERNAL plugin's route has never been RENDERED. Phase 8 settled
      *can it* at VERIFIED (same PluginEntry, same activation loop, same pluginApi; the only
      `source` discrimination in the path is a metadata display field) but not *does it, under a
      real workload*. Everything TESTED in this repo was measured on the builtin path.
@@ -205,7 +215,7 @@ METHOD — this project's standard, and it is not decoration:
   - A NUMBER IS NOT EVIDENCE, AND REPEATING IT DOES NOT MAKE IT MORE EVIDENCE (Phase 8's).
   - CAPTURE THE REAL EXIT CODE. `python probe.py | tail -4; echo $?` reports TAIL's status, not
     the probe's. Use `$pipestatus`/`PIPESTATUS`, or assign the output first.
-  - Run the FREE probes before spending anything (184/187 — one REAL red, see §0 and §1):
+  - Run the FREE probes before spending anything (190/190 total):
       cd .carryover/verified
       venv/bin/python probe_on_grid.py          # 4/4
       venv/bin/python probe_error_state.py      # 10/10
@@ -216,7 +226,7 @@ METHOD — this project's standard, and it is not decoration:
       venv/bin/python probe_headless_arm.py     # 14/14
       venv/bin/python probe_request_channel.py  # 9/9
       venv/bin/python probe_turn_predicate.py   # 18/18
-      venv/bin/python probe_turn_growth.py      # 13/16 RED, exit 1 — REAL. docs/OUTCOME.md §10
+      venv/bin/python probe_turn_growth.py      # 19/19
       venv/bin/python probe_rig_contract.py     # 29/29
       venv/bin/python probe_citations.py        # 14/14
   - Gates before you claim done, from ~/Desktop/healbot/opencode:
@@ -346,6 +356,19 @@ What it found:
   - **`wait_for`'s timeout does not bound** — 300s budgets wrapping a 900s `Api` default.
   All three are documented and deliberately NOT repaired, so the 27/30 describes the file that
   produced it. They are §2 of the task list above.
+- **And a 299,326-token turn took `probe_turn_growth.py` red, which forced the real work.** Asked to
+  define what is in scope and re-derive, the phase found the corpus had **never had a scope**. The
+  probe had carried the right argument in a comment since Phase 8 — *"the gate only ever faces a
+  turn that STARTS just under `RETIRE_AT`"* — and applied it to its printout while leaving every
+  load-bearing assertion on the unconditioned maximum. **All four largest turns in the corpus start
+  at zero, and so does 175,148.** A turn that starts at 0 and grows 299,326 ends at 299,326, under
+  the ceiling, retired at its end: never a cliff. Scope declared (completed, started >= 100,000,
+  compaction off), re-derived: **in-scope max 70,704, bound 289,296, margin 109,296 = 30.4%.** The
+  decision to leave 180,000 was right; the arithmetic under it was answering the wrong question, in
+  the conservative direction. The rule is asserted to be honest rather than argued to be — the probe
+  checks that it discards 175,148 too. **The open gap is now a measurement, not a decision: no real
+  near-gate turn has ever been measured on the pinned model** (11 of its 12 in-scope turns are one
+  rig's synthetic 22,152 loop). `probe_turn_growth.py` 16/16 -> **19/19**.
 - **Checked and healthy:** floors are tight — 19 of the 20 statically boundable rigs have
   `floor == unconditional count`, and the exception (`probe_turn_growth.py`) is deliberate;
   `term.py` is clean; every load-bearing figure in `probe_turn_growth.py` is unmoved.
@@ -353,10 +376,11 @@ What it found:
   `probe_rig_contract.py`'s own detail string said *"all twenty end on it"*, hardcoded; and Phase
   10's *"reconciles every other rig in one command"* is now bounded by §2's first item.
 
-Free suite: 4/4, 10/10, 24/24, 10/10, 14/14, 25/25, 14/14, 9/9, 18/18, **13/16 RED**, **29/29**,
-14/14 — **184 of 187**, eleven probes exit 0 and one exits 1 (real exit codes, not `tail`'s). The red
-is `probe_turn_growth.py` and it is CORRECT: see the fifth finding below. It was 16/16 at the start
-of this phase and went red because paying for two rig runs moved the maximum it guards. Gates: `tsgo` exit 0 with no
+Free suite: 4/4, 10/10, 24/24, 10/10, 14/14, 25/25, 14/14, 9/9, 18/18, **19/19**, **29/29**, 14/14 —
+**190 total**, every probe exit 0 (real exit codes, not `tail`'s). It passed through 184/187 with
+`probe_turn_growth.py` red partway through this phase; the green was restored by declaring the
+corpus scope and re-deriving, not by clearing the fixture. `hb/quest-phase12a.db` still holds the
+299,326 turn and the probe still prints it on every run. Gates: `tsgo` exit 0 with no
 output, `oxlint` exit 0 with the expected 3 warnings.
 
 **One loose end that is not a defect:** `docs/REFUSAL-BASELINE.md` is **untracked** while

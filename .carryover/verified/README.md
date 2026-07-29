@@ -248,6 +248,15 @@ figure comes from, fixture-checked at 677/56/733. Results: the worst single-turn
 `gpt-5.6-sol` is **175,148**, so the bound on `RETIRE_AT` is **184,852**, not the ~190,000 stated
 below and in three other files, and 180,000 clears it by **4,852 tokens — 1.3% of the ceiling**,
 thinner than the "~10K, under 3%" margin this project already rejected at the old 350,000 default.
+
+> **SUPERSEDED IN PHASE 12 — the bound is 289,296 and the margin 30.4%.** Everything in this
+> paragraph is a maximum over turns that mostly START AT ZERO, and the gate never faces one: a turn
+> beginning at 0 that grows 175,148 *ends* at 175,148, well under the ceiling. The rule
+> `RETIRE_AT + worst_turn < ceiling` is about a session already near the gate taking one more turn,
+> so the corpus now has a declared SCOPE — completed, started >= 100,000, compaction off — and
+> `worst_turn` is the maximum over that population: **70,704**. 175,148 is itself out of scope, and
+> the probe asserts that, because a scope invented to protect a number would have kept it.
+> `docs/OUTCOME.md` §11.
 ~170K is the **tail** (p50 is 22,152), it just is not the **maximum**, which is what the derivation
 used it as. **And the threshold is MODEL-SPECIFIC**: the corpus holds a **223,258** turn on
 `gpt-5.6-terra`, which at 180,000 lands at 403,258 and dies — so the number is verified only while

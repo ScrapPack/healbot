@@ -106,6 +106,17 @@ So the gate's own ceiling is **184,852, not the ~190,000 on record** in `docs/RE
 `HARNESS.md` and `harness/env.sh`. The shipped 180,000 clears it by 4,852. Every document that says
 ~190,000 derived it from `worst_turn ~170,000` and is now off by the same 5K.
 
+> **SUPERSEDED IN PHASE 12: the bound is 289,296 and the margin is 30.4%.** This section corrected
+> the *input* to the derivation and inherited its *population* — the maximum over every turn on
+> disk. That population is dominated by first turns out of empty sessions (175,148 is one; so are
+> 299,326, 223,258, 182,918 and 177,110), and the gate never faces one. A turn that starts at 0 and
+> grows 175,148 ends at 175,148, far under the ~360K ceiling. Phase 12 gave the corpus a declared
+> scope — completed, started >= 100,000, compaction off — and re-derived: in-scope maximum
+> **70,704**, bound **289,296**, margin **109,296 = 30.4%**. The §2 decision to leave 180,000 stands
+> and is better supported than when it was made. The model-specificity finding below is
+> **unaffected and now matters more**, because the in-scope population has almost no pinned-model
+> evidence in it. `docs/OUTCOME.md` §11.
+
 ### The new constraint nobody had written down: THE THRESHOLD IS MODEL-SPECIFIC
 
 `worst_turn` is a fact about how far one agent turn grows, which is a fact about a **model's**

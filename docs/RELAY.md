@@ -106,7 +106,9 @@ provider's `ContextOverflowError`. `compaction.auto: false` means nothing upstre
 So the threshold came down with the predicate. With one gate the requirement is
 `RETIRE_AT + worst_turn < ceiling`, which puts the ceiling on the gate itself at roughly **190,000**
 — **re-measured in Phase 8 as 184,852; see `docs/GROWTH.md` §1, and note the input to this
-arithmetic was one turn** —
+arithmetic was one turn. RE-DERIVED IN PHASE 12 AS 289,296, margin 30.4%: both earlier figures took
+`worst_turn` over EVERY turn on disk, and the largest of those start at ZERO, which is not a turn
+the gate ever faces. The corpus now has a declared scope — `docs/OUTCOME.md` §11** —
 — anything at or above that can be carried off the cliff by one ordinary read-heavy turn.
 **180,000 + ~170K = ~350K, just inside.** That derivation is now carried in the code
 (`healbot.ts:106-117`, `healbot.tsx:25-31`, which points back here), in `harness/env.sh:98`, and

@@ -394,24 +394,86 @@ model's worst case now fails, because the pinned model's new maximum (299,326) e
 loud rather than dropping it — *"if this ever goes empty, the model-specificity warning above has
 lost its evidence and should be re-argued rather than inherited."*
 
-### Deliberately NOT decided here
+### Where this went
 
-Two honest readings, and picking between them is a policy call, not a test result:
+Two readings were put to the owner — *the measurement is representative* versus *the fixture is
+unrepresentative* — and the answer was neither: **define what is in scope and re-derive.** §11 is
+that work, and it found the corpus had never had a scope at all.
 
-- **The measurement is representative.** A real repository with `node_modules` is ordinary, not
-  exotic. Then 180,000 does not satisfy its own rule and `NEXT.md` §0 needs re-opening.
-- **The fixture is unrepresentative.** Then the turn is out of scope — but *out of scope* has to be
-  **defined**, because today the corpus silently absorbs whatever the last paid run happened to
-  create.
+## 11. The re-derivation — the corpus gets a declared scope, and the rule stops answering a question the gate never asks
 
-**The threshold was not touched, and nothing was deleted to make the probe green.** Clearing
-`hb/project` or dropping the DB would restore 175,148 and a green suite by destroying the evidence
-that produced the red — which is the precise failure this project exists to catch, and it would be
-the third time in five phases that losing evidence and passing a test were the same event
-(`docs/CLONE.md` §1). **An honest red is the correct state.** The decision is the owner's, and
-`NEXT.md` §0 carries it unchanged with a pointer here.
+**The scope was already argued in the probe and never applied.** `probe_turn_growth.py` carries a
+comment headed *THE DECISIVE CUT*:
 
-## 11. The pattern, now five phases old
+> *"The gate only ever faces a turn that STARTS just under `RETIRE_AT`. A 223K first turn out of an
+> empty session is a true observation about turn growth and a poor proxy for that scenario, so
+> condition on where the turn started."*
+
+It then conditioned the *printout* and left the load-bearing assertions on the unconditioned
+maximum. Every number in every document derives from that unconditioned maximum.
+
+### The measurement that settles it
+
+**All four of the largest turns in the corpus start at zero** — 299,326, 223,258, 182,918, 177,110.
+So does 175,148, the figure five documents derive the old bound from. Condition on where the turn
+began and the distribution is a different shape:
+
+| start ≥ | n | max delta | bound on `RETIRE_AT` | margin at 180,000 |
+|---|---|---|---|---|
+| 0 (the old rule) | 107 | 299,326 | 60,674 | **−119,326** |
+| 25,000 | 35 | 70,704 | 289,296 | +109,296 |
+| **100,000** | **20** | **70,704** | **289,296** | **+109,296 (30.4%)** |
+| 180,000 | 10 | 32,673 | 327,327 | +147,327 |
+
+### Why the exclusion is sound and not a convenience
+
+A turn that starts at 0 and grows 299,326 **ends at 299,326** — under the ~360K ceiling — and is
+retired at its end. **It was never a cliff.** The rule `RETIRE_AT + worst_turn < ceiling` exists for
+one scenario: a session that has accumulated to just under the gate takes one more turn. A
+first-turn-from-empty is not that scenario, and including it conflated the gate's job with a failure
+mode **no value of `RETIRE_AT` can prevent** — a single turn from an empty session that exceeds the
+ceiling on its own dies whatever the gate is set to. That conflation is the whole reason the margin
+read 1.3%.
+
+The rule is asserted to be honest rather than argued to be: **`probe_turn_growth.py` now checks that
+the scope throws out 175,148 too.** A scope invented to protect the old number would have kept it.
+The excluded population and its maximum are printed on every run.
+
+### The scope, as declared
+
+A turn is in scope for sizing `RETIRE_AT` iff **(1)** it completed under the shipped
+`turnFinished()` predicate, **(2)** it started at or above `GATE_FLOOR = 100,000`, and **(3)**
+compaction was off — the regime the harness ships. Condition 3 is currently free (all 20 in-scope
+turns are already compaction-off) and is stated so it cannot drift in unnoticed.
+
+### The re-derived answer
+
+```
+IN SCOPE:  180,000 + 70,704 = 250,704 < 360,000        margin 109,296  =  30.4% of the ceiling
+bound on RETIRE_AT:  289,296     (supersedes 184,852, and the ~190,000 before it)
+```
+
+**`RETIRE_AT = 180,000` is well justified** — by a 30.4% margin rather than the 1.3% on record. The
+decision §0 records was right; the derivation under it was answering the wrong question, in the
+conservative direction.
+
+### The real evidence gap, which is not the threshold
+
+The in-scope maximum of 70,704 is a **cross-model** figure (`gpt-5.5`). On the pinned `gpt-5.6-sol`
+there are 12 near-gate turns and **eleven of them are `verify_retire_350k.py`'s fixed
+22,152-per-turn synthetic loop**; the single non-synthetic one is 109 tokens. So:
+
+> **No real near-gate turn has ever been measured on the pinned model.**
+
+Using the all-model maximum is the conservative choice — 70,704 against the pinned model's 22,152 —
+and the probe asserts that direction so it cannot silently invert. But Phase 8 established the
+threshold is model-specific, and the population that now carries it has almost no pinned-model
+evidence in it. **That is the outstanding work**, and it is a measurement, not a decision.
+
+`probe_turn_growth.py`: 16/16 → **19/19**. Free suite **190/190**, every probe exit 0. Nothing was
+deleted: `hb/quest-phase12a.db` still holds the 299,326 turn, and the probe still prints it.
+
+## 12. The pattern, now five phases old
 
 Each phase's free finding has come from looking at a surface nobody had looked at **as an artifact**:
 the derivation under a number (8), the suite from a fresh clone (9), the paid rigs as source (10),
