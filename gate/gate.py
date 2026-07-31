@@ -21,8 +21,9 @@ tree, so copying it somewhere else buys nothing and costs the ability to see the
 worktree only becomes necessary at Tier 3, where a rig boots a real server and mutates state.
 
 DETERMINISM IS MEASURED, NOT ASSUMED. The evidence hashes below are only meaningful if the same
-tree produces the same bytes. TESTED 2026-07-31, 3 runs each on an unchanged tree: all three
-Tier-1 probes were byte-identical BEFORE any canonicalization, and the whole tier ran in ~0.6s.
+tree produces the same bytes. TESTED 2026-07-31, 3 runs each on an unchanged tree: every Tier-1
+probe was byte-identical BEFORE any canonicalization (the original three at ~0.6s for the tier;
+probe_review_parse re-measured the same way when it joined, tier now ~0.7s).
 That is why this gate can hash raw output and does not need `gated-harness`'s tolerance
 machinery. Re-measure before adding a check whose output embeds a time, a path or a count of
 anything the filesystem orders.

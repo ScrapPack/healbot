@@ -92,8 +92,9 @@ tree and the working tree is the thing being guarded. Isolation becomes necessar
 where a rig boots a real server.
 
 **The evidence hash is over RAW output, because determinism was measured.** TESTED 2026-07-31,
-3 runs each on an unchanged tree: all three Tier-1 probes were byte-identical *before* any
-canonicalization. That is why there is no tolerance machinery here. Adding a check whose output
+3 runs each on an unchanged tree: every Tier-1 probe was byte-identical *before* any
+canonicalization (the original three, and `probe_review_parse` re-measured the same way when
+it joined the tier). That is why there is no tolerance machinery here. Adding a check whose output
 embeds a time, a temp path, or a filesystem-ordered count is the change that starts this lying —
 re-measure first.
 
