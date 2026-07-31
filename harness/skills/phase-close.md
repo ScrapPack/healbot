@@ -37,7 +37,14 @@ is the pipeline map; this is the checklist.
    unmeasured claim is not a pass (docs/CLONE.md is the record of what believing
    otherwise cost).
 
-5. Tier 3 (`verify_*` rigs) stays un-run unless the owner said go — it is PAID. The
+5. The run itself dirties the tree, and that is expected: probe_error_state and
+   probe_focus write `.carryover/verified/hb/errorstate.db` and `hb/focus.db`, which are
+   TRACKED measurement corpus (the suite writes to the corpus it measures —
+   docs/CLONE.md §4). Commit those deltas with the close; never reset or delete them
+   (corpus history is evidence — archive, never delete). If `git status` shows hb/*.db
+   changes you did NOT produce, another session is working the tree: stop and check.
+
+6. Tier 3 (`verify_*` rigs) stays un-run unless the owner said go — it is PAID. The
    close names it NOT RUN, which is honest and free.
 
 ## Known-red register
