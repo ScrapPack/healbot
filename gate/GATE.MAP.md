@@ -1,11 +1,17 @@
 # gate/ — the per-change gate
 
-The layer between "the agent says it is done" and a phase review. Free, ~1.1s, and it runs
-whether or not anybody remembers to run it.
+The layer between "the agent says it is done" and a phase review. Free, ~1.1s, and since
+2026-07-31 it is the push path: `gate/hooks/pre-push` refuses any push whose commits do not
+pass, so it runs whether or not anybody remembers to run it. The hook is versioned; the
+wiring is one line of per-clone config (hooks themselves are not versioned by git):
 
-    .carryover/verified/venv/bin/python gate/gate.py            # working tree
+    git config core.hooksPath gate/hooks                        # install the push gate, once
+    .carryover/verified/venv/bin/python gate/gate.py            # working tree, by hand
     .carryover/verified/venv/bin/python gate/gate.py --base main
     .carryover/verified/venv/bin/python gate/gate.py --quiet    # verdict lines only
+
+`git push --no-verify` is the deliberate escape hatch; using it ships unverified commits,
+so say so wherever the push is discussed.
 
 Exit codes are the interface: **0 pass · 2 blocked · 3 error**. TESTED 2026-07-31 — a banned
 filename and a lint error each produced 2, a clean tree produced 0.
@@ -18,6 +24,7 @@ filename and a lint error each produced 2, a clean tree produced 0.
 | Which checks are Tier 1 | `gate.py` `TIER1` |
 | Lint scoping | `gate.py` `lint()` |
 | The four banned filenames | `gate.py` `BANNED` / `banned_names()` |
+| Push enforcement | `gate/hooks/pre-push` — gates the pushed range via `--base <remote sha>`, refuses on exit 2/3 |
 | Evidence records | `gate/runs/<timestamp>.json`, gitignored |
 
 ## What it checks
@@ -26,8 +33,9 @@ filename and a lint error each produced 2, a clean tree produced 0.
 failure as failure), `probe_citations` (~930 `file:line` citations still resolve),
 `probe_twin` (the `fork/` overlay and the `opencode/` checkout have not drifted).
 
-**Lint — scoped to the changed files:** `ruff` on changed Python; `tsgo --noEmit` on the TUI
-project only when the change touches `fork/` TypeScript. Repo-wide lint on a mixed tree reports
+**Lint — scoped to the changed files:** `ruff` on changed Python; `tsgo --noEmit` plus
+`oxlint` on the checkout twins only when the change touches `fork/` TypeScript (since the
+2026-07-31 NEXT.md freeze this gate is the build gates' only owner). Repo-wide lint on a mixed tree reports
 findings the change did not cause, and a gate that blames you for someone else's lint is a gate
 you route around.
 

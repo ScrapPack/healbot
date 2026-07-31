@@ -1,0 +1,56 @@
+#!/bin/bash
+# The gate's enforcement trigger: a push whose commits do not pass gate/gate.py does not
+# leave the machine. This closes the remember-to-run gap that GATE.MAP.md names as the reason
+# the gate exists (the fork drift check sat silently red because nothing ran it).
+#
+# Install, once per clone (hooks are not versioned; this directory is):
+#     git config core.hooksPath gate/hooks
+# Escape hatch, git-native and deliberate: git push --no-verify. Using it means shipping
+# unverified commits; say so wherever the push is discussed.
+#
+# Scope: gate.py --base diffs <base>...HEAD, so the gate sees the files the pushed commits
+# changed. This repo pushes a single branch from HEAD, where that is exact; pushing a
+# non-HEAD ref would gate an approximation of the range, which still runs every Tier-1
+# probe and the banned-filename invariant regardless.
+#
+# HEALBOT_GATE overrides the gate command for hook plumbing tests (stub exits 0/2/3). It
+# adds no bypass power that --no-verify does not already grant.
+set -u
+
+ZERO=0000000000000000000000000000000000000000
+ROOT="$(git rev-parse --show-toplevel)"
+GATE=${HEALBOT_GATE:-"$ROOT/.carryover/verified/venv/bin/python $ROOT/gate/gate.py"}
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # Deleting a remote ref pushes no commits; there is nothing to gate.
+  [ "$local_sha" = "$ZERO" ] && continue
+
+  if [ "$remote_sha" != "$ZERO" ] && git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+    base="$remote_sha"                    # normal push: gate exactly what the remote gains
+  else
+    # New remote ref, or a remote tip we have not fetched: fall back to the merge-base with
+    # origin/main, and to a working-tree run if even that is unknown.
+    base="$(git merge-base "$local_sha" origin/main 2>/dev/null || true)"
+  fi
+
+  echo "pre-push gate: ${local_ref} -> ${remote_ref} (base ${base:-working tree})" >&2
+  # /dev/null on stdin: a command inside a while-read loop otherwise inherits the loop's
+  # stdin and can consume the remaining ref lines.
+  if [ -n "$base" ]; then
+    $GATE --base "$base" >&2 < /dev/null
+  else
+    $GATE >&2 < /dev/null
+  fi
+  code=$?
+  if [ "$code" -ne 0 ]; then
+    meaning="unknown"
+    [ "$code" -eq 2 ] && meaning="BLOCKED: a check ran and said no"
+    [ "$code" -eq 3 ] && meaning="ERROR: a check could not run, so the claim is unmeasured"
+    echo "pre-push gate: REFUSING the push (gate exit $code, $meaning)." >&2
+    echo "pre-push gate: evidence in gate/runs/; fix and push again, or use" >&2
+    echo "pre-push gate: 'git push --no-verify' deliberately and say so." >&2
+    exit 1
+  fi
+done
+
+exit 0
