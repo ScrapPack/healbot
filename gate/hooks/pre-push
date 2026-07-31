@@ -15,8 +15,8 @@
 #
 # After the gate passes, the model review stage (gate/review.py) runs on the same range:
 # single-pass, fresh-context, typed findings, ADVISORY by default (findings are printed and
-# recorded; the push continues). HEALBOT_REVIEW=blocking makes error-severity findings
-# refuse the push; HEALBOT_REVIEW=off skips. The reviewer needs a logged-in claude CLI;
+# recorded; the push continues). HEALBOT_REVIEW=blocking is fail-closed on severity: any
+# finding not explicitly tagged warning or info refuses the push. HEALBOT_REVIEW=off skips. The reviewer needs a logged-in claude CLI;
 # until one exists it reports ERROR and, in advisory mode, the push continues.
 #
 # HEALBOT_GATE / HEALBOT_REVIEW_CMD override the two commands for hook plumbing tests
