@@ -137,7 +137,9 @@ def lint(files):
 
     # TypeScript only matters when the change touches the fork overlay, and it must be run
     # against the CHECKOUT — `tsgo -p` needs the real tsconfig and node_modules, which exist
-    # only there (`/opencode/` is gitignored). NEXT.md records these two as the build gates.
+    # only there (`/opencode/` is gitignored). tsgo + oxlint are the two build gates the
+    # phases ran by hand through Phase 12; since the 2026-07-31 NEXT.md freeze this gate is
+    # their only owner, so removing either from here removes it from the project.
     if any(f.startswith("fork/") for f in ts):
         oc = f"{ROOT}/opencode"
         if os.path.isdir(f"{oc}/node_modules"):
@@ -148,12 +150,35 @@ def lint(files):
                          "tail": r["out"].strip().splitlines()[-1:] or ["clean"],
                          "state": PASS if r["code"] == 0 else (ERROR if r["code"] is None else BLOCKED),
                          "out": r["out"]})
+            # The overlay mirrors the checkout (probe_twin.py verifies all 17 files), so a
+            # changed fork/<path> lints as <path> in the checkout. oxlint exits 0 on
+            # warnings-only (the recorded baseline is 3 warnings on healbot.tsx), nonzero on
+            # errors, which maps onto the same state lattice as every other row.
+            mapped = [f[len("fork/"):] for f in ts
+                      if f.startswith("fork/") and os.path.exists(f"{oc}/{f[len('fork/'):]}")]
+            if mapped:
+                r = sh([f"{oc}/node_modules/.bin/oxlint", *mapped], cwd=oc)
+                rows.append({"check": "oxlint", "why": f"{len(mapped)} changed fork/ TS file(s)",
+                             "cmd": "oxlint", "code": r["code"], "secs": round(r["secs"], 2),
+                             "sha256": hashlib.sha256(r["out"].encode()).hexdigest(),
+                             "tail": r["out"].strip().splitlines()[-1:] or ["clean"],
+                             "state": PASS if r["code"] == 0 else (ERROR if r["code"] is None else BLOCKED),
+                             "out": r["out"]})
+            else:
+                rows.append({"check": "oxlint", "why": "changed fork/ TS has no checkout twin — "
+                                                       "probe_twin should be red; investigate",
+                             "state": ERROR, "code": None, "secs": 0.0, "sha256": "", "tail": [""], "out": ""})
         else:
             rows.append({"check": "tsgo", "why": "fork/ TS changed but the checkout has no node_modules — "
                                                 "see fork/README.md to reconstitute it",
                          "state": ERROR, "code": None, "secs": 0.0, "sha256": "", "tail": [""], "out": ""})
+            rows.append({"check": "oxlint", "why": "fork/ TS changed but the checkout has no node_modules — "
+                                                  "see fork/README.md to reconstitute it",
+                         "state": ERROR, "code": None, "secs": 0.0, "sha256": "", "tail": [""], "out": ""})
     else:
         rows.append({"check": "tsgo", "why": "no changed fork/ TypeScript", "state": SKIPPED,
+                     "code": None, "secs": 0.0, "sha256": "", "tail": [""], "out": ""})
+        rows.append({"check": "oxlint", "why": "no changed fork/ TypeScript", "state": SKIPPED,
                      "code": None, "secs": 0.0, "sha256": "", "tail": [""], "out": ""})
     return rows
 

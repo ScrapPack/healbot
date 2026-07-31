@@ -217,9 +217,10 @@ plain command substitution and is safe in both.
 
 ### (a) Overnight — the free probe backlog and its coverage
 
-Free of healbot credits: the twelve probes in `.carryover/verified/README.md` are marked "free —
-no model turns, no API credits." NEXT.md:257-270 lists them with expected scores totalling
-**190/190**.
+Free of healbot credits: the probes in `.carryover/verified/README.md` are marked "free —
+no model turns, no API credits." Each probe declares and prints its own `Results(expect=N)`
+floor; the floors are the expected scores, and prose copies of the totals are exactly what
+went stale (NEXT.md is frozen to task + pointers and no longer carries them).
 
 ```sh
 cd ~/Desktop/healbot
@@ -229,19 +230,21 @@ GNHF_TELEMETRY=0 REPO=~/Desktop/healbot STALL_MIN=25 MAX_HOURS=8 \
   --max-iterations 12 \
   --max-tokens 4000000 \
   --prevent-sleep on \
-  --stop-when "gate/gate.py --base main exits 0 AND all twelve free probes exit 0 with a total assertion count strictly greater than 190" \
+  --stop-when "gate/gate.py --base main exits 0 AND every probe_*.py in .carryover/verified exits 0" \
   "$(cat /private/tmp/claude-501/-Users-brittonwerdell-Desktop-healbot/416921f2-86a2-4b1e-a255-cdae7f56921a/scratchpad/prompt-free-probes.md)"
 ```
 
-Why these numbers: 12 iterations = one per probe. 4M tokens is roughly 330K counted tokens per
+Why these numbers: iterations sized at one per probe (count probe_*.py at launch; the sweep
+in probe_rig_contract.py discovers them the same way). 4M tokens is roughly 330K counted tokens per
 iteration, which is generous for read-heavy work in a repo with a 78 KB index — and remember
 §1.6, cache reads count in full.
 
 **Caveat (INFERRED, high confidence):** `probe_turn_growth.py` is documented RED at 13/16 in
-`.carryover/verified/README.md`, while NEXT.md:267 expects 19/19 after Phase 12's re-derivation.
-The two documents were written at different moments. Establish the real baseline by hand before
-launching, or the loop will spend an iteration "fixing" a red that is either already fixed or
-deliberate.
+`.carryover/verified/README.md`, while its own floor (`Results(expect=19)`) reflects Phase 12's
+re-derivation, and its real-corpus fixture can also go red from live-DB drift (healbot-traps
+skill). The prose and the floor were written at different moments. Establish the real baseline
+by hand before launching, or the loop will spend an iteration "fixing" a red that is either
+already fixed or deliberate.
 
 ---
 
@@ -267,8 +270,8 @@ GNHF_TELEMETRY=0 REPO=~/Desktop/healbot STALL_MIN=20 MAX_HOURS=6 \
 
 Note the deliberate asymmetry with (a): a shorter stall window (20 min — this work is
 read-and-edit, not server-booting) and a lower iteration cap, because a vacuous-assertion hunt
-that finds nothing should stop rather than invent something. NEXT.md:100 is explicit: *"Do not
-invent something to build."*
+that finds nothing should stop rather than invent something. NEXT.md's task section is
+explicit: *"Do not invent something to build."*
 
 ---
 
@@ -277,7 +280,7 @@ invent something to build."*
 **This one is not launched by an agent. The owner types it, after saying yes.** NEXT.md's closing
 line is the rule: *"Ask me before spending real API credits on anything beyond a few turns."*
 
-The cheapest useful paid item is NEXT.md:139-145: `verify_handoff.py` must be **re-run** before its
+The cheapest useful paid item is NEXT.md's task item 4: `verify_handoff.py` must be **re-run** before its
 21/21 can be quoted again — Phase 5 took it to 22 unconditional assertions and never executed it,
 so the recorded score is arithmetically unreachable, and HARNESS.md, `docs/VERIFY.md` §10 and the
 rig README all cite it as the Phase 4 exit gate's second clause. Its floor is 22. Its workload is
@@ -414,9 +417,10 @@ genuinely needs a dependency, that is an ASK, and the loop must record `success=
 
 ### 3.5 The corpus is evidence, not scratch
 
-`.carryover/verified/hb/*.db` is `probe_turn_growth.py`'s corpus. NEXT.md:124-126: *"When clearing
-a rig DB, ARCHIVE it under a name that still matches `hb/*.db` … deleting it removes the evidence
-sizing RETIRE_AT."* And from the README: *"DO NOT clear `hb/project` or drop a DB to make this
+`.carryover/verified/hb/*.db` is `probe_turn_growth.py`'s corpus. The rig README's "Assertion
+discipline" section and the paid-run-protocol skill carry the rule: archive a rig DB under a
+name that still matches `hb/*.db` (`quest.db` becomes `quest-phase12a.db`); deleting it removes
+the evidence sizing RETIRE_AT. And from the README: *"DO NOT clear `hb/project` or drop a DB to make this
 green — that deletes the measurement to restore the number."* A loop optimising for green is
 exactly the process that would do this. Ban deletion, allow archival-with-rename.
 
@@ -439,9 +443,9 @@ report any surviving `claude` process, since gnhf spawns it `detached: true`.
 Defaults: `STALL_MIN=25`, `MAX_HOURS=8`. Tune the stall window **above** the slowest legitimate
 single operation. Two documented ones to size against: `verify_question.py` polls three framings at
 300 s each and *"a run where the first two framings do not land takes ~10 minutes before it reaches
-the grid. That is the rig working, not hanging"* (NEXT.md:305-307); and `wait_for` in
+the grid. That is the rig working, not hanging"* (the healbot-traps skill); and `wait_for` in
 `rig.py:296` checks its deadline only between calls to `fn` while `Api.__call__` defaults to
-`timeout=900`, so *"a 300s budget can be held for 900"* (NEXT.md:131-135). Below ~20 minutes you
+`timeout=900`, so *"a 300s budget can be held for 900"* (the healbot-traps skill). Below ~20 minutes you
 will kill working runs.
 
 A forced stop leaves the current iteration uncommitted. That is intentional — the evidence of what
@@ -496,12 +500,12 @@ cd .carryover/verified
 for p in probe_on_grid probe_error_state probe_focus probe_fleet probe_control_wiring \
          probe_twin probe_headless_arm probe_request_channel probe_turn_predicate \
          probe_turn_growth probe_rig_contract probe_citations; do
-  out=$(venv/bin/python $p.py 2>&1); code=$?      # assign first — never `| tail`, see NEXT.md
+  out=$(venv/bin/python $p.py 2>&1); code=$?      # assign first — never `| tail`, see the rig-assertion-discipline skill
   printf '%-26s exit=%s  %s\n' "$p" "$code" "$(printf '%s' "$out" | tail -1)"
 done
 cd ~/Desktop/healbot
 ```
-Expect 190/190 total per NEXT.md:257-270. Write the actual numbers down — §2(a) flags a documented
+Every probe must exit 0; each prints its own floor. Write the actual numbers down — §2(a) flags a documented
 disagreement about `probe_turn_growth.py`, and a loop must not be handed an ambiguous baseline.
 
 **5 — the A/B study is idle and its arms are uncorrupted**
