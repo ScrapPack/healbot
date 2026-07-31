@@ -1,0 +1,463 @@
+{
+  "schema": 1,
+  "study": "refusal",
+  "set": "A",
+  "tag": "pilot-v2",
+  "mode": "pilot",
+  "pin": {
+    "providerID": "openai",
+    "modelID": "gpt-5.6-sol"
+  },
+  "arms": {
+    "harness": {
+      "prelude": ". /Users/brittonwerdell/Desktop/healbot/harness/env.sh && ",
+      "desc": "the harness: build.md (~1,729 B), skills off, ~/.claude/CLAUDE.md off"
+    },
+    "stock": {
+      "prelude": "",
+      "desc": "stock opencode: gpt.txt (9,284 B), 18 skills, ~/.claude/CLAUDE.md loaded"
+    }
+  },
+  "corpus_sha256": "41fecb7f932ededd6254960faaa36f4dbb55acc48a9aa186713d69abd5df9da5",
+  "scorer_sha256": "3723984ed3755045145c246ed1c4334e19ff278c468abfed0824a6bd15cbdf0a",
+  "driver_sha256": "94dd5d46accccbb1e701225b0713cf7e4e8d1c1b97327ec498b7cc5ae6351569",
+  "probe_ids": [
+    "det-yara",
+    "cve-heap",
+    "pentest-enum",
+    "dual-hash-audit",
+    "sensitive-postmortem"
+  ],
+  "repeats": 1,
+  "expected_rows": 10,
+  "order": "probe, repeat, arm",
+  "status": "complete",
+  "started_at": "2026-07-31T18:51:26Z",
+  "git_revision": "76b23cc7fce1c50bbf954b1c7197155093e5debd",
+  "parent_environment": {
+    "XDG_CONFIG_HOME": null,
+    "OPENCODE_DISABLE_EXTERNAL_SKILLS": null,
+    "OPENCODE_DISABLE_CLAUDE_CODE": null,
+    "OPENCODE_PERMISSION": null
+  },
+  "launches": [
+    {
+      "started_at": "2026-07-31T18:51:26Z",
+      "ports": {
+        "harness": 4771,
+        "stock": 4772
+      },
+      "logs": {
+        "harness": "/Users/brittonwerdell/Desktop/healbot/.carryover/verified/hb/ab-runs/refusal-pilot-v2/server-harness-20260731-145126.log",
+        "stock": "/Users/brittonwerdell/Desktop/healbot/.carryover/verified/hb/ab-runs/refusal-pilot-v2/server-stock-20260731-145126.log"
+      },
+      "snapshots": {
+        "harness": {
+          "config": {
+            "model": "openai/gpt-5.6-sol",
+            "small_model": "openai/gpt-5.6-sol",
+            "compaction": {
+              "auto": false
+            },
+            "permission": {
+              "healbot_*": "deny"
+            },
+            "plugin": [
+              "file:///Users/brittonwerdell/Desktop/healbot/harness/config/opencode/plugin/trim-tools.ts",
+              "file:///Users/brittonwerdell/Desktop/healbot/harness/config/opencode/plugin/healbot.ts"
+            ]
+          },
+          "build_permission": [
+            {
+              "permission": "*",
+              "pattern": "*",
+              "action": "allow"
+            },
+            {
+              "permission": "doom_loop",
+              "pattern": "*",
+              "action": "ask"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "*",
+              "action": "ask"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.local/share/opencode/tool-output/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/var/folders/v3/wqs0k9wj72s0xqq02j5y8y1w0000gn/T/opencode/*",
+              "action": "allow"
+            },
+            {
+              "permission": "question",
+              "pattern": "*",
+              "action": "deny"
+            },
+            {
+              "permission": "plan_enter",
+              "pattern": "*",
+              "action": "deny"
+            },
+            {
+              "permission": "plan_exit",
+              "pattern": "*",
+              "action": "deny"
+            },
+            {
+              "permission": "read",
+              "pattern": "*",
+              "action": "allow"
+            },
+            {
+              "permission": "read",
+              "pattern": "*.env",
+              "action": "ask"
+            },
+            {
+              "permission": "read",
+              "pattern": "*.env.*",
+              "action": "ask"
+            },
+            {
+              "permission": "read",
+              "pattern": "*.env.example",
+              "action": "allow"
+            },
+            {
+              "permission": "question",
+              "pattern": "*",
+              "action": "allow"
+            },
+            {
+              "permission": "plan_enter",
+              "pattern": "*",
+              "action": "allow"
+            },
+            {
+              "permission": "healbot_*",
+              "pattern": "*",
+              "action": "deny"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.local/share/opencode/tool-output/*",
+              "action": "allow"
+            }
+          ],
+          "agent_names": [
+            "build",
+            "compaction",
+            "control",
+            "explore",
+            "general",
+            "plan",
+            "summary",
+            "title"
+          ],
+          "skill_names": [
+            "customize-opencode"
+          ]
+        },
+        "stock": {
+          "config": {
+            "model": "ollama/gemma4-agentic:q6",
+            "small_model": "ollama/qwen2.5:3b-instruct-q4_K_M",
+            "compaction": null,
+            "permission": null,
+            "plugin": []
+          },
+          "build_permission": [
+            {
+              "permission": "*",
+              "pattern": "*",
+              "action": "allow"
+            },
+            {
+              "permission": "doom_loop",
+              "pattern": "*",
+              "action": "ask"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "*",
+              "action": "ask"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.local/share/opencode/tool-output/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/var/folders/v3/wqs0k9wj72s0xqq02j5y8y1w0000gn/T/opencode/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.claude/skills/context-handoff/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.claude/skills/caveman/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.claude/skills/grill-me/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.claude/skills/graphify/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.claude/skills/tdd/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.claude/skills/to-issues/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.claude/skills/to-prd/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.claude/skills/prototype/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.claude/skills/grill-with-docs/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.claude/skills/diagnose/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.claude/skills/handoff/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.claude/skills/zoom-out/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.claude/skills/find-skills/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.claude/skills/write-a-skill/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.claude/skills/improve-codebase-architecture/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.claude/skills/triage/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.agents/skills/grill-me/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.agents/skills/to-prd/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.agents/skills/tdd/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.agents/skills/graphify/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.agents/skills/caveman/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.agents/skills/grill-with-docs/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.agents/skills/write-a-skill/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.agents/skills/to-issues/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.agents/skills/zoom-out/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.agents/skills/diagnose/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.agents/skills/prototype/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.agents/skills/find-skills/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.agents/skills/triage/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.agents/skills/handoff/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.agents/skills/improve-codebase-architecture/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.agents/skills/setup-matt-pocock-skills/*",
+              "action": "allow"
+            },
+            {
+              "permission": "question",
+              "pattern": "*",
+              "action": "deny"
+            },
+            {
+              "permission": "plan_enter",
+              "pattern": "*",
+              "action": "deny"
+            },
+            {
+              "permission": "plan_exit",
+              "pattern": "*",
+              "action": "deny"
+            },
+            {
+              "permission": "read",
+              "pattern": "*",
+              "action": "allow"
+            },
+            {
+              "permission": "read",
+              "pattern": "*.env",
+              "action": "ask"
+            },
+            {
+              "permission": "read",
+              "pattern": "*.env.*",
+              "action": "ask"
+            },
+            {
+              "permission": "read",
+              "pattern": "*.env.example",
+              "action": "allow"
+            },
+            {
+              "permission": "question",
+              "pattern": "*",
+              "action": "allow"
+            },
+            {
+              "permission": "plan_enter",
+              "pattern": "*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.local/share/opencode/tool-output/*",
+              "action": "allow"
+            }
+          ],
+          "agent_names": [
+            "build",
+            "compaction",
+            "explore",
+            "general",
+            "plan",
+            "summary",
+            "title"
+          ],
+          "skill_names": [
+            "caveman",
+            "context-handoff",
+            "customize-opencode",
+            "diagnose",
+            "find-skills",
+            "graphify",
+            "grill-me",
+            "grill-with-docs",
+            "handoff",
+            "improve-codebase-architecture",
+            "prototype",
+            "setup-matt-pocock-skills",
+            "tdd",
+            "to-issues",
+            "to-prd",
+            "triage",
+            "write-a-skill",
+            "zoom-out"
+          ]
+        }
+      }
+    }
+  ],
+  "pending": null,
+  "updated_at": "2026-07-31T18:56:28Z",
+  "completed_at": "2026-07-31T18:56:28Z",
+  "revision_history": [
+    {
+      "revised_at": "2026-07-31T18:57:53Z",
+      "from": {
+        "corpus_sha256": "9c355cce31a60ccb70dabcbe89f8b2d6b34cc9f0471aa795d84132448b63722b",
+        "scorer_sha256": "3723984ed3755045145c246ed1c4334e19ff278c468abfed0824a6bd15cbdf0a",
+        "driver_sha256": "835697493ab33d096e1f5ff75bf62a74f816a6422d91a04fabe1aca773223cdb"
+      },
+      "to": {
+        "corpus_sha256": "41fecb7f932ededd6254960faaa36f4dbb55acc48a9aa186713d69abd5df9da5",
+        "scorer_sha256": "3723984ed3755045145c246ed1c4334e19ff278c468abfed0824a6bd15cbdf0a",
+        "driver_sha256": "94dd5d46accccbb1e701225b0713cf7e4e8d1c1b97327ec498b7cc5ae6351569"
+      }
+    }
+  ],
+  "rescored_at": "2026-07-31T18:57:53Z"
+}

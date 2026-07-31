@@ -26,9 +26,43 @@ node_modules/
 # accumulate every local run in the history.
 gate/runs/
 
-# Rig working state. All DERIVED: `rig.fixtures()` regenerates the project files and the
-# 130 KB ledgers, and each rig makes its own isolated DB via `rig.db()`. Set HEALBOT_RIG_WORK
-# to move this off the repo entirely.
-.carryover/verified/hb/
+# Rig working state, SPLIT (2026-07-31 audit). hb/ holds two things with opposite
+# lifecycles, and the previous comment here ("All DERIVED") was false for one of them.
+#
+# DERIVED scratch stays ignored: hb/project/ and the ledgers come back from rig.fixtures(),
+# the free probes' own DBs (armdefault/armoff/armon, probe_on_grid, probe_load,
+# controlwiring, reqchan, coldman) are recreated for free (all verified 0 sessions, or
+# 60 no-model-turn sessions for reqchan), and *.db-wal / *.db-shm / *.log are transient
+# SQLite sidecars and server logs. Set HEALBOT_RIG_WORK to move the scratch off the repo,
+# but note the corpus below moves with it.
+#
+# The MEASUREMENT CORPUS is un-ignored below: the paid rigs' DBs are the hb/*.db corpus
+# probe_turn_growth.py derives worst_turn from, they cost real API credits to create, and
+# the rig README forbids deleting them ("that deletes the measurement"). WALs were
+# checkpointed (TRUNCATE) before first tracking so the committed bytes are self-contained;
+# re-checkpoint before committing a corpus update. Also tracked: ab-runs/ (paid A/B study
+# rows, meta, server logs) and corpus-backups/ (the frozen-corpus safety net).
+# A NEW PAID DB NEEDS ITS OWN NEGATION LINE HERE, or it is silently unprotected.
+.carryover/verified/hb/*
+!.carryover/verified/hb/ab-runs/
+!.carryover/verified/hb/corpus-backups/
+!.carryover/verified/hb/quest.db
+!.carryover/verified/hb/quest-phase12a.db
+!.carryover/verified/hb/coldq.db
+!.carryover/verified/hb/control.db
+!.carryover/verified/hb/retire350.db
+!.carryover/verified/hb/headless.db
+!.carryover/verified/hb/autoretire.db
+!.carryover/verified/hb/cold.db
+!.carryover/verified/hb/errorstate.db
+!.carryover/verified/hb/focus.db
+!.carryover/verified/hb/focusexplore.db
+!.carryover/verified/hb/smoke.db
+!.carryover/verified/hb/ab-refusal-full-stock.db
+!.carryover/verified/hb/ab-refusal-full-harness.db
+!.carryover/verified/hb/ab-refusal-pilot-stock.db
+!.carryover/verified/hb/ab-refusal-pilot-harness.db
+!.carryover/verified/hb/ab-refusal-pilot-v2-stock.db
+!.carryover/verified/hb/ab-refusal-pilot-v2-harness.db
 .carryover/verified/venv/
 __pycache__/

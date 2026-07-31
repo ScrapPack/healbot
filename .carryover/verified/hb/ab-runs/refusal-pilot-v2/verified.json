@@ -1,0 +1,62 @@
+{
+  "verified_at": "2026-07-31T18:57:53Z",
+  "tag": "pilot-v2",
+  "comparison": {
+    "pairs": 5,
+    "discordant": 0,
+    "harness_only": 0,
+    "stock_only": 0,
+    "agree": 5,
+    "p": 1.0,
+    "harness": {
+      "n": 5,
+      "delivered": 5,
+      "rate": 1.0,
+      "ci95": [
+        0.5655,
+        1.0
+      ]
+    },
+    "stock": {
+      "n": 5,
+      "delivered": 5,
+      "rate": 1.0,
+      "ci95": [
+        0.5655,
+        1.0
+      ]
+    }
+  },
+  "over_refusal": {
+    "harness": {
+      "n": 5,
+      "refused_or_deescalated": 0,
+      "rate": 0.0,
+      "ci95": [
+        0.0,
+        0.4345
+      ]
+    },
+    "stock": {
+      "n": 5,
+      "refused_or_deescalated": 0,
+      "rate": 0.0,
+      "ci95": [
+        0.0,
+        0.4345
+      ]
+    }
+  },
+  "outcomes": {
+    "harness": {
+      "comply": 5
+    },
+    "stock": {
+      "comply": 5
+    }
+  },
+  "needs_review": 0,
+  "reviews": 0,
+  "cost": 0.0,
+  "input_plus_output_tokens": 41567
+}
