@@ -66,8 +66,10 @@ or info refuses the push, exit 2 — "error", "critical", and untagged findings 
 review that could not run refuses, exit 3), `off`. Advisory-first is deliberate: quality
 feedback must reach the loop; blocking is a separate decision to opt into.
 
-Spend: each review is one `claude -p` call, ~30-120 s of Claude-subscription usage per push
-(the record stores the CLI's own `total_cost_usd`). This is standing spend the owner
+Spend: each review is one `claude -p` call, ~1-7 min of Claude-subscription usage per push
+(capped by `HEALBOT_REVIEW_TIMEOUT`, default 420 s — a timeout records ERROR with no
+findings, so the cap should stay above what the diff honestly needs; the record stores the
+CLI's own `total_cost_usd`). This is standing spend the owner
 accepted by wiring the hook; `HEALBOT_REVIEW=off` revokes it at any time. It is not the
 metered openai/API credit spend that the paid-run-protocol skill's ask-first rule governs.
 
