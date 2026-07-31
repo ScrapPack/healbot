@@ -333,9 +333,9 @@ choice down.
 ### 3.2 The four banned filenames
 
 `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, `SKILL.md` are banned **anywhere in the tree**
-(HARNESS.md:9-13, now enforced at `gate/gate.py:164`). The first three auto-ingest into every
+(HARNESS.md:9-13, now enforced at `gate/gate.py:192`). The first three auto-ingest into every
 session's context via `packages/opencode/src/session/instruction.ts:64-68`; `SKILL.md` collides
-with opencode's `**/SKILL.md` skill glob — and per `gate/gate.py:167-174`, *"a `SKILL.md` body
+with opencode's `**/SKILL.md` skill glob — and per `gate/gate.py:195-202`, *"a `SKILL.md` body
 containing `` !`cmd` `` shell-executes on slash-invoke with no permission check
 (`harness/env.sh:48-53`, re-verified 2026-07-31 against 1.18.5 … still unfixed)."* Maps are
 `<DIR>.MAP.md`.
