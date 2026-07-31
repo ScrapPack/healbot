@@ -27,7 +27,8 @@ filename and a lint error each produced 2, a clean tree produced 0.
 | Push enforcement | `gate/hooks/pre-push` — gates the pushed range via `--base <remote sha>`, refuses on exit 2/3 |
 | Model review stage | `gate/review.py` — single-pass fresh-context review, typed findings, advisory by default |
 | Evidence flow | `gate/publish.py` — attaches both run records to the pushed commit (or its open PR) on GitHub |
-| Evidence records | `gate/runs/<timestamp>.json`, `-review.json`, `-publish.json`, plus `publish.log`; all gitignored |
+| Tier 2 runner | `gate/tier2.py` — the rest of the free suite, at phase boundaries; trigger is the phase-close skill (`harness/skills/phase-close.md`) |
+| Evidence records | `gate/runs/<timestamp>.json`, `-review.json`, `-publish.json`, `-tier2.json`, plus `publish.log`; all gitignored |
 
 ## What it checks
 
@@ -80,8 +81,14 @@ interactive `claude -p 'reply ok'` from the owner's terminal settles it.
 
 ## What it deliberately does NOT run
 
-- **Tier 2** — the eight free probes that boot a TUI or a server. Free, but tens of seconds, and
-  their output embeds timings. Run them at phase boundaries.
+- **Tier 2** — the rest of the free suite: `probe_*.py` minus Tier 1, discovered by
+  subtraction at run time (13 today — seven boot a TUI or a server, six read living state;
+  `gate/tier2.py --list` enumerates). Free, but minutes not seconds, and the output embeds
+  timings, so no byte-stability claim and no per-row hash — deliberately. Run
+  `gate/tier2.py` at phase boundaries; the phase-close skill is the trigger and owns the
+  known-red register (as of 2026-07-31: probe_turn_growth's fixture-count drift, accepted
+  pending the owner's doc-refresh decision). Record: `gate/runs/<ts>-tier2.json`; a
+  discovery floor makes "found no probes" ERROR instead of a quiet green.
 - **Tier 3** — every `verify_*` rig. **PAID.** Owner's go, never automatic.
 
 ## Three decisions worth not re-litigating
@@ -133,7 +140,6 @@ which, per the same property, reads identically to `--no-verify` from the GitHub
 
 ## Open
 
-- Tier 2 is defined but not wired. It needs a phase-boundary trigger, not a per-change one.
 - No CI. `.github/` does not exist, and adding it changes what "PR" means for the worktree and
   skills work — a decision, not an oversight. A fresh CI clone also cannot run Tier 1 at all
   (no checkout, no venv), so CI could only ever be ruff + banned-names, honestly labeled.

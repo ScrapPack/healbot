@@ -82,9 +82,9 @@ def changed_files(base):
 # ==========================================================================================
 # TIER 1 — always on. Free, static, fast, and MEASURED byte-stable.
 # ==========================================================================================
-# Deliberately NOT the whole free suite. The eight remaining free probes boot a TUI or a server;
-# they cost tens of seconds and their output embeds timings, so they are Tier 2. A per-change
-# gate that takes a minute is a gate people route around.
+# Deliberately NOT the whole free suite. The rest is Tier 2, owned by tier2.py: probes that boot
+# a TUI or a server or read living state, with timing-bearing output — run at phase boundaries,
+# never per change. A per-change gate that takes minutes is a gate people route around.
 TIER1 = [
     ("rig-contract", [PY, "probe_rig_contract.py"], VERIFIED,
      "every rig still reports failure as failure — floors, guards, verdict exits, no box-counting"),
@@ -271,8 +271,8 @@ def main():
         for r in errored:
             print(f"    - {r['check']}: {r['why']}", flush=True)
     print(f"  evidence: {os.path.relpath(path, ROOT)}", flush=True)
-    print("  NOT run by this gate: the 8 booting free probes (tier 2) and every verify_* rig "
-          "(tier 3, PAID — owner's go required).", flush=True)
+    print("  NOT run by this gate: the tier-2 free probes (gate/tier2.py — phase boundaries) "
+          "and every verify_* rig (tier 3, PAID — owner's go required).", flush=True)
 
     # Distinct exit codes so a caller can branch on the KIND of failure, which is the whole point
     # of typing the states. 0 pass / 2 blocked / 3 error.
