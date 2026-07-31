@@ -26,7 +26,8 @@ filename and a lint error each produced 2, a clean tree produced 0.
 | The four banned filenames | `gate.py` `BANNED` / `banned_names()` |
 | Push enforcement | `gate/hooks/pre-push` — gates the pushed range via `--base <remote sha>`, refuses on exit 2/3 |
 | Model review stage | `gate/review.py` — single-pass fresh-context review, typed findings, advisory by default |
-| Evidence records | `gate/runs/<timestamp>.json` and `<timestamp>-review.json`, gitignored |
+| Evidence flow | `gate/publish.py` — attaches both run records to the pushed commit (or its open PR) on GitHub |
+| Evidence records | `gate/runs/<timestamp>.json`, `-review.json`, `-publish.json`, plus `publish.log`; all gitignored |
 
 ## What it checks
 
@@ -114,10 +115,23 @@ and MEASURED on 2026-07-31, that check had been silently **red**: three `.DS_Sto
 Finder visit had taken the overlay from its declared 17 files to 20. Nothing was running it.
 That is the gap this fills.
 
+## The evidence flow
+
+`gate/publish.py`, spawned detached by the hook after both stages pass. It waits for the
+pushed sha to appear on the remote (a failed push never produces it; bounded retries, then a
+gave-up record), then posts a markdown summary plus both run records — bulky raw fields
+stripped, each full local record pinned by its sha256 — as a COMMIT COMMENT on the pushed
+sha, or to `gh pr comment` when the pushed branch has an open PR. Every outcome lands in
+`gate/runs/<ts>-publish.json` and `publish.log` (prune the log by hand; nothing reads it).
+
+The auditable property is the point: only the hook runs the publisher, and `--no-verify`
+skips the hook, so **a pushed commit with no evidence comment is a commit that shipped
+unverified**. Absence is a signal. `HEALBOT_PUBLISH=off` turns publishing off deliberately —
+which, per the same property, reads identically to `--no-verify` from the GitHub side.
+
 ## Open
 
 - Tier 2 is defined but not wired. It needs a phase-boundary trigger, not a per-change one.
-- No PR integration yet. The remote is `ScrapPack/healbot` and `gh` is authed with `repo` +
-  `workflow`; a run record is the natural `gh pr comment` payload.
 - No CI. `.github/` does not exist, and adding it changes what "PR" means for the worktree and
-  skills work — a decision, not an oversight.
+  skills work — a decision, not an oversight. A fresh CI clone also cannot run Tier 1 at all
+  (no checkout, no venv), so CI could only ever be ruff + banned-names, honestly labeled.

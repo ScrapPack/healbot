@@ -22,12 +22,18 @@
 #
 # HEALBOT_GATE / HEALBOT_REVIEW_CMD override the two commands for hook plumbing tests
 # (stub exits 0/2/3). They add no bypass power that --no-verify does not already grant.
+# After both stages pass, the evidence flow (gate/publish.py) is spawned DETACHED: it waits
+# for the pushed sha to appear on the remote, then attaches the run records to the commit
+# (or the branch's open PR). It never blocks a push; HEALBOT_PUBLISH=off skips it. The
+# auditable property: a pushed commit with no evidence comment shipped via --no-verify.
 set -u
 
 ZERO=0000000000000000000000000000000000000000
 ROOT="$(git rev-parse --show-toplevel)"
 GATE=${HEALBOT_GATE:-"$ROOT/.carryover/verified/venv/bin/python $ROOT/gate/gate.py"}
 REVIEW=${HEALBOT_REVIEW_CMD:-"$ROOT/.carryover/verified/venv/bin/python $ROOT/gate/review.py"}
+PUBLISH=${HEALBOT_PUBLISH_CMD:-"$ROOT/.carryover/verified/venv/bin/python $ROOT/gate/publish.py"}
+T0=$(date +%s)
 
 while read -r local_ref local_sha remote_ref remote_sha; do
   # Deleting a remote ref pushes no commits; there is nothing to gate.
@@ -72,6 +78,14 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     echo "pre-push gate: REFUSING the push (review exit $rcode under HEALBOT_REVIEW=${HEALBOT_REVIEW:-advisory})." >&2
     echo "pre-push gate: review evidence in gate/runs/*-review.json." >&2
     exit 1
+  fi
+
+  # The evidence flow, detached (the sha exists remotely only after the transfer this hook
+  # precedes; publish.py retries until it appears, and gives up on record if it never does).
+  if [ "${HEALBOT_PUBLISH:-on}" != "off" ]; then
+    nohup $PUBLISH --sha "$local_sha" --ref "$remote_ref" --since "$T0" \
+      >> "$ROOT/gate/runs/publish.log" 2>&1 < /dev/null &
+    echo "pre-push gate: evidence publisher spawned (gate/runs/publish.log)" >&2
   fi
 done
 
