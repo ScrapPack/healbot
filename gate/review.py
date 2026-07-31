@@ -19,8 +19,9 @@ reason it lives behind the gate rather than inside it.
 ADVISORY-FIRST. The owner's standing rule is that quality feedback must REACH the loop;
 blocking is a separate decision. Modes, via HEALBOT_REVIEW:
     advisory  (default)  findings are printed and recorded; exit 0 regardless
-    blocking             any severity=error finding exits 2; a review that could not run
-                         exits 3 (same 0/2/3 vocabulary as gate.py)
+    blocking             any finding NOT explicitly severity warning or info exits 2
+                         (fail-closed: "error", "critical", or an untagged finding all
+                         block); a review that could not run exits 3 (gate.py's 0/2/3)
     off                  recorded as skipped, exit 0
 The reviewer is READ-ONLY by construction: claude -p with --allowedTools Read,Glob,Grep,
 so it can open cited files but cannot edit, run bash, or push anything.
@@ -131,29 +132,35 @@ def parse_findings(text):
     if t.startswith("```"):
         t = t.strip("`")
         t = t[t.find("{"):]
-    # The slice must end at the last } OR ] — a reply missing only its root brace ends in
-    # ], and slicing to rfind("}") alone would discard the exact bracket the repair below
-    # keys on (TESTED: the first version did, and the repair could never fire).
-    start, end = t.find("{"), max(t.rfind("}"), t.rfind("]"))
+    # Two candidate slices, tried in order (each live review reshaped this). The }-ended
+    # slice first: it parses every complete reply, including one followed by trailing prose
+    # that contains a ] (the third live review caught that ending at max(}, ]) alone
+    # regressed those into ERRORs). Only when that fails, the ]-ended slice feeds the
+    # repair below.
+    start, brace, end = t.find("{"), t.rfind("}"), max(t.rfind("}"), t.rfind("]"))
     if start < 0 or end <= start:
         raise ValueError(f"no JSON object in reply: {text[:200]!r}")
-    body = t[start:end + 1]
-    # Tail-truncation repair, deliberately restricted to ONE case: the findings array is
-    # already CLOSED and only the root brace is missing (the first live review ended exactly
-    # one character short, stop_reason end_turn). A closed array proves no finding was
-    # dropped after it. Repairing any wider imbalance would be unsound: a reply cut BETWEEN
-    # findings would complete into a valid but silently SHORTENED list — the second live
-    # review caught exactly that hole in the first version of this repair. Everything else
-    # stays an ERROR, and the caller records that a repair happened.
+    obj = None
     repaired = False
-    try:
-        obj = json.loads(body)
-    except json.JSONDecodeError:
+    if brace > start:
+        try:
+            obj = json.loads(t[start:brace + 1])
+        except json.JSONDecodeError:
+            obj = None
+    if obj is None:
+        # Tail-truncation repair, deliberately restricted to ONE case: the findings array
+        # is already CLOSED and only the root brace is missing (the first live review ended
+        # exactly one character short, stop_reason end_turn). A closed array proves no
+        # finding was dropped after it. Repairing any wider imbalance would be unsound: a
+        # reply cut BETWEEN findings would complete into a valid but silently SHORTENED
+        # list — the second live review caught exactly that hole in this repair's first
+        # version. Everything else stays an ERROR, and the caller records the repair.
+        body = t[start:end + 1]
         if body.rstrip().endswith("]"):
             obj = json.loads(body + "}")  # a second failure re-raises with the real position
             repaired = True
         else:
-            raise
+            obj = json.loads(body)  # re-raise with the real error position
     if obj.get("verdict") not in ("clean", "findings"):
         raise ValueError(f"bad verdict: {obj.get('verdict')!r}")
     findings = obj.get("findings")

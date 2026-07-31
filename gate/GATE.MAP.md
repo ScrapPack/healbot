@@ -58,9 +58,15 @@ measurement, and carries no byte-stability claim. The reviewer is read-only by c
 (`claude -p` with `--allowedTools Read,Glob,Grep`).
 
 Modes via `HEALBOT_REVIEW`: `advisory` (default — findings print and record, push continues
-regardless), `blocking` (error-severity findings refuse the push, exit 2; a review that could
-not run refuses, exit 3), `off`. Advisory-first is deliberate: quality feedback must reach
-the loop; blocking is a separate decision to opt into.
+regardless), `blocking` (fail-closed on severity: any finding not explicitly tagged warning
+or info refuses the push, exit 2 — "error", "critical", and untagged findings all count; a
+review that could not run refuses, exit 3), `off`. Advisory-first is deliberate: quality
+feedback must reach the loop; blocking is a separate decision to opt into.
+
+Spend: each review is one `claude -p` call, ~30-120 s of Claude-subscription usage per push
+(the record stores the CLI's own `total_cost_usd`). This is standing spend the owner
+accepted by wiring the hook; `HEALBOT_REVIEW=off` revokes it at any time. It is not the
+metered openai/API credit spend that the paid-run-protocol skill's ask-first rule governs.
 
 Activation: the reviewer needs a logged-in `claude` CLI. Until one exists it reports ERROR
 into the record and the advisory push continues. Verified 2026-07-31: the keychain entry
