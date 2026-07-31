@@ -91,6 +91,8 @@ TIER1 = [
      "every file:line citation in the docs still resolves to a real, non-blank line"),
     ("twin", [PY, "probe_twin.py"], VERIFIED,
      "the fork/ overlay and the opencode/ checkout have not drifted apart"),
+    ("review-parse", [PY, "probe_review_parse.py"], VERIFIED,
+     "the review stage's reply parser still holds all three live-failure shapes"),
 ]
 
 

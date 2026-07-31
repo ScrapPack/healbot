@@ -32,7 +32,9 @@ filename and a lint error each produced 2, a clean tree produced 0.
 
 **Tier 1 — static, free, always on** (~0.7s): `probe_rig_contract` (every rig still reports
 failure as failure), `probe_citations` (~930 `file:line` citations still resolve),
-`probe_twin` (the `fork/` overlay and the `opencode/` checkout have not drifted).
+`probe_twin` (the `fork/` overlay and the `opencode/` checkout have not drifted),
+`probe_review_parse` (the review stage's reply parser still holds all three live-failure
+shapes).
 
 **Lint — scoped to the changed files:** `ruff` on changed Python; `tsgo --noEmit` plus
 `oxlint` on the checkout twins only when the change touches `fork/` TypeScript (since the
