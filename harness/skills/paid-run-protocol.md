@@ -10,6 +10,11 @@ description: Protocol for anything that spends healbot API credits, verify_*.py 
 Ask the owner before spending real API credits on anything beyond a few turns. Items listed
 as PAID in NEXT.md's task list are offers, not authorizations; each is still ask-first.
 
+Scope note: "credits" means the metered openai/API spend the rigs and studies burn. The
+pre-push review stage's claude call is Claude-subscription usage, standing spend recorded
+in gate/GATE.MAP.md's "The model review stage" section; HEALBOT_REVIEW=off revokes it at
+any time. It is not an ask-first event per push.
+
 ## Cost it before asking
 
 Use the rig README's costing method (`.carryover/verified/README.md`, the costing

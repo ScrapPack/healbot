@@ -20,9 +20,11 @@ node_modules/
 # There is no reaper for them, so prune by hand if the directory grows.
 .harness/
 
-# Per-change gate run records (gate/GATE.MAP.md). DERIVED: each is a re-runnable snapshot of a
-# gate invocation, and the gate is ~1.1s, so the record is cheaper to regenerate than to keep.
-# Attach a specific record to a PR deliberately when it is the evidence for that change; do not
+# Per-change gate run records (gate/GATE.MAP.md). The plain <ts>.json records are DERIVED:
+# re-runnable snapshots of a ~1.1s gate invocation, cheaper to regenerate than to keep. The
+# <ts>-review.json records are NOT re-runnable (a model review is one nondeterministic
+# judgment) and are kept ephemeral by choice, not because they can be regenerated; attach
+# either kind to a PR deliberately when it is the evidence for that change. Do not
 # accumulate every local run in the history.
 gate/runs/
 
