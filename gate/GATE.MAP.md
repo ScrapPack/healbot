@@ -25,7 +25,8 @@ filename and a lint error each produced 2, a clean tree produced 0.
 | Lint scoping | `gate.py` `lint()` |
 | The four banned filenames | `gate.py` `BANNED` / `banned_names()` |
 | Push enforcement | `gate/hooks/pre-push` — gates the pushed range via `--base <remote sha>`, refuses on exit 2/3 |
-| Evidence records | `gate/runs/<timestamp>.json`, gitignored |
+| Model review stage | `gate/review.py` — single-pass fresh-context review, typed findings, advisory by default |
+| Evidence records | `gate/runs/<timestamp>.json` and `<timestamp>-review.json`, gitignored |
 
 ## What it checks
 
@@ -41,6 +42,30 @@ you route around.
 
 **Invariants:** the `AGENTS.md` / `CLAUDE.md` / `CONTEXT.md` / `SKILL.md` filename ban
 (`HARNESS.md:9-13`). It held for twelve phases on memory alone; now it is a check.
+
+## The model review stage
+
+`gate/review.py`, run by the pre-push hook after the deterministic checks pass. Every gate.py
+check is static, so a change that lints clean and breaks logic passes untouched; this is the
+missing judgment layer, shaped like no-mistakes' reviewer: ONE reviewer, fresh context per
+change-set, single pass, typed findings (severity error/warning/info, action
+no-op/auto-fix/ask-user, risk low/medium/high). Multi-reviewer adversarial review stays at
+phase boundaries, deliberately.
+
+It is NOT a Tier-1 check and must never become one: model output is nondeterministic, so its
+record (`gate/runs/<ts>-review.json`) is a log of what one review said, not a re-runnable
+measurement, and carries no byte-stability claim. The reviewer is read-only by construction
+(`claude -p` with `--allowedTools Read,Glob,Grep`).
+
+Modes via `HEALBOT_REVIEW`: `advisory` (default — findings print and record, push continues
+regardless), `blocking` (error-severity findings refuse the push, exit 2; a review that could
+not run refuses, exit 3), `off`. Advisory-first is deliberate: quality feedback must reach
+the loop; blocking is a separate decision to opt into.
+
+Activation: the reviewer needs a logged-in `claude` CLI. Until one exists it reports ERROR
+into the record and the advisory push continues. Verified 2026-07-31: the keychain entry
+exists on this machine but is not reachable from a non-interactive child process; one
+interactive `claude -p 'reply ok'` from the owner's terminal settles it.
 
 ## What it deliberately does NOT run
 
