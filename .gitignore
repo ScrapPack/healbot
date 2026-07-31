@@ -7,6 +7,25 @@
 node_modules/
 .DS_Store
 
+# Capture debris from the EXTERNAL gated-harness Claude Code plugin
+# (~/.claude/plugins/cache/dev-harness/gated-harness/), not from anything in this repo. Its
+# PostToolUse hook writes a {command, hash} record here on EVERY Bash call made by ANY Claude
+# Code session whose cwd is this tree — including sessions doing unrelated reading. TESTED:
+# three records accumulated during one investigation session, two of them capturing greps of
+# the plugin's own source.
+#
+# Ignored rather than deleted because the plugin recreates the directory unprompted; the
+# defect this guards is that `git add -A` was staging all three into a repo whose entire
+# premise is that its artifacts are deliberate. Nothing in this project reads these files.
+# There is no reaper for them, so prune by hand if the directory grows.
+.harness/
+
+# Per-change gate run records (gate/GATE.MAP.md). DERIVED: each is a re-runnable snapshot of a
+# gate invocation, and the gate is ~1.1s, so the record is cheaper to regenerate than to keep.
+# Attach a specific record to a PR deliberately when it is the evidence for that change; do not
+# accumulate every local run in the history.
+gate/runs/
+
 # Rig working state. All DERIVED: `rig.fixtures()` regenerates the project files and the
 # 130 KB ledgers, and each rig makes its own isolated DB via `rig.db()`. Set HEALBOT_RIG_WORK
 # to move this off the repo entirely.

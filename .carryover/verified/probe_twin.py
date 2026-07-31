@@ -123,7 +123,18 @@ overlay_files = sorted(
     for dirpath, _, filenames in os.walk(f"{rig.HEALBOT}/fork")
     if ".git" not in dirpath
     for fn in filenames
-    if fn not in ("README.md",) and not fn.endswith(".patch")
+    # `.DS_Store` is Finder metadata, not an overlay file. It is gitignored — so the project
+    # already regards it as a non-artifact — but this walk reads the FILESYSTEM, not the index,
+    # and therefore counted it. MEASURED: three of them (fork/, fork/packages/,
+    # fork/packages/opencode/) appeared from a Finder visit, took the overlay from its declared
+    # 17 files to 20, and turned this assertion RED for a reason that is not drift.
+    #
+    # That failure shape is worse than a missed drift: a guard that reddens on OS debris is a
+    # guard people learn to ignore, which is exactly how docs/VERDICT.md's permanently-red
+    # assertion survived five phases. Excluded by name rather than by consulting git, because the
+    # floor below (>= 17) is the real defence against this list quietly widening to hide a
+    # genuine overlay file.
+    if fn not in ("README.md", ".DS_Store") and not fn.endswith(".patch")
 )
 mismatched = [
     rel
