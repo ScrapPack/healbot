@@ -493,8 +493,9 @@ the opencode harness. The record is `docs/SHIP.md`; the working files:
 | `.carryover/verified/probe_fleet_claude.py` | free guard: live fail-open hook executions, a mutation control per source predicate, the canonical/installed skill twin, the arms-tree separation. The count lives in the probe's own `Results(expect=)` floor and its printout, nowhere else |
 | `.carryover/verified/backend.py` | the measurement seam the fleet reads through: occupancy and transcripts, unchanged from its Phase 12 build |
 
-Open items live in `docs/SHIP.md` §5 — the one-time login, pinning the SUSPECTED screen
-markers against a live crewmate, live hook-wiring verification, and the fact that **no
+Open items live in `docs/SHIP.md` §5 — the login's keychain-landing question, pinning
+the still-SUSPECTED busy/trust markers (ready was measured and repinned 2026-08-01,
+the same live run that verified the hook wiring), and the fact that **no
 retirement threshold is verified for any Claude model** (the opencode numbers are
 measurements of a different model through a different program; hand off early until a
 claude-side growth measurement exists). Deliberately not adopted, with reasons on record:

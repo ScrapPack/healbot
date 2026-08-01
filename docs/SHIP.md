@@ -152,9 +152,15 @@ probe_twin pattern — and asserts the body carries no `!`cmd`` shell-substituti
 
 1. **One-time auth**: `. harness/env.claude.sh && claude`, log in, exit. Until then every
    crew spawn fails its ready-wait signed-out. Owner action.
-2. **Pin the screen markers.** `HB_READY_MARKER`/`HB_BUSY_MARKER`/`HB_TRUST_MARKER`
-   defaults are SUSPECTED, version-dependent strings. First live crewmate: capture each
-   state once, pin the strings here and in the environment. Costs one short paid session.
+2. **Pin the screen markers.** Ready is MEASURED and pinned (2026-08-01, first live
+   crew run): under the `bypassPermissions` default the idle footer reads
+   `bypass permissions on` — the pre-bypass hint `? for shortcuts` stopped rendering
+   the moment deb50ae landed, which timed out every spawn until the repin.
+   `HB_BUSY_MARKER`/`HB_TRUST_MARKER` remain SUSPECTED; both classifiers were observed
+   false-positiving on crewmate REPORT PROSE containing the words, and two startup
+   dialogs match no marker at all (the Chrome-extension offer, and the bypass
+   acceptance WARNING — the latter appears once per config root, capitalized, so it
+   cannot false-match the lowercase ready pin).
 3. **Verify the hook events live.** The wiring layer moved up a tier in the review's
    red-capable doctor test: the harness settings.json VALIDATES on the real 2.1.220
    binary (a control file with bad types produced typed errors naming the full valid
