@@ -46,6 +46,15 @@ sees NONE of your context — the brief is its entire world. Use `--slot` only f
 healbot itself (it leases a pooled worktree via harness/pool.py); for other projects pass
 an explicit `--dir`, ideally a worktree that is the crewmate's alone.
 
+## Model policy
+
+The default is the harness settings pin — Opus 5 at `effortLevel: xhigh` — and you do NOT
+pass `--model` to get it. Escalate to `--model fable` (Fable 5) only for briefs that are
+predominantly planning, architecture, or long-form synthesis; a brief whose work is editing,
+running, and verifying stays on the default. Per-spawn models are recorded in the fleet
+manifest by `spawn` — that record is the audit trail, so choose deliberately and say in your
+report which crewmates you escalated and why.
+
 ## Context budget and handoff
 
 Watch `occupancy` per crewmate. Auto-compaction is OFF in the harness config, so the

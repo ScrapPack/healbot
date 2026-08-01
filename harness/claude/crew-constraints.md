@@ -19,6 +19,8 @@ your brief comes from the prompt that spawned you.
   trust its outstanding list over re-deriving state, and trust the repository over both.
 - No destructive git operations (force-push, reset --hard on shared branches, branch
   deletion) unless your brief explicitly names them.
-- Permission prompts are part of the design: if a tool call needs approval, ask and wait.
-  Blocked-and-waiting is a state the fleet sees and handles; silently working around a
-  denied call is not.
+- Permission prompts are rare here — the harness defaults to bypassPermissions — but the
+  rule holds whenever one does appear: if a tool call needs approval, ask and wait. That
+  includes the dialogs bypass mode does not remove (the bypass-mode acceptance dialog, the
+  per-directory trust dialog). Blocked-and-waiting is a state the fleet sees and handles;
+  silently working around a denied call is not.

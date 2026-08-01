@@ -89,9 +89,16 @@ export DISABLE_AUTO_COMPACT
 #   ANTHROPIC_API_KEY         -- the harness runs on the owner's interactive login, same
 #                                as the opencode harness runs on oauth. Keys in env leak
 #                                into every pane's environment.
-#   permissions bypass flags  -- crew run with Claude Code's normal permission prompts;
-#                                blocked crew show up in the fleet state channel
-#                                (Notification event) exactly like a blocked opencode
-#                                session shows QUESTION on the grid. gnhf's default
-#                                --dangerously-skip-permissions posture (docs/AFK.md §1.7)
-#                                is the counterexample, not the model.
+#   permissions bypass flags  -- still not set AS FLAGS, but the decision they encoded is
+#                                REVERSED: owner directive 2026-08-01 makes
+#                                "permissions": {"defaultMode": "bypassPermissions"} the
+#                                settings.json default, so bypass is a config fact, not a
+#                                launch flag (one place, recorded, no per-spawn argv drift).
+#                                WAS: crew ran with Claude Code's normal permission prompts,
+#                                and gnhf's --dangerously-skip-permissions posture
+#                                (docs/AFK.md §1.7) was called the counterexample, not the
+#                                model. The Notification-event blocked-crew channel STAYS
+#                                load-bearing either way: bypass mode does not silence the
+#                                residual dialogs -- the bypass-mode acceptance dialog and
+#                                the per-directory trust dialog both still block a crewmate
+#                                until a human answers, and the fleet must see that.

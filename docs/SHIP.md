@@ -47,7 +47,9 @@ The opencode harness knob map and its claude equivalents, load-bearing rows only
 | opencode (env.sh / opencode.jsonc) | claude harness |
 |---|---|
 | `XDG_CONFIG_HOME` redirect — the only real isolation | `CLAUDE_CONFIG_DIR` redirect — TESTED: under a redirected empty dir, `claude doctor` reported signed-out and wrote `.claude.json` + `backups/` into it. Full user-root redirect including auth/state; project `.claude/` stays, which is the deliberate keep |
-| `"model"` pin | `settings.json "model": "sonnet"` — a DISCIPLINE pin, not a measured one. Per-spawn override records into the fleet manifest |
+| `"model"` pin | `settings.json "model": "opus"` — a DISCIPLINE pin, not a measured one (owner directive 2026-08-01; was `"sonnet"`). Alias VERIFIED present in the 2.1.220 binary (`grep -ac '"opus"` → 24). Per-spawn override records into the fleet manifest; `--model fable` (Fable 5, alias verified, 18 hits) is the recorded escalation for planning/long-form-synthesis briefs, never the default |
+| no equivalent (opencode has no persisted effort knob) | `settings.json "effortLevel": "xhigh"` — max reasoning effort, same owner directive. VERIFIED as a user-settings enum in the 2.1.220 binary: `effortLevel:E.enum(["low","medium","high","xhigh"]).optional()...describe("Persisted effort level for supported models.")`, `"xhigh"` the top member |
+| `permission: {...}` posture | `settings.json "permissions": {"defaultMode": "bypassPermissions"}` — the 2026-07-31 decision (crew run with normal prompts) REVERSED by owner directive 2026-08-01. Both names VERIFIED in the binary: `defaultMode:E.preprocess(...E.enum([...Q_e...]))` (39 hits) over the mode list `["acceptEdits","auto","bypassPermissions","default","dontAsk","plan"]` (`bypassPermissions` 136 hits). Set in settings, NOT as a launch flag, so there is one recorded place and no per-spawn argv drift. Note the binary gates this mode out of PROJECT-scope settings — the harness root is user-scope via `CLAUDE_CONFIG_DIR`, which is where it is grantable |
 | `"compaction": {"auto": false}` | `"autoCompactEnabled": false` + env `DISABLE_AUTO_COMPACT=1`, both names verified present in the 2.1.220 binary. `CLAUDE_CODE_DISABLE_AUTO_COMPACT` and `DISABLE_MICROCOMPACT` are NOT in the binary (0 hits) — do not use |
 | `OPENCODE_DISABLE_EXTERNAL_SKILLS` | The redirect itself: claude's user skills live UNDER the config root, so an empty harness `skills/` is the switch. The `!`cmd`` slash-invoke hole this closed on opencode does not exist on the claude side |
 | `OPENCODE_DISABLE_CLAUDE_CODE` | The redirect drops the user's `~/.claude/CLAUDE.md`; the harness ships its own crew-constraints `CLAUDE.md` |
@@ -156,10 +158,15 @@ probe_twin pattern — and asserts the body carries no `!`cmd`` shell-substituti
 3. **Verify the hook events live.** The wiring layer moved up a tier in the review's
    red-capable doctor test: the harness settings.json VALIDATES on the real 2.1.220
    binary (a control file with bad types produced typed errors naming the full valid
-   event list, which includes SessionStart, Stop, and Notification), `"sonnet"` is a
-   documented model alias, and hook commands run through `/bin/sh -c` with inherited
+   event list, which includes SessionStart, Stop, and Notification), the pinned model is a
+   documented alias, and hook commands run through `/bin/sh -c` with inherited
    environment, so `$CLAUDE_CONFIG_DIR` expands. Still open: the events actually FIRING
-   with the expected stdin shape — the first-crewmate session settles it.
+   with the expected stdin shape — the first-crewmate session settles it. The 2026-08-01
+   repin (`opus` / `xhigh` / `bypassPermissions`, §2) re-opens one strand of this: every
+   new key was verified present in the binary by grep, but the file has NOT been
+   re-validated by the binary since, and whether bypass mode suppresses the Notification
+   event for the dialogs it does NOT remove (bypass acceptance, per-directory trust) is
+   UNVERIFIED. Same first-crewmate session settles both.
 3b. **Settle where the harness login lands.** VERIFIED on this machine: the real
    install's token is a login-keychain item (`Claude Code-credentials`), not a config-dir
    file. Whether a login under the redirected root creates a second keychain item, reuses

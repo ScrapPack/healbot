@@ -2,7 +2,11 @@
   "env": {
     "DISABLE_AUTO_COMPACT": "1"
   },
-  "model": "sonnet",
+  "model": "opus",
+  "effortLevel": "xhigh",
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  },
   "hooks": {
     "SessionStart": [
       {

@@ -66,9 +66,12 @@ DECIDED — do not reopen any of these as a defect, and do not "fix" them:
     repo machinery (coexistence is the pool's job); Claude Code's native --tmux/--worktree
     spawning stays unused (the fleet owns its topology and manifest). Do not re-open any
     of the three without a demonstrated need.
-  - The claude harness model pin ("sonnet") is a DISCIPLINE pin, not a measured one, and
-    NO retirement threshold is verified for any Claude model. Hand off early; do not copy
-    the opencode numbers across.
+  - The claude harness settings pin ("opus" / effortLevel "xhigh" / permissions.defaultMode
+    "bypassPermissions", owner directive 2026-08-01; the model was "sonnet") is a
+    DISCIPLINE pin, not a measured one. Fable 5 (`--model fable`) is the recorded per-spawn
+    escalation for planning and long-form-synthesis briefs, never the default. NO retirement
+    threshold is verified for any Claude model. Hand off early; do not copy the opencode
+    numbers across.
 
 YOUR TASK — Phase 14. Everything in the build order is built and every known correctness
 hole is closed. Nothing is blocking you. Do not invent something to build.
