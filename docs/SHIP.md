@@ -191,7 +191,7 @@ probe_twin pattern — and asserts the body carries no `!`cmd`` shell-substituti
 
 | Check | | |
 |---|---|---|
-| `probe_fleet_claude.py` | **26/26** (floor 20) | free — live hook executions, every mutation control, the arms-tree separation, the CLAUDE.md symlink convention |
+| `probe_fleet_claude.py` | **29/29** (floor 20) | free — live hook executions, every mutation control, the arms-tree separation, the CLAUDE.md symlink convention. Count corrected 2026-08-01: this row read `26/26`, which was wrong when written — both close records cited in the row below record `29/29 passed (expected at least 20)`, e3ea083's own message says "29 checks", and the probe is unchanged since (`git log e3ea083..HEAD` is empty for its path) |
 | `probe_rig_contract.py` | exit 0 | the new probe satisfies the six rig contracts |
 | free suite before the build | 20/20 probes exit 0 | run at phase start, this session |
 | free suite after the build | 21/21 probes exit 0 | includes the arm-factory red found and fixed mid-phase (§2) |
