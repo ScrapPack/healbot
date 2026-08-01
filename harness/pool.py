@@ -118,12 +118,13 @@ def work_state(slot):
     """Work in a slot exists in two forms and every guard needs BOTH: uncommitted changes
     (visible to git status) and commits on the detached HEAD (status-clean, orphaned by a
     reset, reachable only via reflog). The first shipped version guarded only the first —
-    the push review caught release; the committed-canary test then showed acquire and
-    status shared the blind spot."""
+    the 68e9cbe push review caught release; exercising that fix caught acquire and status
+    sharing the blind spot (f6dcaeb). probe_pool.py holds both as negative controls now.
+    A slot with NO readable record reports committed=None — unknown is not clean."""
     dirty, detail = slot_dirty(slot)
     sha = (read_json(record_path(slot)) or {}).get("sha")
     head = run(["git", "rev-parse", "HEAD"], cwd=slot)["out"].strip()
-    committed = bool(sha) and head != sha
+    committed = (head != sha) if sha else None  # None: no baseline — unknowable, not clean
     return dirty, detail, committed, head, sha
 
 
@@ -260,8 +261,9 @@ def acquire(owner, purpose):
         print(f"  leased to {owner} ({purpose}), lease_id {lease['lease_id'][:12]}",
               file=sys.stderr, flush=True)
         return 0
-    print("no leasable slot: all leased, dirty, or unaccepted — see `pool.py status`;"
-          " `provision --count N` grows the pool", file=sys.stderr, flush=True)
+    print("no leasable slot: all leased, holding work (dirty or committed), or unaccepted "
+          "— see `pool.py status`; `provision --count N` grows the pool", file=sys.stderr,
+          flush=True)
     return 2
 
 
@@ -279,7 +281,7 @@ def release(slot, if_owner=None, keep=False, discard_work=False):
     if keep:
         os.unlink(lease_path(slot))
         print(f"{slot_name(slot)}: lease dropped, state KEPT — slot will not lease again "
-              f"until clean (status will show it dirty)", flush=True)
+              f"until restored (status will show the abandoned work)", flush=True)
         return 0
     code = guard_then_restore(slot, discard_work, context="release again")
     if code != 0:
@@ -293,6 +295,14 @@ def guard_then_restore(slot, discard_work, context):
     """The shared back half of release and reset: refuse while the slot holds work in
     either form, unless --discard-work; then restore. 0 restored · 2 refused · 3 failed."""
     dirty, detail, committed, head, sha = work_state(slot)
+    if sha is None:
+        # No provisioning record means no baseline: the committed-work guard cannot fire
+        # and a bare `reset --hard` would reset to HEAD — preserving orphan commits while
+        # claiming success. Unknowable is an error, never a default.
+        print(f"{slot_name(slot)}: no readable provisioning record — the slot's baseline "
+              f"is unknown, so restore cannot claim anything. Re-provision or destroy.",
+              flush=True)
+        return 3
     if (dirty or committed) and not discard_work:
         what = " and ".join(w for w, on in
                             [("uncommitted changes", dirty),
@@ -334,7 +344,8 @@ def status():
         acc = rec.get("acceptance", {}).get("verdict", "none")
         lease = read_json(lease_path(slot))
         dirty, _, committed, _, _ = work_state(slot)
-        state = "dirty" if dirty else ("committed-work" if committed else "clean")
+        state = ("dirty" if dirty else "committed-work" if committed
+                 else "baseline-unknown" if committed is None else "clean")
         bits = [f"accepted={acc}", f"sha={rec.get('sha', '?')[:12]}", state]
         if lease:
             age_note = ""
@@ -413,10 +424,11 @@ def main():
 
     if cmd == "provision":
         try:
-            return provision(int(flag("--count", str(DEFAULT_COUNT))))
+            count = int(flag("--count", str(DEFAULT_COUNT)))
         except ValueError:
             print(f"--count needs an integer\n{USAGE}")
             return 3
+        return provision(count)
     if cmd == "acquire":
         return acquire(flag("--owner"), flag("--purpose"))
     if cmd == "release":

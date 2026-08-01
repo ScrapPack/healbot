@@ -39,8 +39,8 @@ from gate import BLOCKED, ERROR, PASS, PY, ROOT, RUNS, TIER1, VERIFIED, sh
 # nothing ran" reporting identically. The floor makes that collapse loud: discovering fewer
 # probes than this is ERROR (the tier could not run), never a quiet green. It is a MINIMUM,
 # not an equality — adding a probe is safe; retiring one means lowering this number in the
-# same change, deliberately.
-FLOOR = 13
+# same change, deliberately. (13 at birth; 14 when probe_pool.py joined.)
+FLOOR = 14
 
 # Per-probe watchdog, sized ABOVE the ~20-minute hazard on record: wait_for's deadline is
 # checked only between calls to fn, and Api.__call__ defaults to timeout=900, so a probe's
