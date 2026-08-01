@@ -1,0 +1,40 @@
+{
+  "env": {
+    "DISABLE_AUTO_COMPACT": "1"
+  },
+  "model": "sonnet",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_CONFIG_DIR/hooks/fleet-state.sh\" session-start"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_CONFIG_DIR/hooks/fleet-state.sh\" stop"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_CONFIG_DIR/hooks/fleet-state.sh\" notification"
+          }
+        ]
+      }
+    ]
+  },
+  "theme": "dark",
+  "autoCompactEnabled": false
+}

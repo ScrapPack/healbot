@@ -1,0 +1,20 @@
+# Whitelist: Claude Code WRITES state into its config root (TESTED — a doctor run under a
+# redirected CLAUDE_CONFIG_DIR created .claude.json and backups/ inside it, docs/SHIP.md
+# §2), and after the one-time login this directory holds the harness's credential state.
+# Unlike the opencode config dir, which stays read-only, this one is mixed code+state, so
+# everything is ignored except the tracked harness files named below. Fail-closed: a new
+# state shape Claude Code invents lands ignored, not committed.
+#
+# CLAUDE.md is deliberately ABSENT from the whitelist: gate.py's banned-filenames check
+# refuses that name anywhere in the tracked tree, so the tracked file is
+# crew-constraints.md and env.claude.sh materializes the CLAUDE.md symlink at source time.
+# No blanket agents/ or skills/ negations: user skills live UNDER this root, so a session
+# could write there — a wholesale un-ignore would make that state stageable, which is the
+# exact hole the whitelist exists to close (review finding). Add per-file negations when
+# tracked agents/skills actually exist.
+*
+!.gitignore
+!settings.json
+!crew-constraints.md
+!hooks/
+!hooks/**

@@ -52,7 +52,14 @@ import ab
 
 
 CLAUDE = os.environ.get("HEALBOT_CLAUDE_BIN", "claude")
-CC_PROJECTS = os.path.expanduser("~/.claude/projects")
+# The config ROOT is redirectable, and transcripts follow it: under harness/env.claude.sh
+# every fleet crew session runs with CLAUDE_CONFIG_DIR=harness/claude, and session state
+# lands under THAT root, not ~/.claude (the redirect finding, docs/SHIP.md §2; the Phase 13
+# review caught this module hardcoding the default and stranding the fleet's transcript
+# join). Unset, the default is the real install's root, so probe_backend and every
+# pre-fleet caller read exactly what they always read.
+CC_PROJECTS = os.path.join(
+    os.environ.get("CLAUDE_CONFIG_DIR", os.path.expanduser("~/.claude")), "projects")
 
 # Claude Code's stop_reason -> opencode's `finish`. This map is the reason normalization is worth
 # doing at all: `run_refusal.turn_complete()` treats any finish outside ("tool-calls", "unknown")

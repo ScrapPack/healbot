@@ -404,6 +404,9 @@ Things that will silently cost correctness. All cited in the maps.
 | **`api.event` metadata arg works but is untyped** — needs a cast; the grid needs it for cross-directory routing | `plugin/src/PLUGIN-API.MAP.md` |
 | `permission.ask` plugin hook is **dead** — declared, zero trigger sites | `plugin/PLUGIN.MAP.md` |
 | ~~`healbot-spike` occupies `/healbot` in the palette~~ — resolved at fork `26c9316`: the spike was deleted in the same commit that added the real grid, so `/healbot` now belongs to `healbot.tsx` | `tui/feature-plugins/FEATURE-PLUGINS.MAP.md` |
+| **The `*_CONFIG_DIR` naming is INVERTED between opencode and Claude Code.** opencode's `OPENCODE_CONFIG_DIR` is the additive false-isolation trap and `XDG_CONFIG_HOME` is the real switch; Claude Code's `CLAUDE_CONFIG_DIR` IS the real switch (TESTED: a doctor run under a redirected empty dir was signed out and wrote state into it). Reasoning by analogy in either direction configures the wrong thing silently | `docs/SHIP.md` §2 |
+| **A fresh claude config dir is SIGNED OUT — auth does not follow the redirect.** Every crew spawn under an un-logged-in `harness/claude` fails its ready-wait; the config dir is mixed code+state afterwards, which is why its `.gitignore` is a whitelist — and why it lives OUTSIDE `harness/config/`, which `arms.py` freezes wholesale into arm snapshots (measured: the first draft turned `probe_arm_factory.py` red). On macOS the credential itself is a login-KEYCHAIN item, not a config-dir file (VERIFIED), so whether the harness login isolates or shares the owner's auth is open until the first login | `docs/SHIP.md` §2, §5 |
+| **`python3 - <<heredoc` consumes stdin as the PROGRAM, so a hook reading its payload from stdin reads nothing** — syntactically clean, exits 0, writes nothing. In a fail-open script that shape is invisible except to a live happy-path check, which `probe_fleet_claude.py` now is | `docs/SHIP.md` §3 |
 
 ---
 
@@ -473,3 +476,28 @@ multi-step turns.
 ~~Can the **cold-start reconcile** ever be tested?~~ **Closed, TESTED 21/21** — see the refuted
 trap above and [docs/HARDEN.md](docs/HARDEN.md). It was never blocked; the CLI already had
 `attach`.
+
+---
+
+## The claude fleet and config parity (Phase 13)
+
+Claude Code as a build driver in a tmux fleet, with the same measured config discipline as
+the opencode harness. The record is `docs/SHIP.md`; the working files:
+
+| | |
+|---|---|
+| `harness/env.claude.sh` | env.sh's counterpart: `CLAUDE_CONFIG_DIR` redirect (the real isolation knob — see the trap above), `DISABLE_AUTO_COMPACT`, and the deliberately-NOT-set list |
+| `harness/claude/` | the parity config root — deliberately OUTSIDE `harness/config/`, which arms.py freezes into snapshots: model pin + `autoCompactEnabled:false` in `settings.json`, crew constraints in `crew-constraints.md` (materialized as the `CLAUDE.md` symlink by env.claude.sh — gate.py bans the real name in-tree), the fleet-state hook, and a whitelist `.gitignore` because claude writes state (and after login, credentials) into its config root |
+| `harness/hb-fleet.sh` | the fleet: socket-isolated tmux, bridge + crew windows, spawn/state/send/brief/peek/occupancy/kill, a manifest joining pane id ↔ worktree ↔ session uuid ↔ transcript path. Five measured guardrails in its header, probed |
+| `harness/skills/firstmate.md` | the controller skill (captain/crewmate contract, adapted from kunchenguid/firstmate, reimplemented not vendored), installed at `~/.agents/skills/firstmate/` |
+| `.carryover/verified/probe_fleet_claude.py` | free guard: live fail-open hook executions, a mutation control per source predicate, the canonical/installed skill twin, the arms-tree separation. The count lives in the probe's own `Results(expect=)` floor and its printout, nowhere else |
+| `.carryover/verified/backend.py` | the measurement seam the fleet reads through: occupancy and transcripts, unchanged from its Phase 12 build |
+
+Open items live in `docs/SHIP.md` §5 — the one-time login, pinning the SUSPECTED screen
+markers against a live crewmate, live hook-wiring verification, and the fact that **no
+retirement threshold is verified for any Claude model** (the opencode numbers are
+measurements of a different model through a different program; hand off early until a
+claude-side growth measurement exists). Deliberately not adopted, with reasons on record:
+lavish-axi (vendor bill vs. need), any nvim machinery (coexistence is the pool's job), and
+Claude Code's native `--tmux`/`--worktree` spawning (it owns naming and worktrees the
+fleet must own).

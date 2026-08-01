@@ -22,9 +22,9 @@ never by line).
 ## The prompt
 
 ```
-Continue the healbot build at ~/Desktop/healbot. Phase 12 is complete and committed; the
-fork overlay is pinned at 509f4c0b1 (probe_twin.py verifies the pin and all 17 overlay
-files).
+Continue the healbot build at ~/Desktop/healbot. Phase 13 (the ship: claude fleet,
+firstmate, config parity — docs/SHIP.md) is complete; the fork overlay is pinned at
+509f4c0b1 (probe_twin.py verifies the pin and all 17 overlay files).
 
 READ FIRST: HARNESS.md, the root index. Stop when you can name the file that owns any given
 behaviour; follow its pointers into the phase docs on demand instead of reading the tree.
@@ -62,9 +62,21 @@ DECIDED — do not reopen any of these as a defect, and do not "fix" them:
     them trades a fast red for a seven-minute timeout. docs/OUTCOME.md §2.
   - /code-review ultra has been run. HARNESS.md and three phase docs deliberately carry it
     as an open row; leave them.
+  - lavish-axi is REJECTED for now (vendor bill vs. need, docs/SHIP.md §4); nvim gets NO
+    repo machinery (coexistence is the pool's job); Claude Code's native --tmux/--worktree
+    spawning stays unused (the fleet owns its topology and manifest). Do not re-open any
+    of the three without a demonstrated need.
+  - The claude harness model pin ("sonnet") is a DISCIPLINE pin, not a measured one, and
+    NO retirement threshold is verified for any Claude model. Hand off early; do not copy
+    the opencode numbers across.
 
-YOUR TASK — Phase 13. Everything in the build order is built and every known correctness
+YOUR TASK — Phase 14. Everything in the build order is built and every known correctness
 hole is closed. Nothing is blocking you. Do not invent something to build.
+  0. FLEET BRING-UP, cheapest paid item and it unblocks the whole cockpit: after the owner
+     logs in once under harness/env.claude.sh (free, owner action), spawn ONE live crewmate
+     via harness/hb-fleet.sh, pin the SUSPECTED ready/busy/trust screen markers, and verify
+     the fleet-state hooks fire with the expected stdin shape. Record the pinned strings in
+     docs/SHIP.md §5 and the environment. One short session's spend.
   1. FREE, start here: run the suite. In each of the last five phases the finding came from
      reading a surface nobody had read AS AN ARTIFACT (a derivation, the suite from a fresh
      clone, the paid rigs as source, the prose as pointers, the shared library). If you find

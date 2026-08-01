@@ -72,3 +72,7 @@ gate/runs/
 !.carryover/verified/hb/study-refusal-tdd-full-1-plus-tdd.db
 .carryover/verified/venv/
 __pycache__/
+
+# Claude fleet runtime state (manifests, hook state files, briefs, raw pane logs) —
+# volatile per-run, docs/SHIP.md. The claude config dir has its own whitelist .gitignore.
+.fleet/
