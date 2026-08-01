@@ -22,7 +22,7 @@ import shutil
 import sqlite3
 import sys
 
-from rig import Results, boot, db, on_grid
+from rig import Results, boot, db, on_grid, pin_fixture_project
 
 # This probe tests RENDERING, so it must be isolated from the lifecycle. The replayed session
 # sits at occupancy 359,829, which is over the 256,000 gate — so with auto-retirement on (the
@@ -71,6 +71,11 @@ conn.execute("UPDATE session SET time_archived = NULL WHERE id = ?", (sid,))
 conn.commit()
 conn.close()
 print(f"  replaying {sid} with {nfails} ContextOverflowError turns", flush=True)
+
+# The grid filters on `session.project_id`, and the fixture directory's project identity comes
+# from the nearest enclosing git repo — which in a fresh worktree is the healbot checkout, not
+# `hb/project`. Unpinned, every assertion below measures an empty grid. See the docstring.
+pin_fixture_project(SOURCE)
 
 t = boot(PORT, REPLAY, cols=120, rows=44, settle=30)
 try:

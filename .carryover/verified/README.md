@@ -407,7 +407,7 @@ and every `not on_grid` assertion passes **vacuously**.
 Two independent routes produce it, which is why the fix is in `Results` and not in a per-probe
 guard. **`sys.exit()` inside a `finally` DISCARDS the in-flight exception** — named at
 `probe_request_channel.py:151-153` since Phase 7, and present in only **3 of 10** probes until Phase
-9 backfilled it. And **a timeout raises nothing at all**: `wait_for()` (`rig.py:259-270`) prints
+9 backfilled it. And **a timeout raises nothing at all**: `wait_for()` (`rig.py:382-393`) prints
 `!!` and returns `None`, so no exception guard can see it and the probe simply runs fewer
 assertions. `Results(expect=N)` now catches both. It is a **floor, not an equality** — adding an
 assertion must not turn a probe red, losing one must. Controlled in both directions: **142/142 on

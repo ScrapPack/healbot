@@ -444,7 +444,7 @@ Defaults: `STALL_MIN=25`, `MAX_HOURS=8`. Tune the stall window **above** the slo
 single operation. Two documented ones to size against: `verify_question.py` polls three framings at
 300 s each and *"a run where the first two framings do not land takes ~10 minutes before it reaches
 the grid. That is the rig working, not hanging"* (the healbot-traps skill); and `wait_for` in
-`rig.py:296` checks its deadline only between calls to `fn` while `Api.__call__` defaults to
+`rig.py:419` checks its deadline only between calls to `fn` while `Api.__call__` defaults to
 `timeout=900`, so *"a 300s budget can be held for 900"* (the healbot-traps skill). Below ~20 minutes you
 will kill working runs.
 
