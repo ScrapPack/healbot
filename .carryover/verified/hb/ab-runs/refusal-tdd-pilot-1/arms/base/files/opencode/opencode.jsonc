@@ -1,0 +1,93 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // Managed sessions run on a hosted model. Local models stay available as an explicit
+  // per-session opt-in — N concurrent sessions against one local Ollama serialize.
+  //
+  // Hosted concurrency is TESTED, not assumed: 4 sessions fired simultaneously at one
+  // `opencode serve` completed in 5.72s wall — exactly the slowest single turn — against
+  // 10.45s run serially. The server does not serialize. Per-turn latency does degrade under
+  // load (2.4-2.7s solo -> 2.8-5.7s at 4-way), so expect ~1.8x throughput at N=4, not 4x.
+  // Also TESTED: a session parked on permission.asked does NOT stall the others — three
+  // concurrent sessions finished while the blocked one hung (and it hangs forever; there is
+  // no timeout on a pending permission).
+  //
+  // gpt-5.6-sol limits: context 1,050,000 / limit.input 922,000 / output 128,000.
+  "model": "openai/gpt-5.6-sol",
+  "small_model": "openai/gpt-5.6-sol",
+
+  // Compaction OFF is a QUALITY decision, not a cost one, and it is the right call:
+  // handing a fresh session a passover prompt beats compacting, because compaction loses
+  // specificity while re-discovery costs only a little bloat. Retirement is therefore the
+  // sole lifecycle policy and auto-compaction must not silently extend a session past it.
+  //
+  // Set HERE and not via OPENCODE_DISABLE_AUTOCOMPACT: the env var only reaches the legacy
+  // compactor (config.ts:579), while this key is read by both. See docs/SCAN.md C2.
+  //
+  // CONSEQUENCE, and it is not documented upstream: with auto:false, overflow.ts:28
+  // (`if (input.cfg.compaction?.auto === false) return false`) disables the overflow check
+  // entirely, and processor.ts:607-613 turns a real context overflow into
+  // finish:"error" + status idle. So the ceiling is a HARD ERROR, not a compaction.
+  //
+  // THE CEILING IS ~360K, NOT 922,000. This comment used to read "with a 922,000-token input
+  // limit and a 350K retirement threshold there is ~570K of headroom, so this is a safety net
+  // rather than a path anything should reach". MEASURED in Phase 5, and it is false: a session
+  // driven up at the then-default 350K took its last successful turn at occupancy 359,829 and
+  // then failed 25 CONSECUTIVE turns with the provider's ContextOverflowError. The registry's
+  // 922,000 does not describe this provider path. The retirement default came down to 256,000
+  // as a result, and to 180,000 in Phase 7. See docs/HARDEN.md §6 and docs/RELAY.md.
+  //
+  // ONE GATE, AT 180,000, AND IT WAITS FOR THE TURN. Two revisions in two phases, and the second
+  // is why the number moved again. This block once ended "with a hard gate at 330,000", crediting
+  // a second gate for the margin. Phase 7 measured that second gate to have been INERT since it
+  // was written: the predicate meant to hold the first gate back read `finish` directly, and
+  // processor.ts:443-445 sets `finish` and `tokens` in ONE mutation at every step-finish, so the
+  // first gate was already firing mid-turn and the second was dominated on 733/733 real messages.
+  //
+  // Corrected rather than documented: the predicate is now opencode's own (prompt.ts:1295, which
+  // excludes "tool-calls"), so the turn in flight runs to completion and nothing is aborted; and
+  // RETIRE_HARD is DELETED, not disabled. That put the margin back on the single threshold, which
+  // had to come down with it -- waiting for a turn means accepting whatever the turn adds, and one
+  // turn has been MEASURED adding ~170K. With one gate the arithmetic is
+  // RETIRE_AT + worst_turn < ceiling, so 180,000 + ~170K = ~350K, just inside the ~360K measured
+  // above. At 256,000 with no second gate, one ordinary read-heavy turn could carry a session off
+  // the cliff -- which is the one combination that must not ship. See docs/RELAY.md.
+  //
+  // The control terminal must still render that error state, because to the grid a hard
+  // overflow looks like an ordinary idle-after-error.
+  "compaction": {
+    "auto": false
+  },
+
+  // trim-tools: trims generic prose out of tool descriptions via the tool.definition hook.
+  // OFF by default — set HARNESS_TRIM_TOOLS=1 to enable. See docs/STRIP.md.
+  //
+  // healbot: two halves sharing one implementation of retirement. (a) HEADLESS automatic
+  // retirement — the guard that keeps a session from reaching the ceiling above. It lives here
+  // rather than in the TUI because a fleet left running with no client attached must still
+  // retire; server plugins load in `opencode serve` AND in the server the TUI hosts in-process,
+  // so one registration covers both topologies. It is driven off `message.updated` and gated on
+  // `turnFinished()`, so it acts between turns and aborts nothing — see the gate note above. Note
+  // that `message.updated` fires per STEP, so being driven off it is NOT the same as firing per
+  // step; the predicate is what makes the difference, and getting that wrong is what Phase 7 had
+  // to correct. Kill switch: HEALBOT_AUTO_RETIRE=0. (b) the control agent's tools, which the kill
+  // switch leaves alone. See docs/RELAY.md.
+  "plugin": ["./plugin/trim-tools.ts", "./plugin/healbot.ts"],
+
+  // The control agent's tools are DENIED globally and allowed back in agent/control.md.
+  //
+  // This is about standing token cost, which is what this whole harness exists to cut. Tool
+  // definitions are the largest single block of context — 11 shipped tools measure 19,898 B —
+  // and five more would be rent every session pays forever for a capability only one agent uses.
+  //
+  // The mechanism is specific and easy to get wrong: `Permission.disabled`
+  // (permission/index.ts:204-215) removes a tool from the request payload only when the LAST
+  // rule matching it has `pattern: "*"` and `action: "deny"`. A string value here expands to
+  // exactly that (`:190`). The agent's own permission block is merged last (agent/agent.ts:293),
+  // so control.md's `allow` wins the findLast and the tools exist for it alone. A SCOPED deny
+  // would leave the definitions in every prompt and only block execution — all of the cost, none
+  // of the benefit.
+  "permission": {
+    "healbot_*": "deny"
+  }
+}

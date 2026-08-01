@@ -66,5 +66,7 @@ gate/runs/
 !.carryover/verified/hb/ab-refusal-pilot-harness.db
 !.carryover/verified/hb/ab-refusal-pilot-v2-stock.db
 !.carryover/verified/hb/ab-refusal-pilot-v2-harness.db
+!.carryover/verified/hb/study-refusal-tdd-pilot-1-base.db
+!.carryover/verified/hb/study-refusal-tdd-pilot-1-plus-tdd.db
 .carryover/verified/venv/
 __pycache__/
