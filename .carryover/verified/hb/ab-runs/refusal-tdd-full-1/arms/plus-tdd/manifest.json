@@ -1,0 +1,19 @@
+{
+  "base": "harness/config",
+  "delta": {
+    "body_sha256": "af059705061156fd4845ddbb736fe92b564118ac5f03551e09ef9e8f6d970638",
+    "materialize_at": "opencode/skill/tdd/SKILL.md",
+    "skill_name": "tdd"
+  },
+  "files": {
+    "opencode/agent/build.md": "a55a1d666d9efdcce6488239b666eff7947b083c5d4d62a824a9e53e66193334",
+    "opencode/agent/control.md": "4bb0db11251bd8149f6ebfd0e601fd81a232947142902a87ee5eafc49913d0cc",
+    "opencode/opencode.jsonc": "c2ea35b8cb6a18ffd12a47d85896cac903044758465c70046a3dfed7ad7c971f",
+    "opencode/package-lock.json": "11a534cc38f76ca3431adda8224d951c97c88d41f879ee9f903a8be9e85afe49",
+    "opencode/package.json": "9d3877882d89cf7df9ef9ad7774b1115449608fc8bfce9b2078a601633fb6852",
+    "opencode/plugin/healbot.ts": "d475b741252094260179cdd8270359281ae1e556dbd3f91f4e790926904881c4",
+    "opencode/plugin/trim-tools.ts": "4fa24bd315a5e5c5b6dd79ef0b7bd02da7ed774f28824766209f7a7e9da2c7af"
+  },
+  "lockfile_sha256": "11a534cc38f76ca3431adda8224d951c97c88d41f879ee9f903a8be9e85afe49",
+  "name": "plus-tdd"
+}

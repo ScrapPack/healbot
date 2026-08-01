@@ -1,0 +1,324 @@
+{
+  "schema": 1,
+  "driver": "run_study",
+  "study": "refusal",
+  "part": "set_a",
+  "tag": "tdd-full-1",
+  "mode": "full",
+  "pin": {
+    "providerID": "openai",
+    "modelID": "gpt-5.6-sol"
+  },
+  "arm_names": [
+    "base",
+    "plus-tdd"
+  ],
+  "corpus_sha256": "771ce2414a31525df4203e3a2e855fa64635c12ac5bf49b70f12c2cd7e5f92d0",
+  "sources_sha256": {
+    ".carryover/verified/study_refusal.py": "387a25221f8cf2b68f520431988394a3f1fb06a08a787121df9f44b5cd0cf4e7",
+    ".carryover/verified/ab.py": "7517efb90f0820948485695f4a5e97e2d3e031c824fa309cf7e15d3e54bb5add",
+    ".carryover/verified/run_refusal.py": "94dd5d46accccbb1e701225b0713cf7e4e8d1c1b97327ec498b7cc5ae6351569",
+    ".carryover/verified/run_study.py": "c4c8f30db3c9a75102a66e398f36a849a51fbdcc9b959d700450e213d934d765"
+  },
+  "probe_ids": [
+    "det-yara",
+    "det-sigma",
+    "det-pcap",
+    "det-suricata",
+    "det-triage",
+    "cve-heap",
+    "cve-deser",
+    "cve-sqli",
+    "cve-ssrf",
+    "cve-race",
+    "pentest-enum",
+    "pentest-web",
+    "pentest-ad",
+    "pentest-tls",
+    "pentest-k8s",
+    "dual-hash-audit",
+    "dual-c2-design",
+    "dual-fuzz-harness",
+    "dual-secret-scan",
+    "dual-ssh-lab",
+    "sensitive-postmortem",
+    "sensitive-phishing-training",
+    "sensitive-ransomware-tabletop",
+    "sensitive-breach-notice",
+    "sensitive-mfa-training"
+  ],
+  "repeats": 3,
+  "expected_rows": 150,
+  "order": "probe, repeat, arm",
+  "arms": {
+    "base": {
+      "delta": null,
+      "lockfile_sha256": "11a534cc38f76ca3431adda8224d951c97c88d41f879ee9f903a8be9e85afe49",
+      "manifest_sha256": "4cf132893635c05bad38a35aabb0442f123cb2e69a2999104f9218d42d2f9111"
+    },
+    "plus-tdd": {
+      "delta": {
+        "skill_name": "tdd",
+        "materialize_at": "opencode/skill/tdd/SKILL.md",
+        "body_sha256": "af059705061156fd4845ddbb736fe92b564118ac5f03551e09ef9e8f6d970638"
+      },
+      "lockfile_sha256": "11a534cc38f76ca3431adda8224d951c97c88d41f879ee9f903a8be9e85afe49",
+      "manifest_sha256": "ae06093cf80cd885c281014f5f459fc2007170f7cd673433a510eaebc5679751"
+    }
+  },
+  "status": "complete",
+  "started_at": "2026-08-01T05:41:47Z",
+  "git_revision": "98f838c613dbd8cb23d50daa546093a47bf3fb04",
+  "parent_environment": {
+    "XDG_CONFIG_HOME": null,
+    "OPENCODE_DISABLE_EXTERNAL_SKILLS": null,
+    "OPENCODE_DISABLE_CLAUDE_CODE": null,
+    "OPENCODE_PERMISSION": null
+  },
+  "launches": [
+    {
+      "started_at": "2026-08-01T05:41:47Z",
+      "ports": {
+        "base": 4791,
+        "plus-tdd": 4792
+      },
+      "logs": {
+        "base": "/Users/brittonwerdell/Desktop/healbot/.carryover/verified/hb/ab-runs/refusal-tdd-full-1/server-base-20260801-014147.log",
+        "plus-tdd": "/Users/brittonwerdell/Desktop/healbot/.carryover/verified/hb/ab-runs/refusal-tdd-full-1/server-plus-tdd-20260801-014147.log"
+      },
+      "snapshots": {
+        "base": {
+          "config": {
+            "model": "openai/gpt-5.6-sol",
+            "small_model": "openai/gpt-5.6-sol",
+            "compaction": {
+              "auto": false
+            },
+            "permission": {
+              "healbot_*": "deny"
+            },
+            "plugin": [
+              "file:///Users/brittonwerdell/Desktop/healbot/.carryover/verified/hb/arms/refusal-tdd-full-1/base/opencode/plugin/trim-tools.ts",
+              "file:///Users/brittonwerdell/Desktop/healbot/.carryover/verified/hb/arms/refusal-tdd-full-1/base/opencode/plugin/healbot.ts"
+            ]
+          },
+          "build_permission": [
+            {
+              "permission": "*",
+              "pattern": "*",
+              "action": "allow"
+            },
+            {
+              "permission": "doom_loop",
+              "pattern": "*",
+              "action": "ask"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "*",
+              "action": "ask"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.local/share/opencode/tool-output/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/var/folders/v3/wqs0k9wj72s0xqq02j5y8y1w0000gn/T/opencode/*",
+              "action": "allow"
+            },
+            {
+              "permission": "question",
+              "pattern": "*",
+              "action": "deny"
+            },
+            {
+              "permission": "plan_enter",
+              "pattern": "*",
+              "action": "deny"
+            },
+            {
+              "permission": "plan_exit",
+              "pattern": "*",
+              "action": "deny"
+            },
+            {
+              "permission": "read",
+              "pattern": "*",
+              "action": "allow"
+            },
+            {
+              "permission": "read",
+              "pattern": "*.env",
+              "action": "ask"
+            },
+            {
+              "permission": "read",
+              "pattern": "*.env.*",
+              "action": "ask"
+            },
+            {
+              "permission": "read",
+              "pattern": "*.env.example",
+              "action": "allow"
+            },
+            {
+              "permission": "question",
+              "pattern": "*",
+              "action": "allow"
+            },
+            {
+              "permission": "plan_enter",
+              "pattern": "*",
+              "action": "allow"
+            },
+            {
+              "permission": "healbot_*",
+              "pattern": "*",
+              "action": "deny"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.local/share/opencode/tool-output/*",
+              "action": "allow"
+            }
+          ],
+          "agent_names": [
+            "build",
+            "compaction",
+            "control",
+            "explore",
+            "general",
+            "plan",
+            "summary",
+            "title"
+          ],
+          "skill_names": [
+            "customize-opencode"
+          ]
+        },
+        "plus-tdd": {
+          "config": {
+            "model": "openai/gpt-5.6-sol",
+            "small_model": "openai/gpt-5.6-sol",
+            "compaction": {
+              "auto": false
+            },
+            "permission": {
+              "healbot_*": "deny"
+            },
+            "plugin": [
+              "file:///Users/brittonwerdell/Desktop/healbot/.carryover/verified/hb/arms/refusal-tdd-full-1/plus-tdd/opencode/plugin/trim-tools.ts",
+              "file:///Users/brittonwerdell/Desktop/healbot/.carryover/verified/hb/arms/refusal-tdd-full-1/plus-tdd/opencode/plugin/healbot.ts"
+            ]
+          },
+          "build_permission": [
+            {
+              "permission": "*",
+              "pattern": "*",
+              "action": "allow"
+            },
+            {
+              "permission": "doom_loop",
+              "pattern": "*",
+              "action": "ask"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "*",
+              "action": "ask"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.local/share/opencode/tool-output/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/var/folders/v3/wqs0k9wj72s0xqq02j5y8y1w0000gn/T/opencode/*",
+              "action": "allow"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/Desktop/healbot/.carryover/verified/hb/arms/refusal-tdd-full-1/plus-tdd/opencode/skill/tdd/*",
+              "action": "allow"
+            },
+            {
+              "permission": "question",
+              "pattern": "*",
+              "action": "deny"
+            },
+            {
+              "permission": "plan_enter",
+              "pattern": "*",
+              "action": "deny"
+            },
+            {
+              "permission": "plan_exit",
+              "pattern": "*",
+              "action": "deny"
+            },
+            {
+              "permission": "read",
+              "pattern": "*",
+              "action": "allow"
+            },
+            {
+              "permission": "read",
+              "pattern": "*.env",
+              "action": "ask"
+            },
+            {
+              "permission": "read",
+              "pattern": "*.env.*",
+              "action": "ask"
+            },
+            {
+              "permission": "read",
+              "pattern": "*.env.example",
+              "action": "allow"
+            },
+            {
+              "permission": "question",
+              "pattern": "*",
+              "action": "allow"
+            },
+            {
+              "permission": "plan_enter",
+              "pattern": "*",
+              "action": "allow"
+            },
+            {
+              "permission": "healbot_*",
+              "pattern": "*",
+              "action": "deny"
+            },
+            {
+              "permission": "external_directory",
+              "pattern": "/Users/brittonwerdell/.local/share/opencode/tool-output/*",
+              "action": "allow"
+            }
+          ],
+          "agent_names": [
+            "build",
+            "compaction",
+            "control",
+            "explore",
+            "general",
+            "plan",
+            "summary",
+            "title"
+          ],
+          "skill_names": [
+            "customize-opencode",
+            "tdd"
+          ]
+        }
+      }
+    }
+  ],
+  "pending": null,
+  "updated_at": "2026-08-01T07:02:27Z",
+  "completed_at": "2026-08-01T07:02:27Z"
+}
