@@ -43,7 +43,7 @@ import run_study  # noqa: E402
 import study_refusal  # noqa: E402
 from rig import Results  # noqa: E402
 
-r = Results(expect=41)
+r = Results(expect=42)
 TMP = tempfile.mkdtemp(prefix="probe-study-driver-")
 
 
@@ -226,16 +226,30 @@ try:
     probes = good["probes"]
     expected = run_study.expected_meta(fix, "t1", False, 1, "set_a", probes, plan, good, ["a1", "a2"])
     recomputed = run_study.expected_meta(fix, "t1", False, 1, "set_a", probes, plan, good, ["a1", "a2"])
-    r.check("resume compatibility is decided over two INDEPENDENTLY computed plans — a regression "
-            "tripwire: every key today is a literal, a pass-through, or a sorted-dump hash, and "
-            "this row is what goes red the day a nondeterministic field joins expected_meta",
+    r.check("two expected_meta computations over unchanged inputs are compatible — meaningful "
+            "because the drift detector is proven live on the real channel two rows down",
             run_study.compatible_meta(recomputed, expected) == [],
             "the 0973f98 review: comparing one dict to itself was [] by construction")
     r.check("COMPAT_KEYS covers every key expected_meta emits — no plan field resume silently "
             "never checks",
             set(expected) == set(run_study.COMPAT_KEYS),
-            "the live guard of the pair (the 60bcddf review: one claim per row, or a red "
-            "does not say which broke)")
+            "the 60bcddf review: one claim per row, or a red does not say which broke")
+    drifting = f"{TMP}/drifting_source.py"
+    with open(drifting, "w", encoding="utf-8") as fh:
+        fh.write("# scorer v1\n")
+    fix_drift = fixture_def(SOURCES=[drifting])
+    before_drift = run_study.expected_meta(fix_drift, "t1", False, 1, "set_a", probes, plan, good,
+                                           ["a1", "a2"])
+    with open(drifting, "w", encoding="utf-8") as fh:
+        fh.write("# scorer v2, edited between computations\n")
+    after_drift = run_study.expected_meta(fix_drift, "t1", False, 1, "set_a", probes, plan, good,
+                                          ["a1", "a2"])
+    r.check("NEGATIVE CONTROL: a SOURCES file edited on disk between two computations surfaces as "
+            "sources_sha256 drift through the REAL channel — file bytes -> sources_sha -> "
+            "expected_meta -> compatible_meta",
+            run_study.compatible_meta(after_drift, before_drift) == ["sources_sha256"],
+            "the f59f837 review: without this, the two-computation row had no workload that "
+            "could redden it")
     drifted = dict(expected)
     drifted["corpus_sha256"] = "0" * 64
     r.check("NEGATIVE CONTROL: a changed corpus cannot resume under an old paid tag",
