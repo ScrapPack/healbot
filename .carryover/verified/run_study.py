@@ -547,6 +547,13 @@ def compatible_meta(current, expected):
 
 
 def snapshot(api):
+    """What the arm's server resolved at boot — config, agents, skills — via the PROJECT-bound
+    api. KNOWN LIMIT (the 0973f98 review): checked probes' sessions run in per-workspace
+    instances (workspace-routing resolves per directory), and those instances are NOT
+    snapshotted here. The arm's frozen XDG_CONFIG_HOME and skill switches are process-wide, so
+    the global half cannot differ — but project-level config layered inside a leased slot's
+    tree would be invisible in this record. If a checked study ever needs that evidence, take a
+    second snapshot through the workspace-bound Api at turn time."""
     config = api("GET", "/config") or {}
     agents = api("GET", "/agent") or []
     skills = api("GET", "/skill") or []

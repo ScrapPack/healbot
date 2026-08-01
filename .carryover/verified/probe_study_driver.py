@@ -225,7 +225,13 @@ try:
     # -- meta: compatibility, drift channels, checkpoint -----------------------------------
     probes = good["probes"]
     expected = run_study.expected_meta(fix, "t1", False, 1, "set_a", probes, plan, good, ["a1", "a2"])
-    r.check("an identical resume plan is metadata-compatible", run_study.compatible_meta(expected, expected) == [], "")
+    recomputed = run_study.expected_meta(fix, "t1", False, 1, "set_a", probes, plan, good, ["a1", "a2"])
+    r.check("an identical resume plan is metadata-compatible — TWO independent expected_meta "
+            "computations agree, and COMPAT_KEYS covers every key expected_meta emits",
+            run_study.compatible_meta(recomputed, expected) == []
+            and set(expected) == set(run_study.COMPAT_KEYS),
+            "the 0973f98 review: comparing one dict to itself was [] by construction; recomputation "
+            "catches hash non-determinism, the key-set equality catches a plan field resume never checks")
     drifted = dict(expected)
     drifted["corpus_sha256"] = "0" * 64
     r.check("NEGATIVE CONTROL: a changed corpus cannot resume under an old paid tag",
