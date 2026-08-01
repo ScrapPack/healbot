@@ -1,10 +1,12 @@
 """Tier 2 — the free probes the per-change gate deliberately does not run.
 
 WHAT LIVES HERE. Everything in `.carryover/verified/probe_*.py` that is not in gate.py's
-TIER1, discovered by subtraction at run time so a new probe joins this tier by existing.
-Measured 2026-07-31: 13 probes — seven boot a TUI or an opencode server (3-99 s each,
-~4.3 min for the seven), six are sub-second but read LIVING state (the live opencode.db,
-the machine's Claude Code transcripts), so their output moves as the machine does.
+TIER1, discovered by subtraction at run time so a new probe joins this tier by existing —
+`--list` enumerates today's membership; FLOOR below owns the count. The tier's character,
+measured at its 2026-07-31 birth: some probes boot a TUI or an opencode server (3-99 s
+each, minutes together), others are sub-second but read LIVING state (the live
+opencode.db, the machine's Claude Code transcripts), and the rest are fast pure checks
+that simply carry no byte-stability measurement. Output moves as the machine does.
 
 WHY IT IS NOT TIER 1, in the gate's own terms. Tier 1 hashes raw output because
 byte-stability was MEASURED (gate.py module docstring). These probes fail that bar by

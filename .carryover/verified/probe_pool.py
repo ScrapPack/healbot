@@ -31,7 +31,7 @@ sys.path.insert(0, f"{HEALBOT}/harness")
 import pool  # noqa: E402
 from rig import Results  # noqa: E402
 
-r = Results(expect=23)
+r = Results(expect=24)
 TMP = tempfile.mkdtemp(prefix="probe-pool-")
 
 
@@ -141,6 +141,11 @@ try:
             rc == 3, f"got {rc}")
     r.check("…and the lease survives the refusal — the slot stays somebody's problem",
             os.path.exists(pool.lease_path(s1)), "")
+    with open(pool.record_path(s1), "w") as fh:
+        json.dump({"slot": "slot-1", "sha": "", "acceptance": {"verdict": "pass"}}, fh)
+    r.check("an EMPTY-STRING sha is the same unknowable baseline, not a falsiness loophole",
+            pool.release("slot-1", discard_work=True) == 3,
+            "the 569e5e0 review's finding: `is None` disagreed with work_state's `if sha`")
     os.rename(pool.record_path(s1) + ".hidden", pool.record_path(s1))
     pool.release("slot-1", if_owner="A")
 

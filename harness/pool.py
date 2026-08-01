@@ -295,7 +295,7 @@ def guard_then_restore(slot, discard_work, context):
     """The shared back half of release and reset: refuse while the slot holds work in
     either form, unless --discard-work; then restore. 0 restored · 2 refused · 3 failed."""
     dirty, detail, committed, head, sha = work_state(slot)
-    if sha is None:
+    if not sha:  # None OR empty — work_state derives committed from the same falsiness
         # No provisioning record means no baseline: the committed-work guard cannot fire
         # and a bare `reset --hard` would reset to HEAD — preserving orphan commits while
         # claiming success. Unknowable is an error, never a default.
