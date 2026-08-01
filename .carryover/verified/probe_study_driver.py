@@ -43,7 +43,7 @@ import run_study  # noqa: E402
 import study_refusal  # noqa: E402
 from rig import Results  # noqa: E402
 
-r = Results(expect=40)
+r = Results(expect=41)
 TMP = tempfile.mkdtemp(prefix="probe-study-driver-")
 
 
@@ -226,12 +226,16 @@ try:
     probes = good["probes"]
     expected = run_study.expected_meta(fix, "t1", False, 1, "set_a", probes, plan, good, ["a1", "a2"])
     recomputed = run_study.expected_meta(fix, "t1", False, 1, "set_a", probes, plan, good, ["a1", "a2"])
-    r.check("an identical resume plan is metadata-compatible — TWO independent expected_meta "
-            "computations agree, and COMPAT_KEYS covers every key expected_meta emits",
-            run_study.compatible_meta(recomputed, expected) == []
-            and set(expected) == set(run_study.COMPAT_KEYS),
-            "the 0973f98 review: comparing one dict to itself was [] by construction; recomputation "
-            "catches hash non-determinism, the key-set equality catches a plan field resume never checks")
+    r.check("resume compatibility is decided over two INDEPENDENTLY computed plans — a regression "
+            "tripwire: every key today is a literal, a pass-through, or a sorted-dump hash, and "
+            "this row is what goes red the day a nondeterministic field joins expected_meta",
+            run_study.compatible_meta(recomputed, expected) == [],
+            "the 0973f98 review: comparing one dict to itself was [] by construction")
+    r.check("COMPAT_KEYS covers every key expected_meta emits — no plan field resume silently "
+            "never checks",
+            set(expected) == set(run_study.COMPAT_KEYS),
+            "the live guard of the pair (the 60bcddf review: one claim per row, or a red "
+            "does not say which broke)")
     drifted = dict(expected)
     drifted["corpus_sha256"] = "0" * 64
     r.check("NEGATIVE CONTROL: a changed corpus cannot resume under an old paid tag",
