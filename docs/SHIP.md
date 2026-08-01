@@ -197,3 +197,21 @@ probe_twin pattern — and asserts the body carries no `!`cmd`` shell-substituti
 | free suite after the build | 21/21 probes exit 0 | includes the arm-factory red found and fixed mid-phase (§2) |
 | phase close | gate PASS + tier2 PASS | on the final post-review tree: `gate/runs/20260801-110953.json`, `gate/runs/20260801-111010-tier2.json` (an earlier pre-review close, 105648/105706, is superseded — the score describes the file at the moment) |
 | adversarial review | 28 findings, 4 lenses | four parallel reviewers (shell/config/docs/probe), several findings TESTED on this machine. Every blocking finding fixed in-phase: the spawn fallback that could respawn-pane -k a LIVE crewmate (its premise — split fails on a fresh window — was refuted by test; it fires on a FULL window), the `--run` flag that stranded every later subcommand on the default fleet (flag removed; HB_RUN env is the selector), and the transcript join pointing at `~/.claude/projects` while crew write under the redirect (backend.py now honors CLAUDE_CONFIG_DIR). Warnings fixed: per-pane `-e HB_FLEET_DIR` injection (panes inherit the SERVER's start env — TESTED), session-scoped death hook, brief-less spawn exiting 1, silent `state` on a missing manifest, argv-passed python (quote-safe paths), honest long-send reporting, kebab-validated crew names, keychain-aware credential claims, tightened whitelist. The probe gained four checks from its own lens (function-body resolution check, earliest-pane history anchor, the -e injection guardrail) |
+
+**Two of those 29 checks are ENVIRONMENT-dependent.** They pass in the main checkout and go
+red in a fresh pool slot. That is the expected reading in a slot, not a regression, and
+neither is fixable from inside a slot:
+
+- **`probe_fleet_claude.py:144`, the CLAUDE.md symlink.** The symlink is untracked and
+  ignored by the whitelist's catch-all `*` (`harness/claude/.gitignore:15`), so
+  `git worktree add` never populates it — it is materialized by `env.claude.sh:34-36`'s
+  `ln -s` at source time. In a slot where nobody has sourced `env.claude.sh` there is no
+  symlink and the check fails on its `islink` half (the ignore half still holds). Do NOT
+  "fix" it by creating the file: `gate.py:192` bans that name anywhere in the tracked tree,
+  which is the whole reason for the symlink convention.
+- **`probe_fleet_claude.py:232`, the installed-skill twin.** It compares
+  `harness/skills/firstmate.md` against `~/.agents/skills/firstmate/SKILL.md`, which is
+  OUTSIDE the repo. Any crewmate that edits the canonical copy turns it red until the
+  merge-back sync installs it. Red in the slot that made the edit is the expected state; the
+  installed copy is synced at merge-back, never by the crewmate (that would be a write
+  outside its worktree).
