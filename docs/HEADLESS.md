@@ -353,7 +353,7 @@ Carried forward, unchanged:
   and the path is TESTED at 20,000, so the risk is low, but the full-scale run has not been paid
   for. **Phase 7: `verify_headless_retire.py` cannot be the vehicle.** It hardcodes
   `THRESHOLD = 20_000` at `:52` and forces it into the server's environment at `:96-103`, which
-  `rig.py:159` applies last — there is no override to remove. Nor does editing the constant
+  `rig.py:282` applies last — there is no override to remove. Nor does editing the constant
   help: one prompt, one `read` capped at 50 KB by `read.ts:16`, measured peak 36,647, and
   `len(user_turns) == 1` asserted structurally at `:200-204`. See `NEXT.md` for what does work and
   what it costs.

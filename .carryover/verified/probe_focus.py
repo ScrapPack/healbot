@@ -30,7 +30,7 @@ import shutil
 import sqlite3
 import sys
 
-from rig import Results, boot, db, marker_col, on_grid
+from rig import Results, boot, db, marker_col, on_grid, pin_fixture_project
 
 # Rendering test, not a lifecycle test. One replayed session sits at occupancy 359,829, well over
 # the 256,000 gate, so with the guard armed the server would retire it out from under these
@@ -81,6 +81,11 @@ for i, (sid, title) in enumerate(ordered):
     print(f"  cell {i}: {sid}  {title}", flush=True)
 
 r.check("the replay DB has two distinct sessions to tell apart", len(ordered) == 2 and FIRST != SECOND)
+
+# The grid filters on `session.project_id`, and the fixture directory's project identity comes
+# from the nearest enclosing git repo — which in a fresh worktree is the healbot checkout, not
+# `hb/project`. Unpinned, the grid is empty and there is no cell to focus. See the docstring.
+pin_fixture_project(SOURCE)
 
 t = boot(PORT, REPLAY, cols=170, rows=48, settle=30)
 try:

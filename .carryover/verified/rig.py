@@ -108,10 +108,125 @@ def git_baseline():
     return git("rev-parse", "--short", "HEAD", check=False).stdout.strip()
 
 
+def pin_fixture_project(corpus):
+    """Give PROJECT the opencode project identity the REPLAYED CORPUS was recorded under.
+
+    Only the replay probes need this, and without it they are not portable across checkouts.
+    They copy a database produced by an earlier paid run and boot a TUI over it, but the grid
+    lists with `scope=project` (`harness/config/opencode/plugin/healbot.ts:783`) and
+    `listByProject` (`opencode/packages/opencode/src/session/session.ts:964`) filters on
+    `session.project_id` ALONE — the `directory` condition below it is skipped for that scope.
+    So a replayed session is visible only from a directory opencode resolves to the SAME
+    project id. Not the same path: the id.
+
+    That id is not derived from the path at all. `Project.resolve`
+    (`opencode/packages/core/src/project.ts:110-122`) discovers the NEAREST enclosing git repo
+    and takes `remote(repo) ?? .git/opencode ?? root-commit`. In the main checkout `hb/project`
+    happens to be its own commit-bearing repo left behind by a paid run, so the corpus's id
+    falls out for free and nobody had to think about it. In a fresh worktree it is not a repo at
+    all — `fixtures()` writes plain files and nothing else — so discovery walks UP into the
+    healbot worktree and resolves THAT repo's origin remote instead.
+
+    MEASURED in pool slot-1, both probes with a byte-intact corpus: the replay DB gained a
+    second project row `80f8309440852657f22cbabd2db89c3383ce083b` (worktree the slot root,
+    = `sha1("git-remote:github.com/ScrapPack/healbot")`) while every session stayed under
+    `5c3da978d091012af55693928b2b66ed34f165bf`, and the grid rendered `Healbot  0 sessions` /
+    "No sessions yet." probe_error_state scored 6/10 and probe_focus 15/24. Nothing was wrong
+    with the code under test; the probes were looking at an empty project.
+
+    The pin uses opencode's own override rather than reproducing that resolution chain here:
+    `.git/opencode` holds an explicit project id and outranks the root commit, and
+    `Project.commit` is the function that writes it. TESTED that the marker is what carries it,
+    on a fixture repo deliberately given NO commits and NO remote so that `remote()` and
+    `root()` both yield nothing and only the marker can answer: the slot went 6/10 -> 10/10.
+    That control matters because in the main checkout the marker and the root commit hold the
+    same value, so main alone cannot tell which one is doing the work.
+
+    The id is read from the corpus, never hardcoded, so re-checkpointing the corpus under a
+    different project carries the probes with it instead of stranding them.
+
+    In the main checkout this is a no-op, and one that can be checked rather than asserted:
+    `hb/project/.git/opencode` is already present and already holds the corpus's id.
+    """
+    import sqlite3
+    import subprocess
+
+    project = fixtures()
+
+    def git(*args, check=True):
+        return subprocess.run(["git", "-C", project, *args], capture_output=True, text=True, check=check)
+
+    ids = sorted({row[0] for row in sqlite3.connect(corpus).execute("SELECT DISTINCT project_id FROM session")})
+    if len(ids) != 1:
+        raise RuntimeError(f"{corpus}: sessions span {len(ids)} projects {ids} — cannot pin to one")
+    pid = ids[0]
+
+    if not os.path.exists(f"{project}/.git"):
+        git("init", "-q")
+        git("config", "user.email", "rig@healbot.local")
+        git("config", "user.name", "healbot rig")
+
+    # Discovery must STOP here. If it does not, the marker below lands in a repo that is not the
+    # one being opened and the pin silently does nothing.
+    top = git("rev-parse", "--show-toplevel", check=False).stdout.strip()
+    if os.path.realpath(top or "/") != os.path.realpath(project):
+        raise RuntimeError(f"fixture project {project} resolves to repo {top!r}, not itself")
+
+    # `remote()` OUTRANKS the marker in the resolution chain, so a fixture repo that ever
+    # acquired an origin would win over this pin without saying so.
+    origin = git("remote", "get-url", "origin", check=False).stdout.strip()
+    if origin:
+        raise RuntimeError(f"fixture project {project} has origin {origin!r}, which outranks .git/opencode")
+
+    common = git("rev-parse", "--git-common-dir", check=False).stdout.strip() or ".git"
+    marker = os.path.join(project, common) if not os.path.isabs(common) else common
+    marker = os.path.join(marker, "opencode")
+    before = open(marker).read().strip() if os.path.exists(marker) else None
+    if before != pid:
+        with open(marker, "w") as fh:
+            fh.write(pid)
+
+    print(
+        f"== fixture project ==\n"
+        f"  {project}\n"
+        f"  corpus project id  {pid}\n"
+        f"  marker             {marker}\n"
+        f"  was                {before or 'absent — this checkout had never pinned it'}"
+        + ("" if before == pid else "  -> rewritten"),
+        flush=True,
+    )
+    return pid
+
+
 def boot(port, db, cols=170, rows=48, settle=25):
     """TUI from source, harness sourced, DB isolated. The TUI hosts its own server on `port`
     — `--port` is 'port to listen on' (`cli/network.ts:9`), so this mode cannot meet a block
-    that predates it. For that, use `serve()` + `attach()`."""
+    that predates it. For that, use `serve()` + `attach()`.
+
+    `settle` is time given to a TUI that has ALREADY PAINTED, never the budget for painting.
+    It used to be both, and that made every screen assertion in the suite race the boot: pump a
+    fixed 30 seconds, then assert, and a boot that took 31 measures a blank terminal. The
+    failure is silent and it does not look like a timeout — `Term.pump` never raises, so the
+    probe runs its whole script against an empty screen, every positive predicate is false, and
+    every `not`-shaped negative control passes VACUOUSLY. `probe_error_state` scored 5/10 that
+    way and `probe_focus` 13/24, both with a correct DB and a correctly pinned project; the
+    screen dumps in their records hold nothing but the echoed `/healbot` keystrokes, because
+    the terminal was still in cooked mode when they were typed.
+
+    MEASURED in pool slot-1: intermittent, roughly 1 run in 6, and NOT reproducible on demand —
+    the same probe scored 10/10 standalone twice and again through tier 2's own subprocess
+    sequence. Wall-clock is identical on a good run and a bad one (39.1s here, 39.11s in the
+    main checkout's green 12:00 tier-2 record), which is the tell: nothing is slow, the probe
+    simply stopped waiting too early. That is why the constant is not the fix. Raising `settle`
+    buys a wider window on the same race and costs every probe the difference on every run;
+    waiting for the boot to announce itself removes the race and costs ~1s.
+
+    So the wait is a readiness PREDICATE with a floor under it, the pattern `serve()` already
+    used one function up. If home never paints the probe still proceeds — `wait_for` prints and
+    returns None rather than raising — so this cannot convert an honest red into an error. It
+    only means the red now arrives with `!! timed out waiting for the TUI to paint` above it
+    instead of an unexplained blank screen.
+    """
     fixtures()
     inner = f". {ENVSH} && exec {OC} {PROJECT} --port {port}"
     t = Term(
@@ -121,6 +236,14 @@ def boot(port, db, cols=170, rows=48, settle=25):
         cols=cols,
         rows=rows,
     )
+
+    def painted():
+        # Pump INSIDE the predicate: `wait_for` only sleeps between calls, and a terminal
+        # nobody is reading cannot change what it shows. `interval=0` for the same reason.
+        t.pump(1)
+        return t.search(HOME_PROMPT)
+
+    wait_for(painted, 120, f"the TUI to paint its home screen on :{port}", interval=0)
     t.pump(settle)
     return t
 
@@ -484,6 +607,14 @@ def wait_for(fn, timeout, label, interval=1.0):
 # The grid's own header: the literal title, then the session count. `healbot.tsx` renders
 # `Healbot` followed by two spaces and `N session(s)`; nothing else in the TUI does.
 GRID_HEADER = r"Healbot\s+\d+\s+sessions?"
+
+# Home's prompt placeholder, and `boot()`'s proof that the TUI finished painting. Home-only:
+# the session route passes no `placeholders` to `<Prompt>` and Prompt returns an undefined
+# placeholder for an empty list, so this string is on the screen `boot()` returns and on no
+# other route — which is what makes it a boot predicate rather than a liveness one.
+# probe_focus.py asserts it TRUE on home and FALSE on the grid and on the session route, so its
+# discriminating power is measured every tier-2 run rather than assumed here.
+HOME_PROMPT = r"Ask anything\.\.\."
 
 
 def on_grid(t):
