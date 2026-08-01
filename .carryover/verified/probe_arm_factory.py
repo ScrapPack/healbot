@@ -27,7 +27,7 @@ sys.path.insert(0, SP)
 import arms  # noqa: E402
 from rig import Api, Results, db  # noqa: E402
 
-r = Results(expect=17)
+r = Results(expect=19)
 TMP = tempfile.mkdtemp(prefix="probe-arm-factory-")
 PORT_A, PORT_B = 4781, 4782
 DELTA_NAME = "probe-delta-skill"
@@ -134,7 +134,27 @@ try:
     r.check("a lockfile-sha mismatch makes materialize REFUSE — dependency drift is loud",
             drift is not None and "lock" in drift.lower(),
             "node_modules is pinned by the frozen lockfile, not by hope")
+    manifest["lockfile_sha256"] = None
+    json.dump(manifest, open(manifest_path, "w"), indent=2, sort_keys=True)
+    legacy = raises(arms.materialize, run1, "base")
+    r.check("a manifest with NO lockfile sha refuses too — the guard fails CLOSED, not open",
+            legacy is not None and "re-freeze" in legacy.lower(),
+            "the 3136cd8 review: a fresh clone froze None and materialized a dep-less arm")
     json.dump(m1["base"], open(manifest_path, "w"), indent=2, sort_keys=True)
+
+    # No inner try/finally: the contract requires every `finally` to end on the verdict
+    # exit. raises() absorbs the expected refusal; anything unexpected propagates to the
+    # crash guard below, which is the failure path the contract prescribes.
+    bare = f"{TMP}/bare-base"
+    os.makedirs(f"{bare}/opencode")
+    with open(f"{bare}/opencode/opencode.jsonc", "w") as fh:
+        fh.write("{}\n")
+    real_base, arms.BASE = arms.BASE, bare
+    unfit = raises(arms.freeze, [arms.define("base")], f"{TMP}/run3")
+    arms.BASE = real_base
+    r.check("freeze REFUSES an unconstituted base (no lockfile, no node_modules) outright",
+            unfit is not None and "reconstitute" in unfit.lower(),
+            "a fresh clone must be a refusal at freeze time, not a silent dep-less arm")
 
     # -- the decisive rows: boot both arms, read /skill off the live servers --------------
     procs.append(arms.serve(run1, "base", PORT_A, db("armfactory-a"), log=f"{TMP}/a.log"))

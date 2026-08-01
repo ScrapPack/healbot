@@ -38,7 +38,7 @@ venv/bin/python probe_control_wiring.py # 14/14 are the control tools and agent 
 venv/bin/python probe_pool.py        # 24/24 does harness/pool.py's lease/guard machine refuse
                                      #       what it claims? (miniature pool of real git repos,
                                      #       every refusal exercised with the violating state)
-venv/bin/python probe_arm_factory.py # 17/17 does a synthesized arm hold EXACTLY its declared
+venv/bin/python probe_arm_factory.py # 19/19 does a synthesized arm hold EXACTLY its declared
                                      #       delta? (arms.py: freeze/materialize/tamper-refuse,
                                      #       then boots BOTH arms and diffs GET /skill)
 venv/bin/python probe_citations.py   # 14/14 do this repo's file:line citations still point at

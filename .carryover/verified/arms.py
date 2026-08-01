@@ -123,6 +123,21 @@ def freeze(armdefs, runpath):
     rels = _base_files()
     if not rels:
         raise RuntimeError(f"base config at {BASE} has no files — wrong tree?")
+    # Fail CLOSED on an unconstituted base. package-lock.json and node_modules are both
+    # UNTRACKED in harness/config/opencode (opencode seeds a self-ignoring .gitignore —
+    # HARNESS.md "The deliverable"), so a fresh clone has neither; freezing that base would
+    # record lockfile_sha256=None and materialize would hand back an arm with no plugin
+    # deps and no refusal — the silent arm change this module exists to make loud. The
+    # push review caught this guard failing open.
+    if "opencode/package-lock.json" not in rels:
+        raise RuntimeError(
+            "base config has no opencode/package-lock.json — it is not fully constituted "
+            "(fresh clone?). Reconstitute the harness config's plugin deps before "
+            "freezing a study; see HARNESS.md 'The deliverable'")
+    if not os.path.isdir(f"{BASE}/opencode/node_modules"):
+        raise RuntimeError(
+            "base config has no opencode/node_modules — the lockfile alone cannot boot "
+            "an arm's plugins. Reconstitute before freezing")
     manifests = {}
     for arm in armdefs:
         armdir = f"{runpath}/arms/{arm['name']}"
@@ -194,16 +209,30 @@ def materialize(runpath, name):
             fh.write(body)
     # node_modules: NOT frozen; the lockfile is. Clone from base only while the base still
     # matches the frozen lockfile — otherwise the deps this arm would load are not the deps
-    # the study froze, and that is a refusal, not a warning.
+    # the study froze. Every absence here REFUSES (the push review caught the first version
+    # failing open on all three conditions): a manifest without a lockfile sha predates the
+    # fail-closed freeze and cannot pin what the arm loads; a base without node_modules
+    # cannot supply it.
     base_lock = f"{BASE}/opencode/package-lock.json"
     nm_src = f"{BASE}/opencode/node_modules"
-    if manifest.get("lockfile_sha256") and os.path.isdir(nm_src):
-        if _file_sha(base_lock) != manifest["lockfile_sha256"]:
-            raise RuntimeError(
-                f"arm {name!r}: the base config's package-lock.json no longer matches the "
-                f"frozen lockfile — node_modules would not be the frozen dependency tree. "
-                f"Reconstitute the base or re-freeze a NEW run; never edit this one")
-        subprocess.run(["cp", "-c", "-R", nm_src, f"{live}/opencode/node_modules"], check=True)
+    if not manifest.get("lockfile_sha256"):
+        raise RuntimeError(
+            f"arm {name!r}: manifest carries no lockfile_sha256 — this snapshot predates "
+            f"the fail-closed freeze and cannot pin the dependency tree. Re-freeze a new run")
+    if not os.path.isdir(nm_src):
+        raise RuntimeError(
+            f"arm {name!r}: base config has no opencode/node_modules to clone — "
+            f"reconstitute the base; the frozen lockfile says what it must contain")
+    if not os.path.exists(base_lock):
+        raise RuntimeError(
+            f"arm {name!r}: base config lost its package-lock.json since the freeze — "
+            f"cannot verify node_modules against the frozen lockfile; reconstitute the base")
+    if _file_sha(base_lock) != manifest["lockfile_sha256"]:
+        raise RuntimeError(
+            f"arm {name!r}: the base config's package-lock.json no longer matches the "
+            f"frozen lockfile — node_modules would not be the frozen dependency tree. "
+            f"Reconstitute the base or re-freeze a NEW run; never edit this one")
+    subprocess.run(["cp", "-c", "-R", nm_src, f"{live}/opencode/node_modules"], check=True)
     return live
 
 
