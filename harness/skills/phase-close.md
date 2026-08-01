@@ -49,13 +49,12 @@ is the pipeline map; this is the checklist.
 
 ## Known-red register
 
-Maintained here, one entry per accepted red, each with its acceptance decision:
-
-- **probe_turn_growth.py 18/19** — the live opencode.db fixture-count row (677/56/733
-  cited vs a live DB that keeps growing). Count drift only; the IN-SCOPE bound must be
-  UNMOVED (70,704 / 289,296 / 30.4% — the probe prints them side by side). Accepted
-  2026-07-31 pending the owner's decision on refreshing the fixture across HARNESS.md
-  and five docs. A moved in-scope figure is NOT this entry — that is a finding.
+Maintained here, one entry per accepted red, each with its acceptance decision. EMPTY as
+of 2026-07-31 late night: the sole entry (probe_turn_growth.py 18/19, the fixture-count
+equality vs a growing live DB) closed when the owner approved converting the fixture to a
+FLOOR — 677/56/733, the Phase 7 snapshot; growth green, shrinkage red, and the probe's
+in-scope bound rows still treat any moved figure (70,704 / 289,296 / 30.4%) as a FINDING.
+A red probe with no entry here stops the close until a human sees it.
 
 ## Why this is a skill and not a hook
 

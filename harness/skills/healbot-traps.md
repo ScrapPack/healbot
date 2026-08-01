@@ -28,9 +28,11 @@ you recognize the red when it fires. HARNESS.md's "Traps" section is the canonic
 - **The suite is not portable.** A fresh clone lacks the gitignored `opencode/` checkout
   (rebuild per fork/README.md) and the venv; only probe_turn_predicate.py survives a fresh
   clone. Guard: `Results(expect=N)` floors make the collapse loud.
-- **probe_turn_growth.py's real-corpus fixture drifts** as the live opencode.db grows.
-  Count drift alone is expected and not a finding; a moved IN-SCOPE maximum, bound, or
-  conditional is. The probe prints both populations side by side.
+- **probe_turn_growth.py's real-corpus counts grow** with the live opencode.db. Since
+  2026-07-31 the fixture is a FLOOR (677/56/733, the Phase 7 snapshot), so growth stays
+  green and falling BELOW the floor means a different corpus (fresh clone, truncation) —
+  not drift. A moved IN-SCOPE maximum, bound, or conditional is a finding either way. The
+  probe prints both populations side by side.
 
 ## Fork and plugin traps
 

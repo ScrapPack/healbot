@@ -188,7 +188,7 @@ Corrected; the earlier rule here was wrong for its own stated purpose.
   (`docs/HARDEN.md` §6, §8; `docs/RELAY.md` §1). **Phase 8 re-derived the `worst_turn` input to that
   arithmetic from 86 real turns instead of one — see the next row.**
 - *`worst_turn` was ONE measurement, and it was not the worst.* MEASURED across every session DB on
-  disk (`probe_turn_growth.py`, free, **16/16** since Phase 9): on the pinned `gpt-5.6-sol` the worst single-turn
+  disk (`probe_turn_growth.py`, free; the probe owns its own floor): on the pinned `gpt-5.6-sol` the worst single-turn
   growth is **175,148**, not ~170,000, so the gate's own ceiling is **184,852 — not the ~190,000
   this file, `docs/RELAY.md` and `harness/env.sh` all state.** The shipped 180,000 still satisfies
   its rule, by **4,852 tokens, 1.3% of the ceiling** — thinner than the "~10K, under 3%" margin this

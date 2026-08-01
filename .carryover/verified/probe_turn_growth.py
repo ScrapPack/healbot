@@ -254,7 +254,7 @@ def describe(label, ts):
 # 16 through Phase 11. Phase 12 declared the corpus SCOPE and re-derived on it: +3 scope assertions,
 # +1 floor on the new load-bearing figure, -1 for the old scenario-conditioned row the in-scope
 # derivation now subsumes.
-r = rig.Results(expect=19)
+r = rig.Results(expect=20)
 
 try:
     source = open(PLUGIN, encoding="utf-8").read()
@@ -304,15 +304,34 @@ try:
         "rig workloads only — treat the distribution as a worst case, not as typical]",
     )
 
-    # Fixture check: is this the same corpus HARNESS.md measured? 677 tool-calls / 56 stop.
+    # Fixture check: is this still the corpus HARNESS.md measured, or its natural growth?
+    # A FLOOR since 2026-07-31, not the original equality: the live DB grows with every real
+    # session (677/56/733 at the Phase 7 measurement; 836/66/902 the day of this change), so
+    # equality guaranteed a standing red that the phase-close register had to carry. The `>=`
+    # reasoning is the same as `worst_sol >= 175_148` below — MORE corpus is new evidence,
+    # FEWER is a different corpus (fresh clone, truncation, replacement: the docs/CLONE.md
+    # event, where losing the evidence and passing the test were the same event). A swapped
+    # corpus that clears the floor is caught by the in-scope bound assertions below, which
+    # treat any moved figure as a finding.
+    def same_corpus_floor(tool_calls, stops, total):
+        return tool_calls >= 677 and stops >= 56 and total >= 733
+
     if have_real:
         occ_rows = [x for x in real_rows if x["role"] == "assistant" and (x["tokens"] or {}).get("total", 0) > 0]
         tc = sum(1 for x in occ_rows if x["finish"] == "tool-calls")
         st = sum(1 for x in occ_rows if x["finish"] == "stop")
         r.check(
-            f"fixture check: the real corpus is the one HARNESS.md measured — {tc} tool-calls / {st} stop of {len(occ_rows)}",
-            (tc, st, len(occ_rows)) == (677, 56, 733),
-            "677/56/733 is the distribution five documents cite; a different split means a different corpus",
+            f"fixture floor: the real corpus is the measured one or its growth — "
+            f"{tc} tool-calls / {st} stop of {len(occ_rows)}, floor 677/56/733",
+            same_corpus_floor(tc, st, len(occ_rows)),
+            "677/56/733 is the Phase 7 snapshot the docs record as history; falling below it "
+            "means a different corpus, not drift",
+        )
+        r.check(
+            "NEGATIVE CONTROL: the floor refuses a fresh-clone-shaped or truncated corpus",
+            not same_corpus_floor(0, 0, 0) and not same_corpus_floor(676, 56, 733),
+            "through the same predicate the live row reads — a control that re-implements "
+            "its check inline proves only that the inline copy works",
         )
 
     rows = rig_rows + real_rows
@@ -472,7 +491,7 @@ try:
           f"{GATE_FLOOR:,}, largest {worst_excluded:,.0f}.")
     print(f"     A turn starting at 0 that grows {worst_excluded:,.0f} ENDS at {worst_excluded:,.0f} — under the "
           f"{CEILING:,} ceiling — and is retired at its end. It is not a cliff.")
-    print(f"     The residual exposure it DOES show is not the gate's to fix: a single turn from an empty")
+    print("     The residual exposure it DOES show is not the gate's to fix: a single turn from an empty")
     print(f"     session larger than {CEILING:,} dies at ANY value of RETIRE_AT. Unaddressed, and named.")
 
     # -------------------------------------------------------------------------------------------

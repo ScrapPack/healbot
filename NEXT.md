@@ -5,7 +5,7 @@ Paste the block below into a new agent session at `~/Desktop/healbot`.
 **This file is FROZEN at a constant shape** (2026-07-31): the task list, the decided list,
 and pointers. Nothing else. It grew 4.3x across phases 5-12 by accreting method prose, in a
 project whose premise is cutting standing context; that stops here. The working method now
-lives in four skills (canonical copies in `harness/skills/`, installed at
+lives in five skills (canonical copies in `harness/skills/`, installed at
 `~/.agents/skills/<name>/SKILL.md`, surfaced to Claude Code via `~/.claude/skills/`
 symlinks). The traps registry stays in HARNESS.md's "Traps" section, mirrored by the
 healbot-traps skill. Per-probe expected scores live in each probe's own `Results(expect=N)`
