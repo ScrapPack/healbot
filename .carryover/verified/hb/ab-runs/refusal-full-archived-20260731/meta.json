@@ -51,7 +51,7 @@
   "repeats": 3,
   "expected_rows": 150,
   "order": "probe, repeat, arm",
-  "status": "running",
+  "status": "archived",
   "started_at": "2026-07-31T18:58:02Z",
   "git_revision": "76b23cc7fce1c50bbf954b1c7197155093e5debd",
   "parent_environment": {
@@ -1282,5 +1282,7 @@
       }
     }
   ],
-  "rescored_at": "2026-08-01T02:12:18Z"
+  "rescored_at": "2026-08-01T02:12:18Z",
+  "archived_at": "2026-08-01T02:12:18Z",
+  "archive_note": "archived by rename 2026-07-31 (commit 3634cbc); see ARCHIVED.md in this directory. status had read running since the driver died 2026-07-31T19:17Z."
 }
