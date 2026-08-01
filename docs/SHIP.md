@@ -37,7 +37,7 @@ problem is that after the one-time login this directory holds CREDENTIAL state, 
 never be frozen into a run directory. Moved to `harness/claude/`, outside the frozen tree;
 `probe_fleet_claude.py` now asserts the separation structurally. Second collision from the
 same event: the crew memory file must be named `CLAUDE.md` for Claude Code to read it, and
-gate.py:192 bans exactly that name anywhere in the tracked tree — resolved by the repo's
+gate.py:200 bans exactly that name anywhere in the tracked tree — resolved by the repo's
 existing skills convention (safe name tracked: `crew-constraints.md`; real name
 materialized: env.claude.sh creates the `CLAUDE.md` symlink at source time, and the
 whitelist `.gitignore` keeps the symlink untracked).
@@ -205,27 +205,52 @@ probe_twin pattern — and asserts the body carries no `!`cmd`` shell-substituti
 
 | Check | | |
 |---|---|---|
-| `probe_fleet_claude.py` | **29/29** (floor 20) | free — live hook executions, every mutation control, the arms-tree separation, the CLAUDE.md symlink convention. Count corrected 2026-08-01: this row read `26/26`, which was wrong when written — both close records cited in the row below record `29/29 passed (expected at least 20)`, e3ea083's own message says "29 checks", and the probe is unchanged since (`git log e3ea083..HEAD` is empty for its path) |
-| `probe_rig_contract.py` | exit 0 | the new probe satisfies the six rig contracts |
+| `probe_fleet_claude.py` | **33 rows** (floor 33, `skip_max=2`) | free — live hook executions, every mutation control, the arms-tree separation, the CLAUDE.md symlink convention. Was `29/29` (floor 20) through Phase 13; the 2026-08-01 environment-requirement work split the symlink row four ways and raised the floor to the count the probe actually produces. MEASURED in slot-2 that day: `31/31 measured passed, 2 NOT MEASURED HERE (budget 2)`, exit 0. An earlier correction stands: this row once read `26/26`, which was wrong when written — both close records cited below record `29/29 passed (expected at least 20)` and e3ea083's message says "29 checks" |
+| `probe_rig_contract.py` | exit 0 | the new probe satisfies the six rig contracts. **40/40** since 2026-08-01, when contract 7 (environment guards) added eleven rows |
 | free suite before the build | 20/20 probes exit 0 | run at phase start, this session |
 | free suite after the build | 21/21 probes exit 0 | includes the arm-factory red found and fixed mid-phase (§2) |
 | phase close | gate PASS + tier2 PASS | on the final post-review tree: `gate/runs/20260801-110953.json`, `gate/runs/20260801-111010-tier2.json` (an earlier pre-review close, 105648/105706, is superseded — the score describes the file at the moment) |
 | adversarial review | 28 findings, 4 lenses | four parallel reviewers (shell/config/docs/probe), several findings TESTED on this machine. Every blocking finding fixed in-phase: the spawn fallback that could respawn-pane -k a LIVE crewmate (its premise — split fails on a fresh window — was refuted by test; it fires on a FULL window), the `--run` flag that stranded every later subcommand on the default fleet (flag removed; HB_RUN env is the selector), and the transcript join pointing at `~/.claude/projects` while crew write under the redirect (backend.py now honors CLAUDE_CONFIG_DIR). Warnings fixed: per-pane `-e HB_FLEET_DIR` injection (panes inherit the SERVER's start env — TESTED), session-scoped death hook, brief-less spawn exiting 1, silent `state` on a missing manifest, argv-passed python (quote-safe paths), honest long-send reporting, kebab-validated crew names, keychain-aware credential claims, tightened whitelist. The probe gained four checks from its own lens (function-body resolution check, earliest-pane history anchor, the -e injection guardrail) |
 
-**Two of those 29 checks are ENVIRONMENT-dependent.** They pass in the main checkout and go
-red in a fresh pool slot. That is the expected reading in a slot, not a regression, and
-neither is fixable from inside a slot:
+**Two of those checks are ENVIRONMENT-dependent, and as of 2026-08-01 they say so themselves.**
+They were recorded here as expected reds in a pool slot. That reading was accurate and it was
+also the wrong shape: a red that means "wrong machine" is indistinguishable at a glance from a
+red that means "defect", and a tier2 run from a slot reported BLOCKED with four of them. Both
+now carry a declared environment requirement (`rig.Env`, `gate/GATE.MAP.md` "Tier 2 from a pool
+slot"): in a slot they record a counted, named SKIP and the tier's verdict is `declared-skip`;
+in the main checkout the requirements hold, the rows run, and the verdict is a plain `pass`.
 
-- **`probe_fleet_claude.py:144`, the CLAUDE.md symlink.** The symlink is untracked and
-  ignored by the whitelist's catch-all `*` (`harness/claude/.gitignore:15`), so
-  `git worktree add` never populates it — it is materialized by `env.claude.sh:34-36`'s
-  `ln -s` at source time. In a slot where nobody has sourced `env.claude.sh` there is no
-  symlink and the check fails on its `islink` half (the ignore half still holds). Do NOT
-  "fix" it by creating the file: `gate.py:192` bans that name anywhere in the tracked tree,
-  which is the whole reason for the symlink convention.
-- **`probe_fleet_claude.py:232`, the installed-skill twin.** It compares
-  `harness/skills/firstmate.md` against `~/.agents/skills/firstmate/SKILL.md`, which is
-  OUTSIDE the repo. Any crewmate that edits the canonical copy turns it red until the
-  merge-back sync installs it. Red in the slot that made the edit is the expected state; the
-  installed copy is synced at merge-back, never by the crewmate (that would be a write
-  outside its worktree).
+The probe is 33 rows now (floor raised 20 → 33, `skip_max=2`), because the first of the two was
+also split:
+
+- **`probe_fleet_claude.py:192`, the CLAUDE.md symlink** — now four rows, of which only the
+  last is environment-bound. The symlink is untracked and ignored by the whitelist's catch-all
+  `*` (`harness/claude/.gitignore:15`), so `git worktree add` never populates it; it is
+  materialized by `env.claude.sh:34-36`'s `ln -s` at source time. What a slot CAN check, and
+  now does: `crew-constraints.md` tracked under the safe name, the real name untracked and
+  ignored, and **`env.claude.sh` still containing the `ln -s`** — with a mutation leg. That
+  third row is new coverage the single row never had: delete the `ln -s` and the old check
+  stayed green on every machine where the link already existed, which was every machine it had
+  ever run on. Only "the link is on disk right now" is guarded, by
+  `claude-config-materialized`. Still do NOT "fix" a slot by creating the file: `gate.py:200`
+  bans that name anywhere in the tracked tree, which is the whole reason for the convention.
+- **`probe_fleet_claude.py:285`, the installed-skill twin**, guarded by `main-checkout`. It
+  compares `harness/skills/firstmate.md` against `~/.agents/skills/firstmate/SKILL.md`, which
+  is OUTSIDE the repo and holds one copy for the machine, installed from whichever checkout
+  last synced it. From a slot the comparison is the slot's canonical copy against main's
+  installed copy — green until the slot edits the skill, then red for a reason that is not
+  drift and that the crewmate must not fix (installing from a slot is a write outside its
+  worktree). The installed copy is synced at merge-back. MEASURED in slot-2 on 2026-08-01: it
+  was PASSING, which is the sharper argument for guarding it — a row whose colour is decided
+  by whether an unrelated edit has happened yet was never reporting into a slot's verdict
+  usefully in either direction.
+
+A third environment-bound row lives in **`probe_backend.py`** (`corpus-dotted-path`), and it is
+the one that turns on the SHELL rather than the checkout — worth stating precisely, because
+"holds in main" is true of the other two and false of this one. The dotted-path leg of the slug
+rule reads whatever transcript corpus `CLAUDE_CONFIG_DIR` selects (§2's redirect, honored by
+`backend.py` since the review fix above). MEASURED 2026-08-01: `~/.claude/projects` holds 52
+project directories of which 19 carry a doubled dash, so from a plain shell the row runs;
+`harness/claude/projects` holds 3, one per checkout and none from a dotted path, so from a
+harness shell the row skips — in the main checkout as well as in a slot. It will start running
+there on its own the first time a dotted-path checkout opens a session under the harness.

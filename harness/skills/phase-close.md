@@ -37,14 +37,26 @@ is the pipeline map; this is the checklist.
    unmeasured claim is not a pass (docs/CLONE.md is the record of what believing
    otherwise cost).
 
-5. The run itself dirties the tree, and that is expected: probe_error_state and
+5. A verdict of `declared-skip` (exit 0) means every probe passed and at least one check
+   declared an environment requirement this machine does not satisfy — `rig.Env`, added
+   2026-08-01 so a run from a pool worktree slot stops reporting BLOCKED for reasons a
+   slot cannot fix (GATE.MAP.md, "Tier 2 from a pool slot"). It is a pass, and it is NOT
+   the same pass: the record's `declared_skips` names every check that did not run and
+   why, and the close quotes that list rather than the verdict alone. Two questions before
+   accepting one — **is this the machine where that requirement should have held?** (a
+   `main-checkout` skip in the main checkout is a defect, not a status), and **did the
+   list grow?** A new name in it is a finding on the same footing as a new red. The skip
+   surface cannot widen silently — each rig budgets its skips and goes red past the budget
+   — but it can widen deliberately, and this step is where somebody notices.
+
+6. The run itself dirties the tree, and that is expected: probe_error_state and
    probe_focus write `.carryover/verified/hb/errorstate.db` and `hb/focus.db`, which are
    TRACKED measurement corpus (the suite writes to the corpus it measures —
    docs/CLONE.md §4). Commit those deltas with the close; never reset or delete them
    (corpus history is evidence — archive, never delete). If `git status` shows hb/*.db
    changes you did NOT produce, another session is working the tree: stop and check.
 
-6. Tier 3 (`verify_*` rigs) stays un-run unless the owner said go — it is PAID. The
+7. Tier 3 (`verify_*` rigs) stays un-run unless the owner said go — it is PAID. The
    close names it NOT RUN, which is honest and free.
 
 ## Known-red register

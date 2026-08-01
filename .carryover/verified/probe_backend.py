@@ -21,7 +21,7 @@ import sys
 
 import ab
 import backend
-from rig import Results
+from rig import Env, Results
 
 # ab.HEALBOT rather than a local dirname chain: the first version of this line was one directory
 # short and pointed at .carryover, which made the slug resolve to a project that has never
@@ -29,7 +29,31 @@ from rig import Results
 HEALBOT = ab.HEALBOT
 PLUGIN = f"{HEALBOT}/harness/config/opencode/plugin/healbot.ts"
 
-r = Results(expect=16)
+
+def corpus_dirs():
+    return [os.path.basename(p) for p in glob.glob(f"{backend.CC_PROJECTS}/*") if os.path.isdir(p)]
+
+
+# WHICH corpus is in effect is an environment fact, not a repository one: `backend.CC_PROJECTS`
+# honors CLAUDE_CONFIG_DIR (the 2026-08-01 fix in docs/SHIP.md), so under the fleet harness it
+# resolves to harness/claude/projects — a young corpus holding one directory per checkout — and
+# under a plain shell to the owner's ~/.claude/projects, which has years of them. The dotted-path
+# row below needs evidence only the second kind carries. MEASURED in slot-2: 3 directories, none
+# with a doubled dash, and the row went red for a corpus that simply has not seen a dotted path.
+#
+# The requirement is deliberately WEAKER than the row it guards — "some name carries a doubled
+# dash" versus "the `--claude-worktrees-` names are there". A corpus with dotted paths that are
+# not those ones satisfies the requirement, runs the row, and goes red, which is the finding. A
+# requirement as strong as its check would have replaced the measurement with a tautology.
+CORPUS_DOTTED = Env(
+    "corpus-dotted-path",
+    "the transcript corpus in effect (CLAUDE_CONFIG_DIR selects it) holds a project directory "
+    "whose name carries a doubled dash — the signature of two adjacent non-alphanumerics in the "
+    "source path, which is what a dot-prefixed directory produces",
+    lambda: any("--" in d for d in corpus_dirs()),
+)
+
+r = Results(expect=16, skip_max=1)
 try:
     # --- the program exists -------------------------------------------------------------------
     binary = shutil.which(backend.CLAUDE)
@@ -43,7 +67,7 @@ try:
     # --- the path derivation ------------------------------------------------------------------
     # Checked against whatever is actually on disk. A slug rule that is merely self-consistent
     # would agree with itself forever and still point at nothing.
-    real_dirs = [os.path.basename(p) for p in glob.glob(f"{backend.CC_PROJECTS}/*") if os.path.isdir(p)]
+    real_dirs = corpus_dirs()
     ours = backend.project_slug(HEALBOT)
     r.check(f"project_slug derives this repo's real transcript directory — {ours}",
             ours in real_dirs,
@@ -51,10 +75,11 @@ try:
 
     # The worktree entries are the ones that discriminate: their paths contain BOTH a slash and a
     # dot, so a slash-only rule produces a different name and this check is how we find out.
-    dotted = [d for d in real_dirs if "--claude-worktrees-" in d]
-    r.check(f"…including paths with dots as well as slashes — {len(dotted)} worktree directory name(s) match the same rule",
-            bool(dotted),
-            "a `/`-only rule yields '-claude-worktrees' without the doubled dash and would miss these")
+    r.check("…including paths with dots as well as slashes — the `--claude-worktrees-` directories",
+            lambda: bool([d for d in real_dirs if "--claude-worktrees-" in d]),
+            f"a `/`-only rule yields '-claude-worktrees' without the doubled dash and would miss "
+            f"these; {len(real_dirs)} directories in {backend.CC_PROJECTS}",
+            needs=CORPUS_DOTTED)
 
     transcripts = sorted(glob.glob(f"{backend.CC_PROJECTS}/{ours}/*.jsonl"), key=os.path.getsize, reverse=True)
     sid = os.path.basename(transcripts[0])[:-6] if transcripts else None

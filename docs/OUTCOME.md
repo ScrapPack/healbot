@@ -284,7 +284,7 @@ records.
 **VERIFIED by reading; NOT TESTED** — it did not fire in either run this phase, and it is recorded
 at the tier it was established at.
 
-`wait_for(fn, timeout, label)` checks its deadline only *between* calls to `fn` (`rig.py:296`), and
+`wait_for(fn, timeout, label)` checks its deadline only *between* calls to `fn` (`rig.py:472`), and
 `Api.__call__` defaults to **`timeout=900`** (`rig.py:225`). So:
 
 ```python

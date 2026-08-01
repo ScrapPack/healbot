@@ -50,6 +50,14 @@ PASS = "pass"          # every check ran and every check agreed
 BLOCKED = "blocked"    # a check ran and said no — a real finding, escalate to a human
 ERROR = "error"        # a check could not run — NOT the same as passing, and not the same as blocked
 SKIPPED = "skipped"    # deliberately not run (out of scope for the changed files, or a paid tier)
+# The fifth term, added 2026-08-01 for tier2. SKIPPED above is a scoping decision made BEFORE
+# anything ran — nothing about the machine could change it. This one is made by a check that
+# reached its own line, found the machine missing a fact it named in advance (`rig.Env`), and
+# declined to claim a measurement it could not take. It is not PASS: the claim is unmeasured.
+# It is not BLOCKED: nothing said no. It is not ERROR: the run was fine, this machine is not
+# the one that holds the evidence. Keeping it separate is the same argument as ERROR-vs-PASS —
+# a run that measured 30 of 33 things must not report identically to one that measured 33.
+DECLARED = "declared-skip"
 
 
 def sh(cmd, cwd=ROOT, timeout=900):

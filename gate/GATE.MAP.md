@@ -14,7 +14,9 @@ wiring is one line of per-clone config (hooks themselves are not versioned by gi
 so say so wherever the push is discussed.
 
 Exit codes are the interface: **0 pass · 2 blocked · 3 error**. TESTED 2026-07-31 — a banned
-filename and a lint error each produced 2, a clean tree produced 0.
+filename and a lint error each produced 2, a clean tree produced 0. `tier2.py` adds one more
+verdict on the same scale: **`declared-skip` also exits 0** — it is a pass whose record names
+the checks this machine could not measure (see Tier 2 below).
 
 ## Behaviour → file
 
@@ -28,6 +30,7 @@ filename and a lint error each produced 2, a clean tree produced 0.
 | Model review stage | `gate/review.py` — single-pass fresh-context review, typed findings, advisory by default |
 | Evidence flow | `gate/publish.py` — attaches both run records to the pushed commit (or its open PR) on GitHub |
 | Tier 2 runner | `gate/tier2.py` — the rest of the free suite, at phase boundaries; trigger is the phase-close skill (`harness/skills/phase-close.md`) |
+| Environment requirements | `rig.py` `Env` / `Results.check(needs=)` — a check names the machine fact it needs; `tier2.py` `parse_skips()` lifts the declarations into the run record |
 | Evidence records | `gate/runs/<timestamp>.json`, `-review.json`, `-publish.json`, `-tier2.json`, plus `publish.log`; all gitignored |
 
 ## What it checks
@@ -89,6 +92,54 @@ interactive `claude -p 'reply ok'` from the owner's terminal settles it.
   known-red register (as of 2026-07-31: probe_turn_growth's fixture-count drift, accepted
   pending the owner's doc-refresh decision). Record: `gate/runs/<ts>-tier2.json`; a
   discovery floor makes "found no probes" ERROR instead of a quiet green.
+
+### Tier 2 from a pool slot: declared environment skips
+
+MEASURED 2026-08-01 from a worktree slot: four probes red, none of them a defect. A symlink
+`env.claude.sh` materializes at source time and `git worktree add` never runs; an installed
+skill under `~/.agents/` owned by whichever checkout last synced it; a transcript corpus
+chosen by `CLAUDE_CONFIG_DIR`; session rows keyed to the main checkout's absolute path. The
+run said BLOCKED for four things a slot cannot fix and — per the crew constraints — must not
+try to. Misleading rather than wrong, which is worse: it is the reading that teaches people
+to skim reds.
+
+The mechanism is `rig.Env`. A check declares the machine fact it depends on
+(`r.check(name, lambda: ..., needs=MAIN_CHECKOUT)`); when the fact is absent the row records
+a **declared skip** carrying the requirement's name and reason, and `tier2.py` lifts every
+declaration out of the probe's stdout into `declared_skips` in the run record and prints them
+in full under the verdict. The tier's verdict becomes **`declared-skip`** — exit 0, green, and
+explicit that not everything here was measured.
+
+Four rules keep it from being a mute button, and all four are asserted by
+`probe_rig_contract` (contract 7, eleven rows, both polarities):
+
+- The predicate must be a **lambda**. Python evaluates arguments eagerly, so an expression
+  predicate has already run — and already crashed — before `needs=` can decide anything.
+  Caught statically by the sweep and at run time by a `TypeError`.
+- Skips are **budgeted per rig** (`Results(skip_max=N)`, default 0). Skipping past the budget
+  is RED, so the skip surface cannot widen without somebody raising a number on purpose.
+- A run where **nothing was measured** is RED whatever the budget allows.
+- A requirement must be **strictly weaker than the check it guards**, or the guard has
+  replaced the measurement. `probe_backend`'s is the worked example: the requirement is "some
+  corpus directory carries a doubled dash", the check is "the `--claude-worktrees-` ones are
+  there" — so a corpus with other dotted paths still runs the row, and can still go red.
+
+**A requirement that does not hold where it should is a finding, and the merge-back check is
+per requirement, not per verdict.** Two of the three are checkout-scoped and MUST hold in the
+main checkout — `main-checkout` by definition, and `claude-config-materialized` because
+`env.claude.sh` has been sourced there (VERIFIED 2026-08-01: `harness/claude/CLAUDE.md ->
+crew-constraints.md`). So `probe_fleet_claude` must record `"count": 0` in main, and a skip
+there is a defect, not a status.
+
+The third is not checkout-scoped and saying otherwise would be the same over-claim this
+mechanism exists to remove. `corpus-dotted-path` reads whichever corpus `CLAUDE_CONFIG_DIR`
+selects, so it turns on the SHELL: from a plain shell it resolves to `~/.claude/projects`
+(MEASURED 2026-08-01: 52 project directories, 19 carrying a doubled dash) and the row runs;
+from a shell that has sourced `env.claude.sh` it resolves to `harness/claude/projects`, which
+today holds one directory per checkout and no dotted path, and the row skips — in the main
+checkout too. The honest reading of a main-checkout run is therefore `pass` from a plain
+shell and `declared-skip` naming exactly that one requirement from a harness shell; anything
+else is worth opening the record for.
 - **Tier 3** — every `verify_*` rig. **PAID.** Owner's go, never automatic.
 
 ## Three decisions worth not re-litigating
@@ -114,6 +165,14 @@ a suite reports green for a run that died — this project has that exact defect
 `docs/CLONE.md` (three probes exited 0 having proven nothing) and `docs/VERDICT.md` (six paid
 rigs printed a verdict and threw it away). The typed-state vocabulary is borrowed from
 `gated-harness`; its isolation model is not.
+
+`declared-skip` (2026-08-01) is the fifth term and sits alongside them for the same reason.
+It is not `skipped`, which is a scoping decision made before anything ran — no fact about the
+machine could change it. It is a check that reached its own line, found the machine missing a
+fact it had named in advance, and declined to claim a measurement it could not take. Not
+`pass`: the claim is unmeasured. Not `blocked`: nothing said no. Not `error`: the run was
+fine, this machine is not the one holding the evidence. A run that measured 30 of 33 things
+must not report identically to one that measured 33, and the record says which three.
 
 ## Why it exists
 

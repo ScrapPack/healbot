@@ -24,7 +24,7 @@ EOF. All artifacts. So a candidate is only accepted if it actually CONTAINS the 
 `.md` citations prefer this repo over the checkout (both trees have a `PLAN.md`).
 
 SCOPE IS THE OTHER HALF OF THAT PROBLEM. Both the swept documents and the resolver's candidate
-set are FILES GIT OWNS — tracked, plus untracked-but-not-ignored, `gate.py:66-79`'s definition
+set are FILES GIT OWNS — tracked, plus untracked-but-not-ignored, `gate.py:74-87`'s definition
 applied to the whole tree instead of to one change. Walking the filesystem instead put state
 nobody wrote into both. MEASURED in the main checkout, gate run 20260801-115807: Claude Code's
 login auto-installed a plugin marketplace under `harness/claude/plugins/` (gitignored by that
@@ -64,7 +64,7 @@ CITE = re.compile(r"(?<![\w/])([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:ts|tsx|py|sh|jso
 
 def git_owned(root):
     """Absolute paths of every file git owns under `root`: tracked, plus untracked and not
-    ignored. Same pair of commands `gate.py:66-79` uses to decide what a change touches.
+    ignored. Same pair of commands `gate.py:74-87` uses to decide what a change touches.
 
     TWO repositories are asked, not one. `/opencode/` is gitignored wholesale by this repo
     (`.gitignore:5`) and is its own checkout, so asking only the outer repo would empty the index

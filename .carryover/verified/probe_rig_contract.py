@@ -27,6 +27,17 @@ rig must satisfy:
   4. it ACTS on `summary()`'s verdict — a failing run must exit non-zero
   5. and that verdict exit is the LAST thing its `finally` does, so nothing trails it unreachably
   6. no assertion decides that a TURN COMPLETED by counting `fire()`'s box (Phase 12)
+  7. every environment-guarded check (`r.check(..., needs=<Env>)`) passes a LAMBDA predicate
+
+Contract 7 arrived with `rig.Env` on 2026-08-01 and guards the mechanism that lets a check say
+"this machine does not hold the fact I need" instead of going red in a pool slot. Python
+evaluates arguments eagerly, so `r.check("x", open(path).read() == canon, needs=E)` has already
+read — and already crashed — before the guard is entered; the protection the author believes
+they added runs too late to do anything. `Results.check` raises TypeError on a non-callable,
+which catches it at run time; this contract catches it at read time, and a lambda is the one
+form that is unambiguous from source. A bare function reference would also be callable, and
+requiring the lambda anyway costs nothing (every guarded predicate in this suite is an inline
+expression) while keeping the rule one grep away from being verified by eye.
 
 Contract 6 is a different animal from 1–5 and is worth saying why. Those five are about whether a
 rig can REPORT a failure. The sixth is about whether it can SEE one. `fire()` appends a turn that
@@ -53,7 +64,7 @@ import sys
 
 SP = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SP)
-from rig import Results, completed  # noqa: E402
+from rig import Env, Results, completed  # noqa: E402
 
 # Entrypoints only. `rig.py` and `term.py` are libraries and own no assertions; `diagnose_*.py`
 # are scratch tools that make no claims. If this list ever silently narrows, the sweep below
@@ -388,10 +399,41 @@ def box_exemptions(src):
     return [c.lineno for c in _check_calls(tree) if _absence_only(c.args[1], tainted)]
 
 
+def _guarded_calls(tree):
+    return [c for c in _check_calls(tree) if any(kw.arg == "needs" for kw in c.keywords)]
+
+
+def guarded(src):
+    """Every environment-guarded `r.check(..., needs=...)` site — `[(lineno, predicate)]`.
+
+    Counted as well as swept: a contract nobody exercises passes by measuring nothing, and this
+    one would read green on the day the last `needs=` was deleted.
+    """
+    tree = ast.parse(src)
+    return [(c.lineno, (ast.get_source_segment(src, c.args[1]) or "?").replace("\n", " ")[:70])
+            for c in _guarded_calls(tree)]
+
+
+def eager_guards(src):
+    """Guarded sites whose predicate is NOT a lambda — the shape the guard cannot stop.
+
+    Empty is the contract. `ast.Lambda` is the whole test: an expression node here means the
+    predicate was evaluated on the way into `check()`, so an absent environment produced its
+    crash or its false answer before anything could decide to skip.
+    """
+    tree = ast.parse(src)
+    return [(c.lineno, (ast.get_source_segment(src, c.args[1]) or "?").replace("\n", " ")[:70])
+            for c in _guarded_calls(tree) if not isinstance(c.args[1], ast.Lambda)]
+
+
 # ------------------------------------------------------------------------------------------
 # 22 through Phase 11; Phase 12's contract 6 adds seven — the sweep, the exemption count, a clean
-# baseline, three mutation legs and one runtime leg on `completed()` itself.
-r = Results(expect=29)
+# baseline, three mutation legs and one runtime leg on `completed()` itself. Contract 7 adds
+# eleven on 2026-08-01: four static (sweep, exercised-count, clean baseline, two mutation legs in
+# both polarities) and six runtime, because the skip machinery has to be shown SKIPPING loudly
+# and shown RUNNING again once its requirement is satisfied. A mechanism that only ever
+# demonstrates the quiet half is a mechanism nobody can tell from a mute button.
+r = Results(expect=40)
 
 try:
     names = rigs()
@@ -593,6 +635,140 @@ try:
         and completed([("w0", 1.0, {}), ("a0", 1.0, {})], "w") == [("w0", 1.0, {})],
         "`None` and `[]` are what this API returns for an empty body and an empty list — a "
         "truthiness test would discard two real completions, so the predicate is isinstance",
+    )
+
+    # --- contract 7: an environment guard must be able to stop its own predicate ------------
+    eager = {n: v for n, v in {n: eager_guards(src[n]) for n in names}.items() if v}
+    guards = {n: v for n, v in {n: guarded(src[n]) for n in names}.items() if v}
+    r.check(
+        "EVERY ENVIRONMENT-GUARDED CHECK PASSES A LAMBDA",
+        not eager,
+        "Python evaluates arguments eagerly, so an expression predicate has already run — and "
+        "already crashed, if the missing environment is what it reads — before `needs=` can skip "
+        "anything. The author sees a guarded row; the machine ran it unguarded. "
+        + (f"EAGER: {eager}" if eager else "all guarded predicates are lambdas"),
+    )
+    r.check(
+        f"…and the contract is EXERCISED — {sum(len(v) for v in guards.values())} guarded site(s) "
+        f"across {len(guards)} rig(s)",
+        sum(len(v) for v in guards.values()) >= 1,
+        f"{guards} — a sweep with nothing to sweep passes by measuring nothing, and this one "
+        "would read green on the day the last needs= was deleted",
+    )
+    guard_sample = "probe_backend.py"
+    gsrc = src[guard_sample]
+    r.check(
+        f"the contract-7 mutation sample is CLEAN first — {guard_sample}",
+        not eager_guards(gsrc) and len(guarded(gsrc)) >= 1,
+        "a mutation check whose baseline already fails proves nothing about the mutation",
+    )
+    r.check(
+        "MUTATION: rewriting a guarded predicate into the EAGER form IS detected",
+        bool(eager_guards(gsrc.replace(
+            'lambda: bool([d for d in real_dirs if "--claude-worktrees-" in d])',
+            'bool([d for d in real_dirs if "--claude-worktrees-" in d])', 1))),
+        "this is the shape an author lands on by copying an unguarded row and appending needs= "
+        "to it, and it is the one the run-time TypeError catches too late to be useful in review",
+    )
+    r.check(
+        "MUTATION (inverted): an UNGUARDED expression predicate is NOT reported",
+        not eager_guards('class R: pass\nr=R()\nr.check("x", 1 == 1)\n'),
+        "the contract is scoped to needs= sites. A predicate that fired on every ordinary row "
+        "would demand a lambda everywhere in the suite for no reason at all",
+    )
+
+    # --- runtime: the skip machinery, driven directly ---------------------------------------
+    # The four contract-7 rows above are about SOURCE. These are the behaviour that source is
+    # chosen to produce. Both halves are needed and neither substitutes: a lambda that the guard
+    # then evaluates anyway satisfies the static contract and defeats the mechanism.
+    ABSENT = Env("synthetic-absent", "a fact this machine does not have", lambda: False)
+    PRESENT = Env("synthetic-present", "a fact every machine has", lambda: True)
+    BROKEN = Env("synthetic-broken", "a fact whose probe blows up", lambda: 1 / 0)
+    evaluated = []
+
+    def thunk(value):
+        """A predicate that RECORDS having been evaluated, so 'never called' is assertable."""
+
+        def go():
+            evaluated.append(value)
+            return value
+
+        return go
+
+    def synthetic(expect, skip_max, legs):
+        """(verdict, skips) for a synthetic run. `legs` is (env_or_None, thunk) pairs; the
+        unguarded ones are called on the way in, exactly as an ordinary row would be."""
+        res = Results(expect=expect, skip_max=skip_max)
+        with contextlib.redirect_stdout(io.StringIO()):
+            for i, (env, th) in enumerate(legs):
+                if env is None:
+                    res.check(f"synthetic {i}", th())
+                else:
+                    res.check(f"synthetic {i}", th, needs=env)
+            return res.summary(), res.skips()
+
+    evaluated.clear()
+    ok_skip, skips = synthetic(2, 1, [(None, thunk(True)), (ABSENT, thunk(False))])
+    r.check(
+        "RUNTIME: an unsatisfied requirement SKIPS the row, and its predicate is NEVER evaluated",
+        ok_skip is True and evaluated == [True]
+        and [s["needs"] for s in skips] == ["synthetic-absent"],
+        "the skipped leg's predicate returns False, so a guard that evaluated it anyway would "
+        "make this verdict False and put a second entry in `evaluated`. Also proves a skipped "
+        "row still counts toward the floor: 2 rows, one of them a skip, against expect=2",
+    )
+
+    evaluated.clear()
+    ok_run, ran_skips = synthetic(2, 1, [(None, thunk(True)), (PRESENT, thunk(False))])
+    r.check(
+        "RUNTIME: a SATISFIED requirement runs the row, and a red row is still red",
+        ok_run is False and ran_skips == [] and evaluated == [True, False],
+        "the mechanism's other direction, and the one that matters most: satisfy the "
+        "requirement and the check must go back to being an ordinary check, able to fail. A "
+        "guard that swallowed the failure would be a mute button with extra steps",
+    )
+
+    evaluated.clear()
+    ok_over, _ = synthetic(3, 1, [(None, thunk(True)), (ABSENT, thunk(True)), (ABSENT, thunk(True))])
+    r.check(
+        "RUNTIME: skipping PAST the declared budget is RED",
+        ok_over is False,
+        "two skips against skip_max=1. Either a requirement stopped holding where it should or "
+        "one was added uncounted; the budget is what stops the skip surface widening quietly, "
+        "the same job the box exemption's ceiling does for contract 6",
+    )
+
+    evaluated.clear()
+    ok_blank, _ = synthetic(1, 5, [(ABSENT, thunk(True))])
+    r.check(
+        "RUNTIME: a run where NOTHING was measured is RED whatever the budget allows",
+        ok_blank is False,
+        "one row, one skip, budget of five — inside every limit and still worth nothing. This is "
+        "the failure the whole mechanism is built to avoid: a probe that quietly became all-skip "
+        "and kept reporting green",
+    )
+
+    evaluated.clear()
+    ok_broken, broken_skips = synthetic(1, 1, [(BROKEN, thunk(True))])
+    r.check(
+        "RUNTIME: a requirement whose own probe RAISES counts as unsatisfied, not as satisfied",
+        ok_broken is False and [s["needs"] for s in broken_skips] == ["synthetic-broken"]
+        and evaluated == [],
+        "the row is skipped (not measured) rather than run against an environment nobody could "
+        "establish — and because that leaves nothing measured, the run is red by the rule above",
+    )
+
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            Results(expect=1, skip_max=1).check("eager", True, needs=ABSENT)
+        raised = False
+    except TypeError:
+        raised = True
+    r.check(
+        "RUNTIME: needs= with a NON-CALLABLE predicate raises TypeError",
+        raised,
+        "contract 7's run-time half. The static sweep reads lambdas out of source; this catches "
+        "the forms source analysis cannot see, such as a name bound to an already-computed bool",
     )
 
     # --- runtime: the floor mechanism itself ----------------------------------------------

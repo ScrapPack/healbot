@@ -238,6 +238,99 @@ class Api:
         return json.loads(raw) if raw else None
 
 
+# The sentinel `summary()` emits and `gate/tier2.py` parses. A probe's stdout is prose meant
+# for a human, so the one line a machine reads is marked as such rather than pattern-matched
+# out of the prose — the tier must not start depending on the wording of a sentence.
+SKIP_LINE = "##ENV-SKIP## "
+
+
+class Env:
+    """A named requirement about the MACHINE, so a check that cannot be MEASURED here says
+    which fact was missing instead of reporting a red that means "wrong machine".
+
+    THE PROBLEM THIS SOLVES, measured 2026-08-01 by running `gate/tier2.py` from a pool
+    worktree slot: four probes went red, and not one of the reds was a defect. The CLAUDE.md
+    symlink is materialized by `env.claude.sh` at source time and `git worktree add` does not
+    run it; the installed-skill twin compares against `~/.agents/skills/`, which belongs to
+    whichever checkout last installed it; the transcript corpus is whatever
+    `CLAUDE_CONFIG_DIR` points at. A slot run therefore reported BLOCKED for reasons a slot
+    cannot fix and must not try to (a crewmate writing outside its worktree is the thing the
+    crew constraints exist to stop). Misleading, not wrong — and a suite people learn to read
+    around is a suite that has stopped working.
+
+    BOTH FAILURE MODES ARE REAL, and this class is shaped by the second one. A silent red
+    that means "wrong machine" trains the reader to ignore reds. A silent SKIP that means "we
+    stopped measuring" is worse: it reports green for a claim nobody checked, which is
+    `docs/CLONE.md`'s defect wearing a new hat. So a skip here is never quiet — it prints
+    NOT MEASURED HERE with the requirement's name, it is counted against a declared budget
+    (`Results(skip_max=)`), a run where EVERY row skipped is red, and `summary()` emits a
+    machine-readable line `gate/tier2.py` lifts into the run record. What was not measured,
+    and why, is evidence the record carries; it is not an absence.
+
+    A requirement must be STRICTLY WEAKER than the check it guards, or the check can no
+    longer go red and the guard has replaced the measurement. `probe_backend`'s is the worked
+    example: the requirement is "some corpus directory carries a doubled dash", the check is
+    "the `--claude-worktrees-` directories are there and match the rule" — so a corpus that
+    has dotted paths but not those ones still goes red, which is the finding.
+
+    `probe` is called at most once and its answer cached: a requirement is a fact about the
+    machine, and one re-measured per check could answer differently twice in one run. A probe
+    that raises counts as unsatisfied and carries the exception into the printed note —
+    "could not establish the environment" is a skip, not a pass.
+    """
+
+    def __init__(self, name, why, probe):
+        self.name = name
+        self.why = why
+        self._probe = probe
+        self._cached = None
+
+    def satisfied(self):
+        """`(ok, note)`. `note` is empty unless establishing the fact itself failed."""
+        if self._cached is None:
+            try:
+                self._cached = (bool(self._probe()), "")
+            except Exception as exc:
+                self._cached = (False, f"could not establish: {type(exc).__name__}: {exc}")
+        return self._cached
+
+
+def _git_out(*args):
+    import subprocess
+
+    p = subprocess.run(["git", "-C", HEALBOT, *args], capture_output=True, text=True)
+    return p.stdout.strip() if p.returncode == 0 else ""
+
+
+def is_main_checkout():
+    """Is this rig running from the repository's PRIMARY worktree?
+
+    git's own answer rather than a path heuristic: in a linked worktree `--git-dir` is
+    `<main>/.git/worktrees/<name>` while `--git-common-dir` is `<main>/.git`; in the primary
+    checkout the two name the same directory. VERIFIED 2026-08-01 in both — this slot
+    reported `.../healbot/.git/worktrees/slot-2` vs `.../healbot/.git`, the main checkout
+    reported `.git` for both. Relative answers are resolved against HEALBOT, which is why the
+    join is there; `os.path.join` already keeps an absolute second argument.
+
+    No git, or a `git` that errors, yields "" for both and answers False. That is deliberate:
+    a rig that cannot establish which checkout it is in should declare the skip, not assume
+    the privileged answer.
+    """
+    gd, common = _git_out("rev-parse", "--git-dir"), _git_out("rev-parse", "--git-common-dir")
+    if not gd or not common:
+        return False
+    return os.path.realpath(os.path.join(HEALBOT, gd)) == os.path.realpath(os.path.join(HEALBOT, common))
+
+
+MAIN_CHECKOUT = Env(
+    "main-checkout",
+    "the rig is running from the repository's primary worktree, not a pool slot — the claim "
+    "reads state keyed to the main checkout (an installed copy, an absolute session path) "
+    "that a slot cannot own and must not write",
+    is_main_checkout,
+)
+
+
 class Results:
     """Assertion ledger. `expect` is a FLOOR on how many assertions must run, and it is not
     bookkeeping — it is the only thing that can tell "everything passed" from "almost nothing ran".
@@ -262,25 +355,87 @@ class Results:
 
     The floor is a MINIMUM, not an equality: adding an assertion must not turn a probe red, but
     losing one must. Set it to the count the probe is recorded as producing.
+
+    `skip_max` is the second budget and it governs `Env` (above): the MOST declared
+    environment skips a run of this rig may record. It defaults to 0, so every rig that names
+    no requirement is unaffected and a rig that starts skipping must raise this number in the
+    same change — the same discipline `probe_rig_contract`'s box exemption carries, for the
+    same reason. An exemption that widens without anybody counting is how a guard stops
+    guarding.
+
+    A skipped row is still APPENDED, so it counts toward `expect`. That is correct and worth
+    saying why: the floor answers "did the probe reach this line", and a skip proves it did.
+    What the floor cannot then catch is the degenerate case where everything skipped, so
+    `summary()` catches that one by name — rows but none of them measured is red, always,
+    whatever `skip_max` says.
     """
 
-    def __init__(self, expect=None):
+    def __init__(self, expect=None, skip_max=0):
         self.rows = []
         self.expect = expect
+        self.skip_max = skip_max
 
-    def check(self, name, ok, detail=""):
-        self.rows.append((name, bool(ok), detail))
+    def check(self, name, ok, detail="", needs=None):
+        """`needs=<Env>` guards this row on a machine fact. When it holds the row runs
+        normally; when it does not the row records a declared skip and `ok` is NEVER called.
+
+        With `needs=`, `ok` must be a CALLABLE — Python evaluates arguments eagerly, so an
+        expression predicate has already run, and already crashed if the missing environment
+        is what it reads, before this guard can decide anything. The TypeError is deliberate
+        and fatal: a guard that silently accepted the eager form would leave the caller
+        believing a row was protected when the protection ran too late to matter.
+        `probe_rig_contract` asserts the lambda statically, so the two agree.
+        """
+        if needs is not None:
+            if not callable(ok):
+                raise TypeError(
+                    f"check({name!r}, needs={needs.name!r}) needs a CALLABLE predicate — pass a "
+                    "lambda. An expression is evaluated before check() is entered, so the guard "
+                    "cannot stop it reading an environment that is not there."
+                )
+            satisfied, note = needs.satisfied()
+            if not satisfied:
+                self.rows.append((name, None, detail, needs))
+                print(f"  [SKIP] {name} — NOT MEASURED HERE: needs `{needs.name}` ({needs.why})"
+                      + (f" [{note}]" if note else ""), flush=True)
+                return None
+            ok = ok()
+        self.rows.append((name, bool(ok), detail, None))
         print(f"  [{'PASS' if ok else 'FAIL'}] {name}" + (f" — {detail}" if detail else ""), flush=True)
         return bool(ok)
 
+    def skips(self):
+        """The declared environment skips this run recorded, newest last."""
+        return [{"needs": need.name, "check": name, "why": need.why}
+                for name, ok, _, need in self.rows if need is not None]
+
     def summary(self):
         print("\n== summary ==", flush=True)
-        for name, ok, detail in self.rows:
-            print(f"  {'PASS' if ok else 'FAIL'}  {name}" + (f"   ({detail})" if detail else ""))
-        failed = [n for n, ok, _ in self.rows if not ok]
+        for name, ok, detail, need in self.rows:
+            mark = "SKIP" if need is not None else ("PASS" if ok else "FAIL")
+            note = f" [needs {need.name}]" if need is not None else ""
+            print(f"  {mark}  {name}{note}" + (f"   ({detail})" if detail else ""))
+
+        measured = [(n, ok) for n, ok, _, need in self.rows if need is None]
+        skipped = self.skips()
+        failed = [n for n, ok in measured if not ok]
         short = self.expect is not None and len(self.rows) < self.expect
-        tail = f" (expected at least {self.expect})" if self.expect is not None else ""
-        print(f"\n  {len(self.rows) - len(failed)}/{len(self.rows)} passed{tail}", flush=True)
+        over = len(skipped) > self.skip_max
+        blank = bool(self.rows) and not measured
+
+        # Two shapes, and the split is not cosmetic. The floor counts ROWS while the ratio
+        # counts MEASURED rows, so a rig with skips printing the one-line form reads
+        # "31/31 passed (expected at least 33)" — which is what a SHORT RUN looks like, on a
+        # run that was not short. Rigs that name no requirement keep the original line
+        # verbatim; the recorded scores in docs/SHIP.md and gate/runs/ are quotes of it.
+        floor = f" (expected at least {self.expect})" if self.expect is not None else ""
+        if skipped or self.skip_max:
+            against = f" against a floor of {self.expect}" if self.expect is not None else ""
+            print(f"\n  {len(self.rows)} rows{against}: {len(measured) - len(failed)}/{len(measured)} "
+                  f"measured passed, {len(skipped)} NOT MEASURED HERE (budget {self.skip_max})", flush=True)
+        else:
+            print(f"\n  {len(self.rows) - len(failed)}/{len(self.rows)} passed{floor}", flush=True)
+
         if short:
             print(
                 f"  !! SHORT RUN — only {len(self.rows)} of {self.expect} assertions ran. The ones that\n"
@@ -288,7 +443,28 @@ class Results:
                 f"     unmeasured, and screen predicates pass vacuously against a dead terminal.",
                 flush=True,
             )
-        return not failed and not short
+        if over:
+            print(
+                f"  !! SKIP BUDGET EXCEEDED — {len(skipped)} declared skips against a budget of\n"
+                f"     {self.skip_max}. Either an environment requirement stopped holding somewhere it\n"
+                f"     should, or a new one was added without being counted. Both are findings.",
+                flush=True,
+            )
+        if blank:
+            print(
+                f"  !! NOTHING WAS MEASURED — all {len(self.rows)} rows declared a skip. A rig with no\n"
+                f"     measured row proves nothing at all, and reporting that as a pass is exactly the\n"
+                f"     failure the skip machinery exists to avoid. Red regardless of the budget.",
+                flush=True,
+            )
+        # The line gate/tier2.py parses. Emitted whenever this rig participates in the
+        # mechanism at all — including at zero, because "0 of a budget of 3" is the positive
+        # evidence that everything was measured, and absence of the line would be
+        # indistinguishable from a parse that failed.
+        if skipped or self.skip_max:
+            print(SKIP_LINE + json.dumps({"count": len(skipped), "max": self.skip_max,
+                                          "over": over, "blank": blank, "skips": skipped}), flush=True)
+        return not failed and not short and not over and not blank
 
 
 def wait_for(fn, timeout, label, interval=1.0):

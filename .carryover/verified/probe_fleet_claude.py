@@ -22,7 +22,7 @@ import subprocess
 import sys
 import tempfile
 
-from rig import Results
+from rig import MAIN_CHECKOUT, Env, Results
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -34,7 +34,24 @@ ENVSH = os.path.join(HARNESS, "env.claude.sh")
 SKILL_CANON = os.path.join(HARNESS, "skills", "firstmate.md")
 SKILL_INSTALLED = os.path.expanduser("~/.agents/skills/firstmate/SKILL.md")
 
-r = Results(expect=20)
+# `env.claude.sh` materializes the untracked half of the config root when it is sourced
+# (env.claude.sh:34-36's `ln -s`). `git worktree add` runs no shell, so a fresh pool slot has
+# the tracked half and nothing else. `lexists`, not `exists`: a DANGLING symlink means the
+# materialization happened and then broke, which is a red the check below should report — the
+# requirement only excuses the case where nothing was ever materialized at all.
+CONFIG_MATERIALIZED = Env(
+    "claude-config-materialized",
+    "env.claude.sh has been sourced against THIS checkout, so harness/claude/ holds the "
+    "untracked files it creates at source time",
+    lambda: os.path.lexists(os.path.join(CFG, "CLAUDE.md")),
+)
+
+# 29 rows through Phase 13; the CLAUDE.md split turns one row into five, so 33. The floor is
+# also raised to the count the probe actually produces — it read 20 against a recorded 29, and
+# a floor nine below the count cannot catch a probe that loses eight rows. Two skips budgeted,
+# one per environment-bound row: in the MAIN checkout both requirements hold and this run
+# records `"count": 0`, which is the property firstmate asserts at merge-back.
+r = Results(expect=33, skip_max=2)
 
 
 def sh_n(path):
@@ -140,13 +157,41 @@ try:
             and not ignored(rel + "crew-constraints.md"))
 
     # -- the banned-filename convention: safe name tracked, real name materialized --
+    # Split four ways on 2026-08-01, and the split makes the probe STRONGER rather than merely
+    # quieter in a slot. Three of the four facts are pure reads of THIS checkout and hold on
+    # any machine: the tracked file under the safe name, the ignore rule, and — new here —
+    # env.claude.sh still containing the `ln -s` that materializes the real name. That last
+    # one had NO check at all while the convention lived in a single row: delete the ln -s and
+    # the row stayed green on every machine where the symlink already existed, which is every
+    # machine the probe had ever run on. Only the fourth fact, the link being on disk right
+    # now, is environment-bound, and it is the one a pool slot legitimately cannot have.
     claude_md = os.path.join(CFG, "CLAUDE.md")
-    r.check("CLAUDE.md is an untracked symlink to the tracked crew-constraints.md "
-            "(gate.py:192's ban, the skills-install convention)",
-            os.path.islink(claude_md)
-            and os.readlink(claude_md) == "crew-constraints.md"
-            and ignored(rel + "CLAUDE.md")
-            and os.path.isfile(os.path.join(CFG, "crew-constraints.md")))
+    tracked = set(subprocess.run(["git", "-C", REPO, "ls-files", "harness/claude/"],
+                                 capture_output=True, text=True).stdout.split())
+    r.check("the constraints file is TRACKED under the safe name crew-constraints.md",
+            "harness/claude/crew-constraints.md" in tracked
+            and os.path.isfile(os.path.join(CFG, "crew-constraints.md")),
+            "gate.py:200 bans the real name anywhere in the tracked tree; this is the half git carries")
+    r.check("NEGATIVE: the real name is NOT tracked, and is ignored",
+            "harness/claude/CLAUDE.md" not in tracked and ignored(rel + "CLAUDE.md"),
+            "if this ever goes red the ban is being violated, not worked around")
+
+    def materializes(s):
+        # The COMMAND, anchored to both operands. Matching `ln -s` alone would survive a link
+        # pointed at some other file, and matching the comment block above it would survive
+        # the command's deletion — the failure mode this row exists to catch.
+        return bool(re.search(r'ln -s crew-constraints\.md "\$HARNESS_ROOT/claude/CLAUDE\.md"', s))
+
+    envsrc = open(ENVSH).read()
+    r.check("env.claude.sh materializes the real name as a symlink at source time "
+            "(env.claude.sh:34-36)", materializes(envsrc),
+            "the tracked half is inert without this: nothing else in the repo creates the link")
+    r.check("MUTATION: dropping the ln -s is caught",
+            not materializes(envsrc.replace("ln -s crew-constraints.md", "true #", 1)))
+
+    r.check("…and it IS materialized here, pointing at crew-constraints.md",
+            lambda: os.path.islink(claude_md) and os.readlink(claude_md) == "crew-constraints.md",
+            f"islink={os.path.islink(claude_md)}", needs=CONFIG_MATERIALIZED)
 
     # -- hb-fleet.sh guardrails, asserted from source with mutations ---------------
     src = open(FLEET).read()
@@ -228,10 +273,19 @@ try:
     r.check("MUTATION: an injected !`cmd` is caught",
             not no_shell_hole(canon + "\nrun !`rm -rf /` now"))
 
-    installed = open(SKILL_INSTALLED).read() if os.path.exists(SKILL_INSTALLED) else ""
+    # ~/.agents/skills/ is OUTSIDE every worktree and holds ONE copy for the machine, installed
+    # from whichever checkout last synced it — in practice the main one, since installing from a
+    # slot is a write outside the crewmate's worktree and is banned. So from a slot this row
+    # compares the SLOT's canonical copy against MAIN's installed copy: green while the slot has
+    # not touched the skill, red the moment it does, and red for a reason that is not drift and
+    # that the slot must not "fix". VERIFIED 2026-08-01 in this slot: it passed, because the
+    # slot had not edited the skill — a row whose colour is decided by an unrelated edit is
+    # exactly the kind that should not be reporting into a slot's verdict at all. In the main
+    # checkout the requirement holds, the row runs, and a missing install is correctly red.
     r.check("installed SKILL.md is byte-identical to the canonical copy "
-            "(twin drift, probe_twin's pattern)", installed == canon,
-            f"installed {len(installed)}B vs canonical {len(canon)}B")
+            "(twin drift, probe_twin's pattern)",
+            lambda: (open(SKILL_INSTALLED).read() if os.path.exists(SKILL_INSTALLED) else "") == canon,
+            f"canonical {len(canon)}B at {SKILL_CANON}", needs=MAIN_CHECKOUT)
 except SystemExit:
     raise
 except Exception:
