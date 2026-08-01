@@ -18,8 +18,8 @@
       "desc": "stock opencode: gpt.txt (9,284 B), 18 skills, ~/.claude/CLAUDE.md loaded"
     }
   },
-  "corpus_sha256": "41fecb7f932ededd6254960faaa36f4dbb55acc48a9aa186713d69abd5df9da5",
-  "scorer_sha256": "3723984ed3755045145c246ed1c4334e19ff278c468abfed0824a6bd15cbdf0a",
+  "corpus_sha256": "39f98c53af54b93d1b32c0180168d5ab6e86b9b04cee11a473d7a1c5df1ee97e",
+  "scorer_sha256": "7517efb90f0820948485695f4a5e97e2d3e031c824fa309cf7e15d3e54bb5add",
   "driver_sha256": "94dd5d46accccbb1e701225b0713cf7e4e8d1c1b97327ec498b7cc5ae6351569",
   "probe_ids": [
     "det-yara",
@@ -1266,5 +1266,21 @@
     "session": "ses_046641343ffeW6O1kD9ZeZlg61",
     "reserved_at": "2026-07-31T19:17:11Z"
   },
-  "updated_at": "2026-07-31T19:17:11Z"
+  "updated_at": "2026-07-31T19:17:11Z",
+  "revision_history": [
+    {
+      "revised_at": "2026-08-01T02:12:18Z",
+      "from": {
+        "corpus_sha256": "41fecb7f932ededd6254960faaa36f4dbb55acc48a9aa186713d69abd5df9da5",
+        "scorer_sha256": "3723984ed3755045145c246ed1c4334e19ff278c468abfed0824a6bd15cbdf0a",
+        "driver_sha256": "94dd5d46accccbb1e701225b0713cf7e4e8d1c1b97327ec498b7cc5ae6351569"
+      },
+      "to": {
+        "corpus_sha256": "39f98c53af54b93d1b32c0180168d5ab6e86b9b04cee11a473d7a1c5df1ee97e",
+        "scorer_sha256": "7517efb90f0820948485695f4a5e97e2d3e031c824fa309cf7e15d3e54bb5add",
+        "driver_sha256": "94dd5d46accccbb1e701225b0713cf7e4e8d1c1b97327ec498b7cc5ae6351569"
+      }
+    }
+  ],
+  "rescored_at": "2026-08-01T02:12:18Z"
 }
