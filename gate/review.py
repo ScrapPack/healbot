@@ -45,10 +45,12 @@ import gate  # noqa: E402  (changed_files, state vocabulary)
 RUNS = f"{ROOT}/gate/runs"
 MODE = os.environ.get("HEALBOT_REVIEW", "advisory")
 CLAUDE = os.environ.get("HEALBOT_REVIEW_CLAUDE") or shutil.which("claude")
-# 420s: the first four live reviews ran 63-190s, then a 231-line diff hit the original 300s
-# cap and produced a no-findings ERROR — spend with nothing to show. A timed-out review is
-# strictly worse than a slow one; raise HEALBOT_REVIEW_TIMEOUT further for very large diffs.
-TIMEOUT = int(os.environ.get("HEALBOT_REVIEW_TIMEOUT", "420"))
+# 900s: the first four live reviews ran 63-190s, then a 231-line diff hit the original 300s
+# cap and produced a no-findings ERROR — spend with nothing to show — so 300 became 420;
+# then the 1,298-line run_study.py diff (0973f98) timed out at 420 and its honest review
+# needed 442s on the manual re-run. A timed-out review is strictly worse than a slow one;
+# raise HEALBOT_REVIEW_TIMEOUT further for very large diffs.
+TIMEOUT = int(os.environ.get("HEALBOT_REVIEW_TIMEOUT", "900"))
 MAX_DIFF_BYTES = 200_000          # per no-silent-caps: anything dropped is named in the record
 MAX_UNTRACKED_BYTES = 20_000      # per untracked file, working-tree mode only
 
