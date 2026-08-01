@@ -495,10 +495,11 @@ the opencode harness. The record is `docs/SHIP.md`; the working files:
 
 Open items live in `docs/SHIP.md` §5 — the login's keychain-landing question, pinning
 the still-SUSPECTED busy/trust markers (ready was measured and repinned 2026-08-01,
-the same live run that verified the hook wiring), and the fact that **no
-retirement threshold is verified for any Claude model** (the opencode numbers are
-measurements of a different model through a different program; hand off early until a
-claude-side growth measurement exists). Deliberately not adopted, with reasons on record:
+the same live run that verified the hook wiring), and the claude-side retirement
+marker: **provisional ~300K (30% of the 1M window), INFERRED not measured** — the
+planning-stage degradation rule validated as transferring to claude-opus-5's 1M
+architecture on 2026-08-01; a claude-side growth measurement is what would verify it
+(the opencode numbers remain non-transferable). Deliberately not adopted, with reasons on record:
 lavish-axi (vendor bill vs. need), any nvim machinery (coexistence is the pool's job), and
 Claude Code's native `--tmux`/`--worktree` spawning (it owns naming and worktrees the
 fleet must own).

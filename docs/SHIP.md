@@ -179,12 +179,20 @@ probe_twin pattern — and asserts the body carries no `!`cmd`` shell-substituti
    the owner's, or writes the `.credentials.json` fallback into `harness/claude/` is
    unknown until the one-time login runs. If it shares the owner's item, say so in this
    document and treat harness logout as touching the main install's auth.
-4. **No verified retirement threshold exists for any Claude model.** The opencode numbers
-   (180,000 gate, ~360K ceiling, 175,148 worst turn) are measurements of gpt-5.6-sol
-   through opencode and DO NOT TRANSFER. With auto-compact off, the ceiling is a hard
-   error, so until a claude-side growth measurement exists, the firstmate skill's rule is
-   hand-off-early. The measurement program is the same one NEXT.md already carries for
-   the opencode side, run through `backend.py`.
+4. **Retirement context window: provisional marker at ~300,000 (30% of window), INFERRED.**
+   Validated 2026-08-01 against the planning-stage design rule (degradation marker at
+   ~300K = 30% of the context limit on a 1M architecture): the crew default resolves to
+   `claude-opus-5` — all 181 turns of the first live crewmate's transcript record that
+   exact model string — and current Anthropic docs give claude-opus-5 (and claude-fable-5)
+   a 1M-token window as both default and maximum, so the design rule transfers
+   architecture-for-architecture. Live counter-evidence scan: worst observed turn
+   135,482 tokens (13.5% of window), hand-offs at 106K-138K occupancy, zero degradation
+   observed — consistent with, but far inside, the marker. The marker is INFERRED, not
+   MEASURED: no claude-side session has yet run near 300K. The opencode numbers (180,000
+   gate, ~360K ceiling, 175,148 worst turn: gpt-5.6-sol) still DO NOT TRANSFER; the
+   claude-side growth measurement (the NEXT.md program via `backend.py`) is what would
+   move this marker to VERIFIED, and with auto-compact off the ~1M ceiling stays a hard
+   error, so the firstmate treats 300K as retire-by, not retire-at.
 5. **Claude Code's native `--tmux`/`--worktree` spawning exists** (VERIFIED in --help)
    and is deliberately unused: it owns its own session naming and worktrees, and the
    fleet must own its topology and its pool. Recorded so nobody "simplifies" into it

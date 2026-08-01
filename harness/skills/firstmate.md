@@ -59,10 +59,13 @@ report which crewmates you escalated and why.
 
 Watch `occupancy` per crewmate. Auto-compaction is OFF in the harness config, so the
 context ceiling is a hard error, not a compaction — retirement-by-handoff is the only
-lifecycle policy, exactly as in the opencode harness. There is NO verified retirement
-threshold for Claude models yet (the opencode numbers are measurements of a different
-model through a different program and do not transfer — docs/SHIP.md §5); until one is
-measured, hand off early rather than late. The handoff, adapted from the opencode gate's
+lifecycle policy, exactly as in the opencode harness. The crew default (claude-opus-5)
+is a 1M-context model; the provisional retirement marker is **~300,000 tokens (30% of
+window)** — the planning-stage degradation rule, validated as transferring to this
+architecture on 2026-08-01 but INFERRED, not measured (docs/SHIP.md §5 item 4). Treat
+300K as retire-BY: start the handoff when occupancy approaches it, earlier when a new
+objective would plausibly cross it. A fresh objective goes to a fresh crewmate, not a
+deep session. (The opencode numbers still do not transfer.) The handoff, adapted from the opencode gate's
 handoffDocument: derive the outstanding work from the crewmate's own replies, write a
 successor brief that puts the OUTSTANDING LIST above the original instruction (successors
 have been measured obeying stale sequencing), spawn the successor under a fresh name,
