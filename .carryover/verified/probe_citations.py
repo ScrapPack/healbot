@@ -50,6 +50,24 @@ import rig  # noqa: E402
 
 HB = rig.HEALBOT
 CHECKOUT = f"{HB}/opencode"
+
+# `opencode/` is DERIVED and gitignored, so a fresh clone or worktree does not have it. The
+# first thing to touch it here is `git -C` inside owned_set(), whose CalledProcessError
+# (exit 128, not a repository) reaches the gate's citations row as a raw traceback instead
+# of a cause. TESTED 2026-08-02 in a fresh worktree; the exit was already 1 (crash-guard
+# row plus a short run against the floor), so, like probe_twin.py's refusal, this is a
+# legibility fix rather than a correctness one. The check is for `.git`, the thing ls-files
+# actually needs: a half-rebuilt checkout directory without a repository would die the same
+# way a missing one does.
+if not os.path.exists(f"{CHECKOUT}/.git"):
+    print(
+        f"\n!! {CHECKOUT}/.git not found.\n"
+        "   `opencode/` is the derived checkout and is gitignored — a fresh clone does not\n"
+        "   have it. Rebuild it from fork/README.md, then re-run.\n",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
 SKIP = {".git", "node_modules", "venv", "__pycache__", "dist", "build", ".next", "hb"}
 
 # Historical prose, excluded BY NAME rather than by silently narrowing the walk. `REDO-PROMPT.md`
@@ -89,8 +107,9 @@ _owned = None
 
 
 def owned_set():
-    """Memoized union of both repositories. Resolved on first use rather than at import so a git
-    that fails or is missing surfaces as a failed check row, not an unframed traceback."""
+    """Memoized union of both repositories. The absent checkout is refused at startup, by the
+    guard beside CHECKOUT; any git failure past that resolves on first use inside the try, so
+    it surfaces as a failed check row rather than an unframed traceback."""
     global _owned
     if _owned is None:
         _owned = git_owned(HB) | git_owned(CHECKOUT)
