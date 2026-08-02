@@ -321,14 +321,18 @@ def home_paths():
         # A failed (or empty) enumeration is an UNMEASURED tree, not a clean one — reporting
         # PASS here is the ERROR-vs-PASS collapse the state lattice above exists to prevent.
         # The empty-list guard is the same claim: a healbot checkout with zero tracked files
-        # is not a scanned tree, it is a broken `git ls-files`.
+        # is not a scanned tree, it is a broken `git ls-files`. Carry only the FAILING
+        # command's output: when one call succeeds, its NUL-joined file list would bury the
+        # actual failure text in the record and in main()'s tail rendering.
+        fail = [r for r in (ls, others) if r["code"] != 0] or [ls]
+        diag = "\n".join(r["out"] for r in fail)
         return {
             "check": "home-paths",
             "why": "git ls-files failed — the tree could not be enumerated, nothing was measured",
             "cmd": "static", "code": None, "secs": round(time.time() - t0, 2),
-            "sha256": hashlib.sha256((ls["out"] + others["out"]).encode()).hexdigest(),
+            "sha256": hashlib.sha256(diag.encode()).hexdigest(),
             "tail": [f"ls code={ls['code']} others code={others['code']}"],
-            "state": ERROR, "out": ls["out"] + others["out"],
+            "state": ERROR, "out": diag,
         }
     out = ls["out"] + others["out"]
     hits = []
