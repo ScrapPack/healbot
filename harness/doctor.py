@@ -331,6 +331,16 @@ def check_claude_auth():
     WARN, never FAIL: a fresh clone has legitimately never logged in, and the fix is one
     interactive command. The tier summary is what carries the consequence. Identity fields in
     the JSON (email, org) are deliberately not printed — doctor output gets pasted around.
+
+    The detector has a side effect in a fresh root: the CLI's one-time migration ladder
+    (gated on `migrationVersion` in the UNTRACKED .claude.json) rewrites the TRACKED
+    settings.json on its first run — 2.1.220's step 13 flips exactly the alias "opus" to
+    "opus[1m]", inside a JSON round-trip that also reorders keys. Worktrees, pool slots, and
+    clones carry only the tracked half, so every fresh one is unstamped and THIS call is its
+    trigger. The guard below snapshots the bytes and restores exactly what this invocation
+    changed, keeping the stamp so the root never re-fires; dirt that predates the call is
+    left alone — the settings probe owns that finding, not doctor. Traps registry has the
+    full mechanism.
     """
     cfg = os.path.join(HARNESS, "claude")
     if not which("claude"):
@@ -339,7 +349,28 @@ def check_claude_auth():
     if not os.path.isdir(cfg):
         row(WARN, "harness claude auth", f"no config root at {cfg} — check_configs owns that finding")
         return
+    st = os.path.join(cfg, "settings.json")
+    try:
+        with open(st, "rb") as f:
+            pre = f.read()
+    except OSError:
+        pre = None  # no tracked half to protect; check_configs already reported it
     code, out = run(["claude", "auth", "status", "--json"], env_extra={"CLAUDE_CONFIG_DIR": cfg})
+    if pre is not None and os.path.isfile(st):
+        with open(st, "rb") as f:
+            post = f.read()
+        if post != pre:
+            try:
+                with open(st, "wb") as f:
+                    f.write(pre)
+                row(WARN, "claude CLI rewrote settings.json — restored",
+                    "the CLI's one-time settings migration ran in this unstamped root "
+                    "(2.1.220 flips the opus pin to opus[1m]); bytes restored, migration "
+                    "stamp in .claude.json kept so this root will not re-fire")
+            except OSError as exc:  # noqa: BLE001 — a tracked file left mutated is one finding
+                row(FAIL, "claude CLI rewrote settings.json — NOT restored",
+                    f"restore failed ({exc}) — revert harness/claude/settings.json by hand "
+                    "and keep .claude.json (the stamp prevents a re-fire)")
     if code is None:
         row(SKIP, "harness claude auth", f"could not run `claude auth status`: {out}")
         return
