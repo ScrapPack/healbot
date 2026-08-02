@@ -91,3 +91,10 @@ you recognize the red when it fires. HARNESS.md's "Traps" section is the canonic
 - **Environment mutation during a live study voids arms.** Check on-disk study state, not
   process liveness, before any script that touches global config (the apply-symlinks.sh
   incident). Full protocol: the paid-run-protocol skill.
+- **Skill twins sync by hand; sessions load the INSTALLED half.** `harness/skills/<name>.md`
+  (tracked) vs `~/.agents/skills/<name>/SKILL.md` (loaded by BOTH harnesses; the `.agents`
+  copy wins name collisions). No installer exists, so a repo edit that skips the copy serves
+  every live session a stale skill in green — MEASURED 2026-08-02, two days, on this very
+  skill while only firstmate was guarded. A red's direction is a diff's call, never assumed.
+  Guard: doctor's `skill twins` row (any machine) and probe_fleet_claude.py's population
+  sweep (main checkout).

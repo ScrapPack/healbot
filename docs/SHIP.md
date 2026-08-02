@@ -232,10 +232,12 @@ now carry a declared environment requirement (`rig.Env`, `gate/GATE.MAP.md` "Tie
 slot"): in a slot they record a counted, named SKIP and the tier's verdict is `declared-skip`;
 in the main checkout the requirements hold, the rows run, and the verdict is a plain `pass`.
 
-The probe is 44 rows now (floor 20 → 33 on 2026-08-01, → 44 on 2026-08-02 with the cockpit build
-(auth preflight + the re-runnable-`start` pane marker); `skip_max=2` throughout), because the first of the two was also split:
+The probe is 50 rows now (floor 20 → 33 on 2026-08-01, → 44 on 2026-08-02 with the cockpit build
+(auth preflight + the re-runnable-`start` pane marker), → 50 the same day when the twin check
+generalized from firstmate to the whole skills population; `skip_max=2` throughout), because
+the first of the two was also split:
 
-- **`probe_fleet_claude.py:192`, the CLAUDE.md symlink** — now four rows, of which only the
+- **`probe_fleet_claude.py:173`, the CLAUDE.md symlink** — now four rows, of which only the
   last is environment-bound. The symlink is untracked and ignored by the whitelist's catch-all
   `*` (`harness/claude/.gitignore:15`), so `git worktree add` never populates it; it is
   materialized by `env.claude.sh:34-36`'s `ln -s` at source time. What a slot CAN check, and
@@ -246,16 +248,23 @@ The probe is 44 rows now (floor 20 → 33 on 2026-08-01, → 44 on 2026-08-02 wi
   ever run on. Only "the link is on disk right now" is guarded, by
   `claude-config-materialized`. Still do NOT "fix" a slot by creating the file: `gate.py:204`
   bans that name anywhere in the tracked tree, which is the whole reason for the convention.
-- **`probe_fleet_claude.py:285`, the installed-skill twin**, guarded by `main-checkout`. It
-  compares `harness/skills/firstmate.md` against `~/.agents/skills/firstmate/SKILL.md`, which
+- **`probe_fleet_claude.py:383`, the skill twins**, guarded by `main-checkout`. Firstmate-only
+  until later on 2026-08-02, when `healbot-traps.md` was found to have drifted for two days
+  while the one guarded specimen held (HARNESS.md Traps has the row); now one aggregate row
+  compares every `harness/skills/<name>.md` against `~/.agents/skills/<name>/SKILL.md`, which
   is OUTSIDE the repo and holds one copy for the machine, installed from whichever checkout
-  last synced it. From a slot the comparison is the slot's canonical copy against main's
-  installed copy — green until the slot edits the skill, then red for a reason that is not
-  drift and that the crewmate must not fix (installing from a slot is a write outside its
-  worktree). The installed copy is synced at merge-back. MEASURED in slot-2 on 2026-08-01: it
-  was PASSING, which is the sharper argument for guarding it — a row whose colour is decided
-  by whether an unrelated edit has happened yet was never reporting into a slot's verdict
-  usefully in either direction.
+  last synced it. Around it: a census with a core-twin floor (a twin deleted from the repo
+  goes red instead of leaving its installed copy loading forever), frontmatter and
+  shell-hole sweeps over the discovered population, and a machine-state-free mutation leg
+  for the identity comparator. `doctor.py`'s `skill twins` row is the stdlib any-machine
+  half, and its FAIL gates BOTH workflow tiers. From a slot the comparison is the slot's
+  canonical copies against main's installed copies — green until the slot edits a skill,
+  then red for a reason that is not drift and that the crewmate must not fix (installing
+  from a slot is a write outside its worktree). The installed copies are synced at
+  merge-back. MEASURED in slot-2 on 2026-08-01, firstmate era: it was PASSING, which is the
+  sharper argument for guarding it — a row whose colour is decided by whether an unrelated
+  edit has happened yet was never reporting into a slot's verdict usefully in either
+  direction.
 
 A third environment-bound row lives in **`probe_backend.py`** (`corpus-dotted-path`), and it is
 the one that turns on the SHELL rather than the checkout — worth stating precisely, because
