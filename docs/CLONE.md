@@ -484,18 +484,29 @@ newest, reachable only from HARNESS.md's own Phase 13 section) and `docs/AFK.md`
 exit test is *"from this file alone you should be able to name the file that owns any given
 behavior"*, and for those two it does not hold. The README now says "most of them" and names
 the exceptions, which is honest but is not the repair. **The repair is left undone
-deliberately**: adding rows to that table shifts every line under it. MEASURED across the
-tracked tree, `HARNESS.md:NNN` is cited **18** times from **six** files — `docs/REVIEW.md`
-8, `docs/AFK.md` 4, the fork's `FEATURE-PLUGINS.MAP.md` 2, `gate/gate.py` 2, `PLAN.md` 1,
-`gate/GATE.MAP.md` 1 — of which **11 target lines below the table** and 2 land inside it.
-Repairing those means editing two dated phase records during a presentation pass, with a
-parallel session already writing to HARNESS.md. Named here so it is a task and not a
-silence. (The count in this sentence was itself a push-review finding at *error* severity:
-the first draft said "seventeen … from `docs/AFK.md` and `docs/REVIEW.md`", which was the
-count of distinct cited LINE NUMBERS across all six files, wearing the wrong noun. Third
-wrong count this pass, all three in paragraphs about wrong counts.) The same review also caught `docs/CLONE.md` — this file — being listed as live
-surface *and* excluded from "everything else is a dated phase record"; it is both, and the
-paragraph now says so.
+deliberately**: adding rows to that table shifts every line under it, and other files point
+at those lines. Counted over every tracked file, `HARNESS.md:NNN` appears **22** times
+across **7**. Four of those are inside `fork/healbot-fork.patch` and are not pointers at
+all — frozen text in a recorded diff, and two of them are the stale pointer at line 316 of
+HARNESS.md that §8.1 is about (written out rather than in live `file:line` form, per the
+citation-hygiene rule: the probe cannot tell a specimen from a pointer). That leaves **18 live pointers across 6 files**, of which **11 target a line
+below the table**. Repairing those means editing two dated phase records during a
+presentation pass, with a parallel session already writing to HARNESS.md. Named here so it
+is a task and not a silence.
+
+The same review also caught `docs/CLONE.md` — this file — being listed as live surface *and*
+excluded from "everything else is a dated phase record"; it is both, and the paragraph now
+says so.
+
+**And the census above took three tries.** First "seventeen citations from `docs/AFK.md` and
+`docs/REVIEW.md`" — a number carried over from a spot-check list run earlier in this session
+for a different question and never re-derived, which is the whole of its provenance; no
+reading of the citations yields it. Then "18 across six files", from a script whose file
+filter (`.md/.py/.ts/.sh`) was real but undeclared, so it silently dropped the patch and
+reported a scoped number as a repo-wide one. **An undeclared filter is an unmeasured claim
+wearing a measurement's clothes** — the same shape as §8.3's `RELEASED build`, in a
+different medium. Both were caught by the push review and neither by the author, in a
+paragraph whose subject is wrong counts.
 
 **And a third, from the push review of this very section.** Two findings, both real. The
 correction added to `fork/README.md` said "all five code paths in the overlay" while naming
