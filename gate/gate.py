@@ -315,8 +315,22 @@ def home_paths():
             "tail": [f"{len(broken)} matrix row(s) broken, first: {broken[0]!r}"],
             "state": ERROR, "out": "\n".join(repr(s) for s in broken),
         }
-    out = (sh(["git", "ls-files", "-z"])["out"]
-           + sh(["git", "ls-files", "-z", "--others", "--exclude-standard"])["out"])
+    ls = sh(["git", "ls-files", "-z"])
+    others = sh(["git", "ls-files", "-z", "--others", "--exclude-standard"])
+    if ls["code"] != 0 or others["code"] != 0 or not ls["out"].strip("\0"):
+        # A failed (or empty) enumeration is an UNMEASURED tree, not a clean one — reporting
+        # PASS here is the ERROR-vs-PASS collapse the state lattice above exists to prevent.
+        # The empty-list guard is the same claim: a healbot checkout with zero tracked files
+        # is not a scanned tree, it is a broken `git ls-files`.
+        return {
+            "check": "home-paths",
+            "why": "git ls-files failed — the tree could not be enumerated, nothing was measured",
+            "cmd": "static", "code": None, "secs": round(time.time() - t0, 2),
+            "sha256": hashlib.sha256((ls["out"] + others["out"]).encode()).hexdigest(),
+            "tail": [f"ls code={ls['code']} others code={others['code']}"],
+            "state": ERROR, "out": ls["out"] + others["out"],
+        }
+    out = ls["out"] + others["out"]
     hits = []
     for rel in out.split("\0"):
         if not rel or rel.startswith(HOME_EXEMPT):

@@ -23,6 +23,7 @@ import urllib.request
 # under test. Set HEALBOT_VERIFY_SCRATCH to keep or reuse a workspace deliberately.
 # term.py lives next to this file, not in the scratch dir.
 S = os.environ.get("HEALBOT_VERIFY_SCRATCH") or tempfile.mkdtemp(prefix="healbot-legacy-verify-")
+print(f"scratch root: {S}")   # a paid run's DB, logs and project dir land here — name it or lose it
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from term import Term  # noqa: E402
 
