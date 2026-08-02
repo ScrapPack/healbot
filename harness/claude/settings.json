@@ -2,11 +2,10 @@
   "env": {
     "DISABLE_AUTO_COMPACT": "1"
   },
-  "model": "opus",
-  "effortLevel": "xhigh",
   "permissions": {
     "defaultMode": "bypassPermissions"
   },
+  "model": "opus",
   "hooks": {
     "SessionStart": [
       {
@@ -39,6 +38,8 @@
       }
     ]
   },
+  "effortLevel": "xhigh",
   "theme": "dark",
-  "autoCompactEnabled": false
+  "autoCompactEnabled": false,
+  "skipDangerousModePermissionPrompt": true
 }

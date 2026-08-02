@@ -503,3 +503,59 @@ architecture on 2026-08-01; a claude-side growth measurement is what would verif
 lavish-axi (vendor bill vs. need), any nvim machinery (coexistence is the pool's job), and
 Claude Code's native `--tmux`/`--worktree` spawning (it owns naming and worktrees the
 fleet must own).
+
+---
+
+## The second machine, and the public repo (Phase 14, 2026-08-02)
+
+Windows parity for the daily-driver halves, an honest boundary around what stays
+POSIX-bound, and the public face of the repo (`github.com/ScrapPack/healbot` was already
+live and public; this phase made it navigable). Owner decision on record: **local models are
+not part of the PC setup** — the Mac's local-model pin is machine state outside this repo.
+
+| File | Owns |
+|---|---|
+| `README.md` | The public face: what this is, the repo map, both quickstarts, scope of the numbers |
+| `docs/WINDOWS.md` | PC bring-up: prerequisites, the native/WSL2 capability table, Mac-only stand-ins, and the INFERRED→TESTED conversion checklist. **Owns every platform claim** |
+| `docs/OPERATIONS.md` | The operator cheat sheet — commands only, no facts of its own, pointers win |
+| `harness/doctor.py` | Machine preflight: PASS/FAIL/WARN/SKIP rows + a tier summary of what THIS machine can carry. The feedback loop that replaces "should work on the PC" |
+| `.gitattributes` | `eol=lf` pinned repo-wide (bash-everywhere survives any clone's autocrlf), `*.patch -text` (byte-exact overlay), `*.db binary` |
+
+What actually had to change, each measured or source-verified rather than assumed:
+
+- **The path shape at the process boundary.** Git Bash hands native processes POSIX-shaped
+  `/c/...` paths, which they resolve against the drive root — reproducing env.sh's
+  "worst possible failure shape" (a silently empty config). `hb_nativepath()` (cygpath `-m`
+  on MSYS, identity elsewhere) now wraps every boundary-crossing export in `env.sh`,
+  `env.claude.sh`, and `fleet.sh`. The mechanism it protects is VERIFIED, not hoped:
+  opencode's config root comes from the `xdg-basedir` package
+  (`packages/core/src/global.ts:13`), which reads `$XDG_CONFIG_HOME` on every platform —
+  the Phase-14 sweep's contrary %APPDATA% claim was checked against the package source and
+  was wrong.
+- **The venv layout.** `gate/gate.py` and `gate/hooks/pre-push` resolve
+  `venv/Scripts/python.exe` when `venv/bin/python` is absent; a missing venv still reports
+  the same ERROR it always has. `tier2.py` inherits via its `PY` import.
+- **`probe_citations.py`'s resolver** compared normpath'd (os.sep) paths against a
+  `"/"`-joined needle — on Windows that never matches and the fallback silently widens to
+  every basename collision, in a Tier-1 gate check. The needle is os.sep-normalized now;
+  byte-identical behavior on POSIX.
+- **The crew-constraints materialization.** `ln -s` on Windows fails without Developer Mode
+  or silently degrades to a copy; env.claude.sh now falls back to a copy and refreshes it
+  whenever it drifts from `crew-constraints.md` (the drift was the silent wrong-belief
+  producer). The symlink path, and probe_fleet_claude's anchored assertion on it, are
+  untouched on POSIX.
+- **`python3` vs `python`.** fleet-state.sh resolves either (still fail-open); hb-fleet.sh's
+  `py()` likewise.
+- The line-number shifts these edits caused were re-derived, not offset: the `gate.py:204`
+  ban and the `harness/env.sh:63-68` shell-hole block are the two everything cites, and
+  `docs/RELAY.md`'s pointer to the RETIRE_HARD statement was found already 12 lines stale
+  and re-derived to `harness/env.sh:139`. Gate 14/14 after.
+
+The boundary, stated once (docs/WINDOWS.md carries the full table): **native Windows** runs
+the Claude Code workflow, the opencode workflow, and the gate under Git Bash; the **tmux
+fleet and the pty rig are WSL2 territory** (`term.py` imports `pty`/`termios`/`fcntl` at
+module load); the **pool is Mac-only** (APFS clonefile, and its `os.kill(pid, 0)` liveness
+probe would TERMINATE a lease holder on Windows). Still open, and honestly held: every
+native-Windows "yes" is INFERRED until `harness/doctor.py` and docs/WINDOWS.md's conversion
+checklist run on a real PC — this machine can verify mechanisms, not that machine's
+behavior.

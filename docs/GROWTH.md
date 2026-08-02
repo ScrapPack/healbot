@@ -177,7 +177,7 @@ re-open it as a defect. What it accepts, stated plainly so it is inherited hones
   guards.
 
 The corrections that shipped with the decision: `~190,000 → 184,852` in `HARNESS.md`,
-`docs/HARDEN.md` §6, `docs/RELAY.md` §1 and §5, and `harness/env.sh:98`; the model-pin constraint
+`docs/HARDEN.md` §6, `docs/RELAY.md` §1 and §5, and `harness/env.sh:113`; the model-pin constraint
 written into `HARNESS.md`'s Traps, `harness/env.sh` and this file.
 
 ---

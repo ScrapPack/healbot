@@ -24,7 +24,7 @@ EOF. All artifacts. So a candidate is only accepted if it actually CONTAINS the 
 `.md` citations prefer this repo over the checkout (both trees have a `PLAN.md`).
 
 SCOPE IS THE OTHER HALF OF THAT PROBLEM. Both the swept documents and the resolver's candidate
-set are FILES GIT OWNS — tracked, plus untracked-but-not-ignored, `gate.py:74-87`'s definition
+set are FILES GIT OWNS — tracked, plus untracked-but-not-ignored, `gate.py:78-91`'s definition
 applied to the whole tree instead of to one change. Walking the filesystem instead put state
 nobody wrote into both. MEASURED in the main checkout, gate run 20260801-115807: Claude Code's
 login auto-installed a plugin marketplace under `harness/claude/plugins/` (gitignored by that
@@ -64,7 +64,7 @@ CITE = re.compile(r"(?<![\w/])([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:ts|tsx|py|sh|jso
 
 def git_owned(root):
     """Absolute paths of every file git owns under `root`: tracked, plus untracked and not
-    ignored. Same pair of commands `gate.py:74-87` uses to decide what a change touches.
+    ignored. Same pair of commands `gate.py:78-91` uses to decide what a change touches.
 
     TWO repositories are asked, not one. `/opencode/` is gitignored wholesale by this repo
     (`.gitignore:5`) and is its own checkout, so asking only the outer repo would empty the index
@@ -160,7 +160,11 @@ def classify(cited, lo, hi, index):
     real finding from the 155 this probe's first draft invented.
     """
     cands = index.get(os.path.basename(cited), [])
-    suffix = [p for p in cands if p.endswith("/" + cited)] or cands
+    # Citations write "/" but the index holds normpath'd paths, which walk os.sep — on
+    # Windows a "/"-needle never matches and the fallback silently widens to every basename
+    # collision. Normalize the needle, which on POSIX is byte-identical to "/" + cited.
+    want = os.sep + cited.replace("/", os.sep)
+    suffix = [p for p in cands if p.endswith(want)] or cands
     if not suffix:
         return "NOFILE", cited
     # `.md` citations mean this repo's docs, not the checkout's copy of some upstream doc — both
@@ -172,7 +176,7 @@ def classify(cited, lo, hi, index):
     if not inrange:
         biggest = max(suffix, key=lambda p: len(lines_of(p) or []))
         return "PAST_EOF", f"{os.path.relpath(biggest, HB)} has {len(lines_of(biggest) or [])} lines"
-    exact = [p for p in inrange if p.endswith("/" + cited)]
+    exact = [p for p in inrange if p.endswith(want)]
     pick = (exact or inrange)[0]
     if all(not s.strip() for s in lines_of(pick)[lo - 1 : hi]):
         return "BLANK", os.path.relpath(pick, HB)

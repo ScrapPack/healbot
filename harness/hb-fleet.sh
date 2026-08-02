@@ -90,7 +90,7 @@ HARNESS_ROOT="$FLEET_ROOT" . "$FLEET_ROOT/env.claude.sh"
 
 t() { tmux -L "$HB_SOCKET" "$@"; }
 
-py() { python3 "$@"; }
+py() { if command -v python3 >/dev/null 2>&1; then python3 "$@"; else python "$@"; fi; }
 
 # Manifest: one JSON line per spawn — {name, pane, dir, sid, transcript, model, at}.
 # The durable join between tmux, the worktree, and the claude session; it survives

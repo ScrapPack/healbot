@@ -29,11 +29,26 @@ if [ ! -f "$HARNESS_ROOT/config/opencode/opencode.jsonc" ]; then
   return 1 2>/dev/null || exit 1
 fi
 
+# Path shape at the process boundary. Under Git Bash / MSYS on Windows, $PWD-derived paths
+# are POSIX-shaped (/c/Users/...); a NATIVE opencode/bun process resolves that against the
+# current drive root and lands on a directory with no config in it -- which is exactly the
+# empty-config silent failure the header above calls the worst shape here. cygpath -m
+# rewrites to C:/Users/... (forward slashes, so no quoting surprises); everywhere else this
+# is the identity. VERIFIED the mechanism itself is portable: opencode resolves its config
+# root through the xdg-basedir package (core/src/global.ts:13), which reads
+# $XDG_CONFIG_HOME on every platform, Windows included -- there is no %APPDATA% branch.
+hb_nativepath() {
+  case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*) cygpath -m "$1" 2>/dev/null || printf '%s\n' "$1";;
+    *) printf '%s\n' "$1";;
+  esac
+}
+
 # Config isolation. XDG_CONFIG_HOME is the ONLY thing that actually redirects the global
 # config root -- OPENCODE_CONFIG_DIR is additive and changes nothing about inheritance
 # (docs/SCAN.md C1, TESTED both ways). Global.Path.config is derived from xdgConfig at
 # module load, so this must be exported before opencode starts.
-XDG_CONFIG_HOME="$HARNESS_ROOT/config"
+XDG_CONFIG_HOME="$(hb_nativepath "$HARNESS_ROOT/config")"
 export XDG_CONFIG_HOME
 
 # Skill trees. Skills key off $HOME, not the config dir, so XDG isolation alone leaves all

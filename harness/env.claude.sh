@@ -34,6 +34,18 @@ fi
 if [ ! -e "$HARNESS_ROOT/claude/CLAUDE.md" ]; then
   ln -s crew-constraints.md "$HARNESS_ROOT/claude/CLAUDE.md" 2>/dev/null || true
 fi
+# Windows fallback. Under Git Bash, `ln -s` either fails without Developer Mode or silently
+# degrades to a COPY (MSYS default) -- and a copy that drifts from crew-constraints.md is a
+# crew running stale constraints with no error anywhere. So whenever CLAUDE.md exists as a
+# regular file (or the link attempt produced nothing), materialize it as a copy and refresh
+# it on every source when the bytes differ. On macOS/Linux the symlink exists, `-L` is
+# true, and this block is inert.
+if [ ! -L "$HARNESS_ROOT/claude/CLAUDE.md" ]; then
+  if [ ! -e "$HARNESS_ROOT/claude/CLAUDE.md" ] \
+     || ! cmp -s "$HARNESS_ROOT/claude/crew-constraints.md" "$HARNESS_ROOT/claude/CLAUDE.md"; then
+    cp "$HARNESS_ROOT/claude/crew-constraints.md" "$HARNESS_ROOT/claude/CLAUDE.md" 2>/dev/null || true
+  fi
+fi
 
 # Config isolation. CLAUDE_CONFIG_DIR redirects the ENTIRE user config root — settings,
 # CLAUDE.md, skills, agents, hooks, AND auth/state. TESTED (docs/SHIP.md §2): under a
@@ -57,7 +69,17 @@ fi
 #
 # Project-scope config (.claude/ under a session's cwd) is NOT redirected — that is the
 # deliberate keep, mirroring env.sh's project-AGENTS.md decision.
-CLAUDE_CONFIG_DIR="$HARNESS_ROOT/claude"
+#
+# hb_nativepath: same boundary rule as env.sh — a POSIX-shaped /c/Users/... path handed to
+# the native claude binary on Windows resolves wrongly and lands the session on a fresh,
+# signed-out config root. cygpath -m form (C:/...) is what crosses; identity elsewhere.
+hb_nativepath() {
+  case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*) cygpath -m "$1" 2>/dev/null || printf '%s\n' "$1";;
+    *) printf '%s\n' "$1";;
+  esac
+}
+CLAUDE_CONFIG_DIR="$(hb_nativepath "$HARNESS_ROOT/claude")"
 export CLAUDE_CONFIG_DIR
 
 # Compaction off, second half. The first half is "autoCompactEnabled": false in

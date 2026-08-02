@@ -50,7 +50,7 @@ STUDIES = f"{SP}/studies"
 RUNS = os.environ.get("HEALBOT_AB_RUNS", f"{SP}/hb/ab-runs")
 
 # The model under test, pinned identically in every arm. Changing this invalidates every
-# recorded run, the same way it invalidates HEALBOT_RETIRE_AT (harness/env.sh:108-111).
+# recorded run, the same way it invalidates HEALBOT_RETIRE_AT (harness/env.sh:123-126).
 PIN = {"providerID": "openai", "modelID": "gpt-5.6-sol"}
 
 

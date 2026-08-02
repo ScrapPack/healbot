@@ -111,7 +111,7 @@ arithmetic was one turn. RE-DERIVED IN PHASE 12 AS 289,296, margin 30.4%: both e
 the gate ever faces. The corpus now has a declared scope — `docs/OUTCOME.md` §11** —
 — anything at or above that can be carried off the cliff by one ordinary read-heavy turn.
 **180,000 + ~170K = ~350K, just inside.** That derivation is now carried in the code
-(`healbot.ts:106-117`, `healbot.tsx:25-31`, which points back here), in `harness/env.sh:98`, and
+(`healbot.ts:106-117`, `healbot.tsx:25-31`, which points back here), in `harness/env.sh:113`, and
 here, and it must travel
 with the number wherever the number is explained; 180,000 read as a preference rather than as a
 consequence is an invitation to raise it.
@@ -166,7 +166,7 @@ The shipped state, VERIFIED by opening each file:
   the gate wait.
 - **`RETIRE_HARD` is deleted, not disabled.** The constant, the `hard` variable, the guard, the env
   var and its half of the arming log line are gone from `healbot.ts` and `healbot.tsx`;
-  `HEALBOT_RETIRE_HARD` now reads nothing anywhere, which `harness/env.sh:112` states out loud for
+  `HEALBOT_RETIRE_HARD` now reads nothing anywhere, which `harness/env.sh:139` states out loud for
   anyone carrying it in an old shell profile. The intermediate position — keep it, marked INERT,
   because it becomes load-bearing again if the predicate is ever flipped — was the first decision's,
   and the predicate was flipped in the other direction instead.

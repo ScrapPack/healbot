@@ -21,7 +21,7 @@ channel, one file, zero contamination from the machine's 20+ external skills.
 THE FILENAME-BAN COLLISION, resolved by construction. Run dirs are TRACKED
 (hb/ab-runs/, .gitignore's un-ignore block) and this repo bans the SKILL.md filename
 in-tree (gate.py `BANNED`) because a body containing !`cmd` shell-executes on slash-invoke
-with no permission check (harness/env.sh:48-53, session/prompt.ts:1397-1408 at the pin).
+with no permission check (harness/env.sh:63-68, session/prompt.ts:1397-1408 at the pin).
 So the SNAPSHOT stores the delta body under a safe name (`files/_delta_skill.md`) and only
 `materialize()` writes a literal SKILL.md — into `hb/arms/`, which `.gitignore:48` ignores
 (only explicit negations escape `hb/*`). The same hole motivates `define()`'s content
@@ -61,7 +61,7 @@ BASE = f"{HEALBOT}/harness/config"
 LIVE = f"{SP}/hb/arms"  # ignored by .gitignore's hb/* rule — disposable, rebuildable
 OC = f"bun run --cwd {HEALBOT}/opencode/packages/opencode --conditions=browser src/index.ts"
 
-# The bang-backtick shell hole (harness/env.sh:48-53). A delta body carrying it would give
+# The bang-backtick shell hole (harness/env.sh:63-68). A delta body carrying it would give
 # the arm a slash command that executes shell with no permission gate — refuse at define().
 SHELL_HOLE = re.compile(r"!`[^`]*`")
 
@@ -108,7 +108,7 @@ def define(name, skill_name=None, skill_body=None):
             raise ValueError(
                 "delta skill body contains the !`cmd` shell-substitution pattern — a skill "
                 "body shell-executes on slash-invoke with no permission check "
-                "(harness/env.sh:48-53); refusing to build an arm around it")
+                "(harness/env.sh:63-68); refusing to build an arm around it")
     return {"name": name, "skill_name": skill_name, "skill_body": skill_body}
 
 

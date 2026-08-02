@@ -37,7 +37,7 @@ problem is that after the one-time login this directory holds CREDENTIAL state, 
 never be frozen into a run directory. Moved to `harness/claude/`, outside the frozen tree;
 `probe_fleet_claude.py` now asserts the separation structurally. Second collision from the
 same event: the crew memory file must be named `CLAUDE.md` for Claude Code to read it, and
-gate.py:200 bans exactly that name anywhere in the tracked tree — resolved by the repo's
+gate.py:204 bans exactly that name anywhere in the tracked tree — resolved by the repo's
 existing skills convention (safe name tracked: `crew-constraints.md`; real name
 materialized: env.claude.sh creates the `CLAUDE.md` symlink at source time, and the
 whitelist `.gitignore` keeps the symlink untracked).
@@ -232,7 +232,7 @@ also split:
   third row is new coverage the single row never had: delete the `ln -s` and the old check
   stayed green on every machine where the link already existed, which was every machine it had
   ever run on. Only "the link is on disk right now" is guarded, by
-  `claude-config-materialized`. Still do NOT "fix" a slot by creating the file: `gate.py:200`
+  `claude-config-materialized`. Still do NOT "fix" a slot by creating the file: `gate.py:204`
   bans that name anywhere in the tracked tree, which is the whole reason for the convention.
 - **`probe_fleet_claude.py:285`, the installed-skill twin**, guarded by `main-checkout`. It
   compares `harness/skills/firstmate.md` against `~/.agents/skills/firstmate/SKILL.md`, which

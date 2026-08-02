@@ -1,0 +1,12 @@
+# Every text file lands LF in the repo AND in the working tree, on every platform. The
+# harness's shell scripts, git hooks, and Claude Code hooks all execute under bash
+# everywhere (Git Bash on Windows), and a CRLF checkout kills them at the shebang with no
+# useful error. Pinned here so no clone's core.autocrlf can undo it; harness/doctor.py
+# checks the working-tree half on every run.
+* text=auto eol=lf
+
+# The fork overlay patch must stay byte-exact against base 7534d23 — never translated.
+*.patch -text
+
+# SQLite measurement corpus: binary, never diffed, never translated.
+*.db binary

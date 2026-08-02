@@ -28,7 +28,13 @@ EVENT="${1:-unknown}"
 mkdir -p "$HB_FLEET_DIR/state" 2>/dev/null || exit 0
 PAYLOAD="$(cat 2>/dev/null || true)"
 
-HB_EVENT="$EVENT" HB_STATE_DIR="$HB_FLEET_DIR/state" HB_PAYLOAD="$PAYLOAD" python3 -c '
+# python3 is the POSIX spelling; Windows installs ship `python` (and often no python3 at
+# all, or a Store stub). Resolve once, and stay fail-open: no interpreter means no state
+# file and an unharmed session, same contract as every other failure path here.
+PYBIN="$(command -v python3 2>/dev/null || command -v python 2>/dev/null)"
+[ -n "$PYBIN" ] || exit 0
+
+HB_EVENT="$EVENT" HB_STATE_DIR="$HB_FLEET_DIR/state" HB_PAYLOAD="$PAYLOAD" "$PYBIN" -c '
 import json
 import os
 import sys

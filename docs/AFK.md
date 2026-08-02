@@ -89,7 +89,7 @@ Per-run directory `<repo>/.gnhf/runs/<runId>/` (VERIFIED, `setupRun`/`resumeRun`
 
 **gnhf appends `.gnhf/runs/` to `.git/info/exclude`, not to `.gitignore`** — VERIFIED
 (`ensureRunMetadataIgnored` shells `git rev-parse --git-path info/exclude`). This matters for
-healbot specifically: `gate/gate.py:73-86` builds its untracked-file list with
+healbot specifically: `gate/gate.py:77-90` builds its untracked-file list with
 `git ls-files --others --exclude-standard`, which honours `info/exclude`, so **gnhf run metadata
 will not pollute the gate's changed-file set.** VERIFIED at both ends.
 
@@ -333,18 +333,18 @@ choice down.
 ### 3.2 The four banned filenames
 
 `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, `SKILL.md` are banned **anywhere in the tree**
-(HARNESS.md:9-13, now enforced at `gate/gate.py:200`). The first three auto-ingest into every
+(HARNESS.md:9-13, now enforced at `gate/gate.py:204`). The first three auto-ingest into every
 session's context via `packages/opencode/src/session/instruction.ts:64-68`; `SKILL.md` collides
-with opencode's `**/SKILL.md` skill glob — and per `gate/gate.py:203-210`, *"a `SKILL.md` body
+with opencode's `**/SKILL.md` skill glob — and per `gate/gate.py:207-214`, *"a `SKILL.md` body
 containing `` !`cmd` `` shell-executes on slash-invoke with no permission check
-(`harness/env.sh:48-53`, re-verified 2026-07-31 against 1.18.5 … still unfixed)."* Maps are
+(`harness/env.sh:63-68`, re-verified 2026-07-31 against 1.18.5 … still unfixed)."* Maps are
 `<DIR>.MAP.md`.
 
 Two live traps this creates for gnhf specifically:
 
 - **The gnhf package ships `skills/gnhf/SKILL.md`** (§1.9). An agent told to "install the gnhf
   skill" will copy a banned filename into the tree. Every prompt must forbid it explicitly.
-- **A committing loop hides the violation from the gate.** `gate/gate.py:73-86` with no `--base`
+- **A committing loop hides the violation from the gate.** `gate/gate.py:77-90` with no `--base`
   reports the *working tree*, and gnhf commits after every successful iteration — so the tree is
   clean and `changed_files` is empty, `lint()` skips, and `banned_names([])` returns PASS having
   checked nothing. VERIFIED at both ends. **Inside a gnhf loop the gate must always be run as

@@ -30,9 +30,12 @@ set -u
 
 ZERO=0000000000000000000000000000000000000000
 ROOT="$(git rev-parse --show-toplevel)"
-GATE=${HEALBOT_GATE:-"$ROOT/.carryover/verified/venv/bin/python $ROOT/gate/gate.py"}
-REVIEW=${HEALBOT_REVIEW_CMD:-"$ROOT/.carryover/verified/venv/bin/python $ROOT/gate/review.py"}
-PUBLISH=${HEALBOT_PUBLISH_CMD:-"$ROOT/.carryover/verified/venv/bin/python $ROOT/gate/publish.py"}
+VENVPY="$ROOT/.carryover/verified/venv/bin/python"
+# Windows venv layout puts the interpreter under Scripts/; fall through only when bin/ is absent.
+[ -x "$VENVPY" ] || VENVPY="$ROOT/.carryover/verified/venv/Scripts/python.exe"
+GATE=${HEALBOT_GATE:-"$VENVPY $ROOT/gate/gate.py"}
+REVIEW=${HEALBOT_REVIEW_CMD:-"$VENVPY $ROOT/gate/review.py"}
+PUBLISH=${HEALBOT_PUBLISH_CMD:-"$VENVPY $ROOT/gate/publish.py"}
 T0=$(date +%s)
 
 while read -r local_ref local_sha remote_ref remote_sha; do

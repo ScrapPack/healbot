@@ -50,7 +50,17 @@ LOG="${TMPDIR:-/tmp}/healbot-serve-$PORT.log"
 # FORK (`packages/tui/src/feature-plugins/system/healbot.tsx`), so the released `opencode` on
 # your PATH does not have it. Running this against the installed binary gets you the fleet
 # architecture and no control terminal — `/healbot` simply will not exist.
-FORK="$(cd "$FLEET_ROOT/.." 2>/dev/null && pwd)/opencode"
+# hb_nativepath: paths that cross into a NATIVE process (bun's --cwd, claude/opencode
+# flags) must be Windows-shaped under Git Bash; POSIX /c/... resolves wrongly there.
+# Identity everywhere else. Same rule and rationale as env.sh's copy.
+hb_nativepath() {
+  case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*) cygpath -m "$1" 2>/dev/null || printf '%s\n' "$1";;
+    *) printf '%s\n' "$1";;
+  esac
+}
+
+FORK="$(hb_nativepath "$(cd "$FLEET_ROOT/.." 2>/dev/null && pwd)/opencode")"
 if [ -n "${HEALBOT_OPENCODE:-}" ]; then
   OC="$HEALBOT_OPENCODE"
 elif [ -f "$FORK/packages/opencode/src/index.ts" ]; then
@@ -69,7 +79,7 @@ if [ ! -d "$PROJECT" ]; then
   echo "fleet.sh: project directory does not exist: $PROJECT" >&2
   exit 1
 fi
-PROJECT="$(cd "$PROJECT" && pwd)"
+PROJECT="$(hb_nativepath "$(cd "$PROJECT" && pwd)")"
 
 # shellcheck source=./env.sh
 HARNESS_ROOT="$FLEET_ROOT" . "$FLEET_ROOT/env.sh"

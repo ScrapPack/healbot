@@ -39,6 +39,10 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VERIFIED = f"{ROOT}/.carryover/verified"
 PY = f"{VERIFIED}/venv/bin/python"
+if not os.path.exists(PY) and os.path.exists(f"{VERIFIED}/venv/Scripts/python.exe"):
+    # Windows venv layout. The POSIX name stays the default so a missing venv still reports
+    # the same "executable not found" ERROR it always has.
+    PY = f"{VERIFIED}/venv/Scripts/python.exe"
 RUNS = os.environ.get("HEALBOT_GATE_RUNS", f"{ROOT}/gate/runs")
 
 # Typed terminal states. Borrowed verbatim from gated-harness's lattice
@@ -204,7 +208,7 @@ def banned_names(files):
     """HARNESS.md:9-13 bans four filenames anywhere in the tree: the first three auto-ingest into
     every session's context (session/instruction.ts), and SKILL.md collides with opencode's skill
     glob — which matters more than tidiness, because a SKILL.md body containing !`cmd`
-    shell-executes on slash-invoke with no permission check (harness/env.sh:48-53, re-verified
+    shell-executes on slash-invoke with no permission check (harness/env.sh:63-68, re-verified
     2026-07-31 against 1.18.5, the installed 1.18.0 and upstream 1.18.10 — still unfixed).
 
     The ban held for twelve phases on memory alone. This makes it a check."""
