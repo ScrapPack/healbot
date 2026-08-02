@@ -633,7 +633,7 @@ preflight)
   # What this machine can carry for a fleet run, before anything is built. Deliberately NOT a
   # second doctor.py: doctor answers "is this a working healbot checkout", this answers "can
   # `up` + `spawn` succeed right now", and auth is the row only this one can ask (doctor is
-  # stdlib-only and must not source env.claude.sh — this script already did, at line 89).
+  # stdlib-only and must not source env.claude.sh — this script already did, in its header).
   # Blockers exit 2, matching the gate's "a check ran and said no"; advisories never fail the
   # command, because every one of them costs only an optional pane.
   BLOCKED=0

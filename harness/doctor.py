@@ -344,14 +344,18 @@ def check_claude_auth():
         row(SKIP, "harness claude auth", f"could not run `claude auth status`: {out}")
         return
     try:
-        logged_in = json.loads(out).get("loggedIn") is True
+        parsed = json.loads(out).get("loggedIn")
     except (ValueError, AttributeError):
-        # Exit code is the documented interface; JSON is the convenience. If the shape ever
-        # changes, fall back rather than reporting a signed-in root as broken.
+        parsed = None
+    if not isinstance(parsed, bool):
+        # Exit code is the documented interface; JSON is the convenience. A parse failure and
+        # a shape change that keeps valid JSON (loggedIn renamed, dropped, or non-bool) are
+        # the same case: fall back rather than reporting a signed-in root as broken.
         logged_in = code == 0
         row(WARN if not logged_in else PASS, "harness claude auth",
-            f"`auth status --json` did not parse ({out[:80]!r}) — fell back to exit code {code}")
+            f"`auth status --json` gave no boolean loggedIn ({out[:80]!r}); fell back to exit code {code}")
         return
+    logged_in = parsed
     if logged_in:
         row(PASS, "harness claude auth", f"signed in at {os.path.relpath(cfg, ROOT)} "
                                          "(credential present; liveness unproven until the first turn)")
