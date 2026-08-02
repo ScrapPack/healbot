@@ -1,11 +1,11 @@
 """Does the claude fleet harness hold its shape? Zero model turns, zero API credits.
 
 Guards the Phase 13 cockpit build (docs/SHIP.md): the parity config dir, the fleet-state
-hook's fail-open contract, hb-fleet.sh's five load-bearing tmux guardrails, and the
-firstmate skill's canonical-vs-installed twin. Every predicate that reads source carries a
-mutation check — the same predicate re-run against a deliberately corrupted copy, required
-to fail — because a probe that cannot go red is decoration (the rig-assertion-discipline
-skill; probe_twin.py is the pattern source for the twin check).
+hook's fail-open contract, hb-fleet.sh's five load-bearing tmux guardrails, and every
+skill twin in harness/skills/ against its installed half. Every predicate that reads
+source carries a mutation check — the same predicate re-run against a deliberately
+corrupted copy, required to fail — because a probe that cannot go red is decoration (the
+rig-assertion-discipline skill; probe_twin.py is the pattern source for the twin check).
 
 The hook checks here are LIVE executions, not source reads: the hook's one prior defect
 (the heredoc consuming the payload's stdin) produced a script that was syntactically
@@ -32,8 +32,15 @@ HOOK = os.path.join(CFG, "hooks", "fleet-state.sh")
 FLEET = os.path.join(HARNESS, "hb-fleet.sh")
 ENVSH = os.path.join(HARNESS, "env.claude.sh")
 DOCTOR = os.path.join(HARNESS, "doctor.py")
-SKILL_CANON = os.path.join(HARNESS, "skills", "firstmate.md")
-SKILL_INSTALLED = os.path.expanduser("~/.agents/skills/firstmate/SKILL.md")
+SKILLS_DIR = os.path.join(HARNESS, "skills")
+INSTALLED_SKILLS = os.path.expanduser("~/.agents/skills")
+# The twin population is DISCOVERED (harness/skills/*.md), so a new twin joins the sweep
+# with no edit here — plainspec arrived untracked mid-build and was covered before its
+# first commit. The census floor below is the other half: these seven must exist, so a
+# twin DELETED from the repo goes red here instead of silently leaving its installed
+# copy loading forever.
+CORE_TWINS = {"citation-hygiene", "firstmate", "healbot-traps", "paid-run-protocol",
+              "phase-close", "rig-assertion-discipline", "tdd"}
 
 # `env.claude.sh` materializes the untracked half of the config root when it is sourced
 # (env.claude.sh:34-36's `ln -s`). `git worktree add` runs no shell, so a fresh pool slot has
@@ -54,8 +61,11 @@ CONFIG_MATERIALIZED = Env(
 # records `"count": 0`, which is the property firstmate asserts at merge-back.
 # 33 through the 2026-08-01 environment-requirement work. The 2026-08-02 cockpit build adds
 # eleven: nine for the auth preflight (four predicates, five mutation legs) and two for the
-# re-runnable-`start` pane marker. 44.
-r = Results(expect=44, skip_max=2)
+# re-runnable-`start` pane marker. 44. The 2026-08-02 skill-twin generalization (healbot-traps
+# drifted for two days while only firstmate was guarded) replaces the four firstmate rows
+# with eight population rows — census, frontmatter, shell-hole, identity, each with its
+# mutation leg — plus two doctor-wiring rows. 50.
+r = Results(expect=50, skip_max=2)
 
 
 def sh_n(path):
@@ -370,33 +380,82 @@ try:
     r.check("MUTATION: dropping the row from claude_ok is caught",
             not auth_row_gates_the_tier(doc.replace(', "harness claude auth")', ")", 1)))
 
-    # -- firstmate skill: canonical vs installed twin, and the shell-hole ban ------
-    canon = open(SKILL_CANON).read()
-    r.check("firstmate skill has frontmatter name and description",
-            canon.startswith("---") and "name: firstmate" in canon
-            and "description:" in canon)
+    # -- skill twins: harness/skills/*.md vs ~/.agents/skills/<name>/SKILL.md ------
+    # Generalized 2026-08-02 from the firstmate-only check, after the incident it could not
+    # see: healbot-traps.md gained two trap entries in the repo while the installed copy
+    # served the stale body for two days, in green, to every live session — BOTH harnesses
+    # load ~/.agents/skills (fork SKILL.MAP.md sources 1-2, the .agents copy winning name
+    # collisions). The guarded specimen held while the population drifted; guard the
+    # population.
+    twins = sorted(fn[:-3] for fn in os.listdir(SKILLS_DIR) if fn.endswith(".md"))
+    r.check("skill-twin census: every core twin is present in harness/skills/",
+            CORE_TWINS <= set(twins), f"found {twins}")
+    r.check("MUTATION: a census missing a core twin is caught",
+            not (CORE_TWINS <= set(twins) - {"firstmate"}))
+
+    bodies = {name: open(os.path.join(SKILLS_DIR, name + ".md")).read() for name in twins}
+
+    def loadable(name, s):
+        # What the loaders need: frontmatter fences, a name matching the stem (the installed
+        # path ~/.agents/skills/<name>/ is derived from it), a description to trigger on.
+        return s.startswith("---") and f"name: {name}" in s and "description:" in s
+
+    bad_front = [n for n in twins if not loadable(n, bodies[n])]
+    r.check("every twin carries loadable frontmatter (name matches its file stem, "
+            "description present)", not bad_front,
+            f"offenders: {bad_front}" if bad_front else f"{len(twins)} twins")
+    r.check("MUTATION: a stem-mismatched name is caught",
+            not loadable("firstmate", bodies["tdd"]))
 
     def no_shell_hole(s):
         return not re.search(r"!\s*`", s)
 
-    r.check("skill body contains no !`cmd` shell-substitution pattern "
-            "(the env.sh:63-68 hole class)", no_shell_hole(canon))
+    holes = [n for n in twins if not no_shell_hole(bodies[n])]
+    r.check("no twin body contains a !`cmd` shell-substitution pattern "
+            "(the env.sh:63-68 hole class)", not holes,
+            f"offenders: {holes}" if holes else f"{len(twins)} twins")
     r.check("MUTATION: an injected !`cmd` is caught",
-            not no_shell_hole(canon + "\nrun !`rm -rf /` now"))
+            not no_shell_hole(bodies[twins[0]] + "\nrun !`rm -rf /` now"))
 
     # ~/.agents/skills/ is OUTSIDE every worktree and holds ONE copy for the machine, installed
     # from whichever checkout last synced it — in practice the main one, since installing from a
     # slot is a write outside the crewmate's worktree and is banned. So from a slot this row
-    # compares the SLOT's canonical copy against MAIN's installed copy: green while the slot has
-    # not touched the skill, red the moment it does, and red for a reason that is not drift and
-    # that the slot must not "fix". VERIFIED 2026-08-01 in this slot: it passed, because the
-    # slot had not edited the skill — a row whose colour is decided by an unrelated edit is
-    # exactly the kind that should not be reporting into a slot's verdict at all. In the main
-    # checkout the requirement holds, the row runs, and a missing install is correctly red.
-    r.check("installed SKILL.md is byte-identical to the canonical copy "
-            "(twin drift, probe_twin's pattern)",
-            lambda: (open(SKILL_INSTALLED).read() if os.path.exists(SKILL_INSTALLED) else "") == canon,
-            f"canonical {len(canon)}B at {SKILL_CANON}", needs=MAIN_CHECKOUT)
+    # compares the SLOT's canonical copies against MAIN's installed copies: green while the slot
+    # has not touched a skill, red the moment it does, and red for a reason that is not drift
+    # and that the slot must not "fix" (the firstmate-era note, VERIFIED 2026-08-01, unchanged
+    # by the generalization). In the main checkout the requirement holds, the row runs, and a
+    # missing install is correctly red.
+    def installed_matches(name, canon, root=INSTALLED_SKILLS):
+        p = os.path.join(root, name, "SKILL.md")
+        return os.path.exists(p) and open(p).read() == canon
+
+    r.check("every twin's installed SKILL.md is byte-identical to its repo copy "
+            "(twin drift, probe_twin's pattern; doctor's `skill twins` row is the "
+            "any-machine half)",
+            lambda: all(installed_matches(n, bodies[n]) for n in twins),
+            f"{len(twins)} twins vs {INSTALLED_SKILLS}", needs=MAIN_CHECKOUT)
+    with tempfile.TemporaryDirectory() as td:
+        os.makedirs(os.path.join(td, "x"))
+        with open(os.path.join(td, "x", "SKILL.md"), "w") as f:
+            f.write("body")
+        r.check("MUTATION: the identity comparator passes a faithful copy, fails a "
+                "one-byte drift, fails an absent install (no machine state read)",
+                installed_matches("x", "body", root=td)
+                and not installed_matches("x", "bodyx", root=td)
+                and not installed_matches("absent", "body", root=td))
+
+    def twin_family_gates_both_tiers(s):
+        # Same decoration hazard as the auth row above, doubled: twin drift degrades BOTH
+        # workflows, so the doctor's family-matched FAIL must reach both tier verdicts.
+        # Family, not name — the row has three state-named spellings (tier_summary's crew
+        # constraints comment records why).
+        return (bool(re.search(r'twin_fail = any\(s == FAIL and n\.startswith\("skill twin"\)', s))
+                and s.count("not twin_fail") >= 2)
+
+    r.check("doctor's skill-twin family gates BOTH workflow tiers, not merely printed",
+            twin_family_gates_both_tiers(doc))
+    r.check("MUTATION: dropping the twin gate from one tier is caught",
+            not twin_family_gates_both_tiers(doc.replace(" and not twin_fail", "", 1)))
 except SystemExit:
     raise
 except Exception:

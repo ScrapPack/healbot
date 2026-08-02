@@ -361,6 +361,54 @@ def check_claude_auth():
             "screen. Fix once: . harness/env.claude.sh && claude   (sign in, then exit)")
 
 
+def check_skill_twins():
+    """Every harness/skills/<name>.md is the tracked half of a twin whose installed half at
+    ~/.agents/skills/<name>/SKILL.md is what live sessions actually load — BOTH harnesses:
+    claude via the ~/.claude/skills symlinks, opencode via its skill-manifest glob over
+    ~/.agents, where the .agents copy also wins name collisions (fork SKILL.MAP.md, sources
+    1-2). Nothing syncs them: no installer script exists, env.claude.sh only cites the
+    naming convention. Measured 2026-08-02: healbot-traps.md gained two trap entries in the
+    repo while the installed copy served the stale body for two days, in green, to every
+    session on this machine. This row is the sweep that did not exist that week.
+
+    Three honest states, crew-constraints' shape: identical (PASS), divergent or partially
+    installed (FAIL — a diff decides the direction; the doctor must not, because the
+    incident above was repo-newer and the opposite happens the day someone edits an
+    installed copy), and nothing installed at all (WARN — a machine that has not adopted
+    the convention yet gets bring-up guidance, not a defect report).
+    probe_fleet_claude.py owns the mutation-controlled main-checkout version of this claim;
+    this row is the stdlib, any-machine half.
+    """
+    canon_dir = os.path.join(HARNESS, "skills")
+    installed_root = os.path.expanduser(os.path.join("~", ".agents", "skills"))
+    names = sorted(f[:-3] for f in os.listdir(canon_dir)
+                   if f.endswith(".md")) if os.path.isdir(canon_dir) else []
+    if not names:
+        row(FAIL, "skill twins", f"no *.md under {canon_dir} — not a healbot checkout shape")
+        return
+    drifted, missing, same = [], [], []
+    for n in names:
+        inst = os.path.join(installed_root, n, "SKILL.md")
+        if not os.path.isfile(inst):
+            missing.append(n)
+            continue
+        with open(os.path.join(canon_dir, n + ".md"), "rb") as a, open(inst, "rb") as b:
+            (same if a.read() == b.read() else drifted).append(n)
+    if not drifted and not missing:
+        row(PASS, "skill twins", f"{len(same)}/{len(names)} installed copies byte-identical "
+                                 f"under {installed_root}")
+    elif not same and not drifted:
+        row(WARN, "skill twins not installed",
+            f"none of the {len(names)} twins exist under {installed_root} — live sessions "
+            "load none of them. Install: copy each harness/skills/<name>.md to "
+            "~/.agents/skills/<name>/SKILL.md")
+    else:
+        parts = [f"{n} (differs)" for n in drifted] + [f"{n} (not installed)" for n in missing]
+        row(FAIL, "skill twin drift", ", ".join(parts) +
+            " — live sessions load the installed half; diff to confirm direction, then copy "
+            "the newer over the older (no sync script exists)")
+
+
 # -- platform-bound tiers -------------------------------------------------------------
 
 
@@ -396,13 +444,19 @@ def tier_summary():
     # other than crew-constraints.md FAILs under the "materialized" name and left this tier
     # reading READY over a red row. Match the family, not a spelling.
     crew_fail = any(s == FAIL and n.startswith("crew constraints") for s, n, _ in ROWS)
-    claude_ok = ok("git", "claude", "claude harness settings", "harness claude auth") and not crew_fail
+    # Same family-matching rule for the skill twins (three state-named spellings), and FAIL
+    # only: the not-installed WARN is bring-up, not breakage. A drifted or half-installed
+    # twin set degrades BOTH workflows — claude and opencode load the same ~/.agents copies
+    # (fork SKILL.MAP.md sources 1-2) — so the gate reaches both tiers below.
+    twin_fail = any(s == FAIL and n.startswith("skill twin") for s, n, _ in ROWS)
+    claude_ok = ok("git", "claude", "claude harness settings", "harness claude auth") \
+        and not crew_fail and not twin_fail
     tiers.append(("claude code workflow (env.claude.sh + settings pin)",
                   claude_ok, "needs git, claude CLI, settings.json, constraints in sync, "
-                             "and the redirected root signed in"))
+                             "skill twins in sync, and the redirected root signed in"))
     tiers.append(("opencode workflow (env.sh + fork TUI/grid)",
-                  ok("bun", "opencode/ checkout", "opencode harness config"),
-                  "needs bun + the reconstituted checkout (fork/README.md)"))
+                  ok("bun", "opencode/ checkout", "opencode harness config") and not twin_fail,
+                  "needs bun + the reconstituted checkout (fork/README.md), skill twins in sync"))
     if KIND == "windows":
         tiers.append(("crew fleet (tmux) and rig/suite (pty)", None,
                       "WSL2-only on a PC, by design — not measurable from native Windows"))
@@ -436,6 +490,7 @@ def main():
         check_configs()
         check_claude_md()
         check_claude_auth()
+        check_skill_twins()
         check_fleet_and_rig()
     width = max(len(n) for _, n, _ in ROWS)
     for status, name, detail in ROWS:
