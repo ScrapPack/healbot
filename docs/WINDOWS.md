@@ -133,7 +133,9 @@ Everything below runs in **Git Bash inside Windows Terminal**, from the clone ro
 
 ## Mac-only pieces, and their PC stand-ins
 
-- **Corpus backup** (`harness/backup-opencode-db.sh` + LaunchAgent): the script's method
+- **Corpus backup** (`harness/backup-opencode-db.sh`, installed by
+  `harness/install-db-backup.sh`, which renders `__HOME__` into
+  `harness/com.healbot.opencode-db-backup.plist` at install time): the script's method
   (`VACUUM INTO`, integrity check, gzip, rename) is portable; its install (launchd, TCC,
   iCloud paths) is not. On a PC with paid corpus worth protecting, run the same VACUUM
   snapshot from Task Scheduler against `%USERPROFILE%\.local\share\opencode\opencode.db`

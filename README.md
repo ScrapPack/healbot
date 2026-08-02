@@ -43,6 +43,15 @@ the guards it produced are executable:
 | `.carryover/verified/` | The measurement rig: free probes, paid rigs, and the tracked corpus of paid session DBs the thresholds are derived from |
 | `docs/` | Phase docs (the evidence record), plus `OPERATIONS.md` (command cheat sheet) and `WINDOWS.md` (PC bring-up) |
 
+**Live surface vs. record**, because `docs/` holds both and the filenames do not say which:
+this README, `docs/OPERATIONS.md`, `docs/WINDOWS.md`, `docs/CLONE.md` and `harness/doctor.py`
+are what you read to *use* the repo. Everything else under `docs/` is a **dated phase record**
+— the evidence behind a number or a decision, written at the time and corrected in place by
+appending, never rewritten. You do not need any of it to run the harness; you need all of it
+before you argue with a figure. `HARNESS.md` indexes the records newest-first and says what
+each one settles.
+
+
 ## Quickstart — macOS / Linux
 
 ```sh
