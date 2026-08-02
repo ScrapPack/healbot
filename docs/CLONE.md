@@ -484,11 +484,16 @@ newest, reachable only from HARNESS.md's own Phase 13 section) and `docs/AFK.md`
 exit test is *"from this file alone you should be able to name the file that owns any given
 behavior"*, and for those two it does not hold. The README now says "most of them" and names
 the exceptions, which is honest but is not the repair. **The repair is left undone
-deliberately**: adding rows to that table shifts every line under it, and seventeen
-`HARNESS.md:NNN` citations from `docs/AFK.md` and `docs/REVIEW.md` land below the insertion
-point — repairing those means editing two dated records during a presentation pass, with a
+deliberately**: adding rows to that table shifts every line under it. MEASURED across the
+tracked tree, `HARNESS.md:NNN` is cited **18** times from **six** files — `docs/REVIEW.md`
+8, `docs/AFK.md` 4, the fork's `FEATURE-PLUGINS.MAP.md` 2, `gate/gate.py` 2, `PLAN.md` 1,
+`gate/GATE.MAP.md` 1 — of which **11 target lines below the table** and 2 land inside it.
+Repairing those means editing two dated phase records during a presentation pass, with a
 parallel session already writing to HARNESS.md. Named here so it is a task and not a
-silence. The same review also caught `docs/CLONE.md` — this file — being listed as live
+silence. (The count in this sentence was itself a push-review finding at *error* severity:
+the first draft said "seventeen … from `docs/AFK.md` and `docs/REVIEW.md`", which was the
+count of distinct cited LINE NUMBERS across all six files, wearing the wrong noun. Third
+wrong count this pass, all three in paragraphs about wrong counts.) The same review also caught `docs/CLONE.md` — this file — being listed as live
 surface *and* excluded from "everything else is a dated phase record"; it is both, and the
 paragraph now says so.
 
