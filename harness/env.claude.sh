@@ -136,3 +136,16 @@ export DISABLE_AUTO_COMPACT
 #                                residual dialogs -- the bypass-mode acceptance dialog and
 #                                the per-directory trust dialog both still block a crewmate
 #                                until a human answers, and the fleet must see that.
+
+# UNSET, on purpose: CLAUDE_CODE_CHILD_SESSION. Claude Code stamps this marker into the
+# environment of every Bash it spawns, so a `claude` launched from inside another session's
+# tooling inherits it -- and 2.1.220 answers an inherited marker by silently disabling
+# transcript saving, with only a status-line warning. MEASURED 2026-08-02: the staging-polish
+# crew session ran a full afternoon writing no transcript jsonl, idle housekeeping reaped its
+# empty projects/ munge dir at 15:00:23 (rmdir-if-empty), and docs/CLONE.md briefly recorded
+# the shrunken corpus as the baseline environment. A transcript-less crewmate breaks
+# hb-fleet.sh's `claude --resume` path and crew-constraints.md's "your transcript is the
+# record", and crew spawned THROUGH Claude tooling is the normal fleet case here -- so the
+# marker is cleared deliberately: sessions under this harness are first-class, however
+# they were launched.
+unset CLAUDE_CODE_CHILD_SESSION
