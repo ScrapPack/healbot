@@ -261,7 +261,9 @@ NOT_PARTICIPLE = {"often", "even", "open", "seven", "when", "then", "between", "
                   "deed", "feed", "greed", "children", "burden", "garden", "kitchen",
                   "thirteen", "fourteen", "fifteen", "sixteen", "seventeen",
                   "eighteen", "nineteen"}
-OPENERS = re.compile(r"\b(in this document|as you may know|before we begin|"
+# "in this document" is an opener only at sentence start; mid-sentence it is a
+# legitimate self-reference (measured: all four corpus hits were self-references).
+OPENERS = re.compile(r"^in this document\b|\b(?:as you may know|before we begin|"
                      r"it should be noted|first of all)\b", re.I)
 CLOSERS = re.compile(r"\b(in summary|in conclusion|to recap|going forward)\b", re.I)
 BOLD_FRAGMENT = re.compile(r"^\*\*([^*]+)\*\*")
@@ -547,6 +549,8 @@ FIXTURES = [
     ("R11", "fire", "", "In this document we describe the parser."),
     ("R11", "fire", "", "In summary, the parser is fast."),
     ("R11", "clean", "", "The parser caches tokens between runs."),
+    # a mid-sentence self-reference is not an opener
+    ("R11", "clean", "", "Every number in this document depends on the model pin."),
     # R12: the word cap has its own fixture, free of the other two sub-checks
     ("R12", "fire", "strict",
      "1. Run the complete installer bundle for the primary node of the staging "

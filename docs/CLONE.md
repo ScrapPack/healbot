@@ -80,7 +80,7 @@ and present in exactly **3 of 10** probes. The seven without it were the seven o
 
 **(b) A timeout raises nothing at all.** `wait_for()` (`rig.py:593-604`) prints
 `!! timed out waiting for …` and returns `None`. No exception, so guard (a) would not have caught
-it either — the probe simply runs fewer assertions. This is `probe_headless_arm` reporting
+it either — the probe runs fewer assertions. This is `probe_headless_arm` reporting
 `1/1 passed` and exit 0 after ninety seconds of waiting for a server that could never start.
 
 Two different mechanisms, one symptom, so the fix goes where the symptom is: **`Results` now takes
@@ -238,7 +238,7 @@ way, and a future phase seeing them drift must not read that as a signal about t
 | max, start ≥ 50K / 100K / 150K | 70,704 / 70,704 / 32,673 | **identical, same n** |
 
 This is the first evidence that the derivation is **stable under corpus growth**, and Phase 8 could
-not have had it — it had one corpus and no way to tell a robust maximum from an artifact of the
+not have had it — it had one corpus and no way to tell a stable maximum from an artifact of the
 particular sessions on disk. Twelve new turns moved three percentiles by a few hundred tokens and
 moved no maximum, no bound and no conditional. That is a genuinely better position than a re-run
 that merely reproduced the same digits, and it was free.
