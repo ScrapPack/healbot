@@ -71,7 +71,7 @@ Exit codes are the interface: **0 pass · 2 blocked · 3 error** (`gate/GATE.MAP
 | `venv/bin/python probe_citations.py` (from `.carryover/verified`) | The citation sweep alone — run before editing any doc with `file:line` citations (citation-hygiene skill) |
 | `sqlite3 <db> 'PRAGMA wal_checkpoint(TRUNCATE);'` | Before committing a corpus DB update, fold its WAL in so the tracked bytes are self-contained (`.gitignore`'s corpus block) — and remember the tier2 ordering trap above |
 | — | A NEW paid DB needs its own negation line in `.gitignore` or it is silently unprotected (the file says so at the corpus block) |
-| `bash harness/backup-opencode-db.sh` | Snapshot the LIVE opencode DB by hand; the scheduled install is macOS launchd (script header). PC recipe: `docs/WINDOWS.md` |
+| `bash harness/backup-opencode-db.sh` | Snapshot the LIVE opencode DB by hand; the scheduled install is `bash harness/install-db-backup.sh` (macOS launchd, renders the plist's `__HOME__`). PC recipe: `docs/WINDOWS.md` |
 | Paid rigs (`verify_*.py`), studies, smoke | **Ask first, every time** — the paid-run-protocol skill owns costing, corpus freeze, and accounting. Never set `XDG_DATA_HOME` |
 
 ## Skills

@@ -2,10 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- Daily backup of the live opencode.db. See harness/backup-opencode-db.sh for the why,
      the method, and the TCC constraint that forces the libexec copy (launchd bash cannot
-     read ~/Desktop). Install:
-       cp harness/backup-opencode-db.sh ~/.local/libexec/healbot/
-       cp harness/com.healbot.opencode-db-backup.plist ~/Library/LaunchAgents/
-       launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.healbot.opencode-db-backup.plist
+     read ~/Desktop). The home placeholders in the path strings below are rendered to the
+     real home at install time — launchd expands neither ~ nor environment variables in
+     ProgramArguments/log paths. Install (or re-install after editing either file):
+       bash harness/install-db-backup.sh
      Fires daily at 13:00; launchd runs a missed firing on next wake (skipped if powered off). -->
 <plist version="1.0">
 <dict>
@@ -14,7 +14,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>/Users/brittonwerdell/.local/libexec/healbot/backup-opencode-db.sh</string>
+    <string>__HOME__/.local/libexec/healbot/backup-opencode-db.sh</string>
   </array>
   <key>StartCalendarInterval</key>
   <dict>
@@ -24,8 +24,8 @@
     <integer>0</integer>
   </dict>
   <key>StandardOutPath</key>
-  <string>/Users/brittonwerdell/Library/Logs/healbot-opencode-db-backup.log</string>
+  <string>__HOME__/Library/Logs/healbot-opencode-db-backup.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/brittonwerdell/Library/Logs/healbot-opencode-db-backup.log</string>
+  <string>__HOME__/Library/Logs/healbot-opencode-db-backup.log</string>
 </dict>
 </plist>

@@ -477,4 +477,4 @@ rather than recording the corrections only here.
 ---
 
 *Raw findings, per-agent evidence and the skeptic reviews are in the workflow journal:*
-`~/.claude/projects/-Users-brittonwerdell-Desktop-healbot/9e0e754c-1daa-45ea-adec-073b3b86496b/subagents/workflows/wf_b44d22b6-e8d/journal.jsonl`
+`~/.claude/projects/<repo-path-slug>/9e0e754c-1daa-45ea-adec-073b3b86496b/subagents/workflows/wf_b44d22b6-e8d/journal.jsonl`

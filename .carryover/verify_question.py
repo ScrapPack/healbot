@@ -10,16 +10,20 @@ Claude-code and external skills are switched off for the same reason.
 """
 
 import json
+import os
 import sys
 import threading
 import time
 import urllib.request
 
-S = "/private/tmp/claude-501/-Users-brittonwerdell-Desktop-Everything-For-The-Union-Vintage/f304ddb9-e40e-42ce-bbdc-4f3d2b0d031b/scratchpad"
-sys.path.insert(0, S)
+# Scratch root for the rig's isolated XDG roots, DB and project dir — overridable, disposable.
+# term.py lives next to this file (not in the scratch dir, where the original session had it).
+S = os.environ.get("HEALBOT_VERIFY_SCRATCH", "/tmp/healbot-legacy-verify")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from term import Term  # noqa: E402
 
-REPO = "/Users/brittonwerdell/Desktop/healbot/opencode"
+REPO = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "opencode")
+os.makedirs(f"{S}/hb/project", exist_ok=True)
 BASE = "http://127.0.0.1:4601"
 results = []
 

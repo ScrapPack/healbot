@@ -1,13 +1,13 @@
 # gnhf in healbot — specification
 
-**Written** 2026-07-31 · **gnhf** 0.1.43 · **repo** `/Users/brittonwerdell/Desktop/healbot` @ `76b23cc` (branch `main`)
+**Written** 2026-07-31 · **gnhf** 0.1.43 · **repo** `~/Desktop/healbot` @ `76b23cc` (branch `main`)
 
 Every claim below is tiered per this project's method: **TESTED** (I ran it) / **VERIFIED** (I read
 the code, cited) / **INFERRED** (stated link is not measured) / **SUSPECTED**. No loop was run —
 nothing in this document cost a model turn beyond the session that wrote it. **Nothing in
 `~/Desktop/healbot` was modified.**
 
-Companion artifacts, all in the same scratchpad directory as this file:
+Companion artifacts, all in the session scratchpad directory (below, `$SCRATCH`):
 
 | File | What it is |
 |---|---|
@@ -225,13 +225,13 @@ went stale (NEXT.md is frozen to task + pointers and no longer carries them).
 ```sh
 cd ~/Desktop/healbot
 GNHF_TELEMETRY=0 REPO=~/Desktop/healbot STALL_MIN=25 MAX_HOURS=8 \
-/private/tmp/claude-501/-Users-brittonwerdell-Desktop-healbot/416921f2-86a2-4b1e-a255-cdae7f56921a/scratchpad/gnhf-watch.sh \
+"$SCRATCH"/gnhf-watch.sh \
   --agent claude \
   --max-iterations 12 \
   --max-tokens 4000000 \
   --prevent-sleep on \
   --stop-when "gate/gate.py --base main exits 0 AND every probe_*.py in .carryover/verified exits 0" \
-  "$(cat /private/tmp/claude-501/-Users-brittonwerdell-Desktop-healbot/416921f2-86a2-4b1e-a255-cdae7f56921a/scratchpad/prompt-free-probes.md)"
+  "$(cat "$SCRATCH"/prompt-free-probes.md)"
 ```
 
 Why these numbers: iterations sized at one per probe (count probe_*.py at launch; the sweep
@@ -259,13 +259,13 @@ completion predicate in the suite in 9 ms.
 ```sh
 cd ~/Desktop/healbot
 GNHF_TELEMETRY=0 REPO=~/Desktop/healbot STALL_MIN=20 MAX_HOURS=6 \
-/private/tmp/claude-501/-Users-brittonwerdell-Desktop-healbot/416921f2-86a2-4b1e-a255-cdae7f56921a/scratchpad/gnhf-watch.sh \
+"$SCRATCH"/gnhf-watch.sh \
   --agent claude \
   --max-iterations 8 \
   --max-tokens 3000000 \
   --prevent-sleep on \
   --stop-when "three distinct vacuous assertions have been hardened, each with a mutation whose RED was observed and recorded, and probe_rig_contract.py is green at 29/29 or higher" \
-  "$(cat /private/tmp/claude-501/-Users-brittonwerdell-Desktop-healbot/416921f2-86a2-4b1e-a255-cdae7f56921a/scratchpad/prompt-vacuous-hunt.md)"
+  "$(cat "$SCRATCH"/prompt-vacuous-hunt.md)"
 ```
 
 Note the deliberate asymmetry with (a): a shorter stall window (20 min — this work is
@@ -291,13 +291,13 @@ three ~130 KB ledgers read in full plus file creation.
 # verify_handoff.py and on nothing else.
 cd ~/Desktop/healbot
 GNHF_TELEMETRY=0 REPO=~/Desktop/healbot STALL_MIN=20 MAX_HOURS=2 \
-/private/tmp/claude-501/-Users-brittonwerdell-Desktop-healbot/416921f2-86a2-4b1e-a255-cdae7f56921a/scratchpad/gnhf-watch.sh \
+"$SCRATCH"/gnhf-watch.sh \
   --agent claude \
   --max-iterations 3 \
   --max-tokens 1500000 \
   --prevent-sleep on \
   --stop-when "verify_handoff.py has been executed exactly once, its real exit code and score are recorded, and every document quoting 21/21 has been corrected to the measured value" \
-  "$(cat /private/tmp/claude-501/-Users-brittonwerdell-Desktop-healbot/416921f2-86a2-4b1e-a255-cdae7f56921a/scratchpad/prompt-paid-handoff.md)"
+  "$(cat "$SCRATCH"/prompt-paid-handoff.md)"
 ```
 
 Caps rationale: `--max-iterations 3` bounds *iterations*, not dollars — the spend is one rig
@@ -431,7 +431,7 @@ TESTED (`bash -n` clean; the stall detector correctly fires on a 157-minute-old 
 correctly does **not** fire on an empty runs directory):
 
 ```
-/private/tmp/claude-501/-Users-brittonwerdell-Desktop-healbot/416921f2-86a2-4b1e-a255-cdae7f56921a/scratchpad/gnhf-watch.sh
+"$SCRATCH"/gnhf-watch.sh
 ```
 
 Mechanism: poll every 60 s; find the newest mtime across `.gnhf/runs/**/iteration-*.jsonl`

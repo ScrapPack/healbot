@@ -14,10 +14,8 @@
 # launchd-spawned /bin/bash gets "Operation not permitted" reading anything under ~/Desktop,
 # so the agent runs a COPY of this script from ~/.local/libexec/healbot/, not this file.
 # iCloud Drive is NOT blocked for the agent (same test). THIS repo copy is canonical; after
-# editing it, re-install:
-#   cp harness/backup-opencode-db.sh ~/.local/libexec/healbot/
-#   cp harness/com.healbot.opencode-db-backup.plist ~/Library/LaunchAgents/
-#   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.healbot.opencode-db-backup.plist
+# editing it, re-install (renders the plist's __HOME__ placeholder, refreshes both copies):
+#   bash harness/install-db-backup.sh
 # Daily at 13:00; launchd runs a missed firing on next wake (skipped if powered off).
 # Log: ~/Library/Logs/healbot-opencode-db-backup.log
 # Run by hand any time: bash harness/backup-opencode-db.sh
