@@ -109,3 +109,9 @@ boundaries, venv layouts, LF pinning, the doctor) landed 2026-08-02 with the hon
 that Windows end-to-end runs are verified by running `harness/doctor.py` *on that machine*,
 not by this repo's history. Nothing here is packaged for reuse; it is a working lab whose
 value is the record.
+
+## License
+
+MIT — see `LICENSE`, including its third-party notice: the `fork/` overlay and its patch
+derive from [sst/opencode](https://github.com/sst/opencode) (MIT, Copyright (c) 2025
+opencode), and the reconstituted `opencode/` checkout carries upstream's own license file.
