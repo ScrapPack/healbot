@@ -295,7 +295,7 @@ def finally_ends_on_verdict(src):
     verified by hand, was exactly the kind of thing that should not stay verified by hand.
 
     Rigs with no `try/finally` are vacuously fine and say so by returning True: they exit at module
-    level and an escaping exception simply propagates (`probe_twin.py`, `probe_turn_growth.py`,
+    level and an escaping exception propagates (`probe_twin.py`, `probe_turn_growth.py`,
     `probe_turn_predicate.py`).
     """
     tree = ast.parse(src)

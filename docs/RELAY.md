@@ -331,7 +331,7 @@ It tests **the real source text**, not a copy. The predicate is extracted from
 `harness/config/opencode/plugin/healbot.ts` by brace-matching `function turnFinished(`, stripped of
 its TypeScript annotations with two regexes, and evaluated in `node` — so a re-implementation of the
 predicate inside the probe, which would prove nothing about what ships, is never written. It cannot
-simply import the function instead: `getLegacyPlugins` (`plugin/index.ts:95-108`) walks
+import the function instead: `getLegacyPlugins` (`plugin/index.ts:95-108`) walks
 `Object.values(mod)` and pushes **every** export through `getServerPlugin` (`:88-93`) — a bare
 function is accepted as a plugin and later invoked as one — so exporting a helper to make it
 testable turns the predicate into a second plugin. Extraction is the price of that, and the probe's

@@ -160,7 +160,7 @@ Four options went to the owner, cheapest first:
 2. **Lower to ~150,000.** Restores a ~35K cushion above the pinned model's measured worst turn, at
    the price of shorter sessions and more handoffs.
 3. **Lower to ~136,000.** Satisfies the rule against the *whole* corpus including other models —
-   i.e. makes the threshold robust to a change of model pin. Materially shorter sessions.
+   i.e. makes the threshold insensitive to a change of model pin. Materially shorter sessions.
 4. **Restore a second, mid-turn gate.** The thing `RETIRE_HARD` was drawn for, deleted in Phase 7 for
    good reasons (it was inert — under the *old* per-step predicate. Under the current per-turn one it
    would not be). The only option that decouples the threshold from `worst_turn` again, and the only

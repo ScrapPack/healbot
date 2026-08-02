@@ -36,7 +36,7 @@ failed. VERIFIED by reading all twelve paid entrypoints; three of them (`verify_
 carry.** TESTED with a two-line A/B on the shipped `Results`: the old shape, given one failing
 assertion and no exception, prints `1/2 passed` and exits **0**; the new shape, same assertions,
 exits **1**. But a rig that *crashes* always exited 1 even before this phase — with no `sys.exit`
-in the `finally`, the exception simply propagates and Python sets the status itself. So the defect
+in the `finally`, the exception propagates and Python sets the status itself. So the defect
 is exactly: **a clean failing assertion is invisible to the shell.** That is not a lesser bug here,
 because it is precisely the state `verify_surface.py` sat in for five phases (17/18, no exception)
 and precisely what a wrong model pin does to `smoke.py` — `:27`, `:45` and `:50` are plain
@@ -218,7 +218,7 @@ probe, all of them the same species as the findings above.
   ends on `sys.exit(0 if ok else 1)`.
 
 A first version of predicate 3 demanded a guard unconditionally and flagged `probe_twin.py`, which
-has no `try` at all and is therefore safe — an exception simply propagates. Satisfying that check
+has no `try` at all and is therefore safe — an exception propagates. Satisfying that check
 would have meant reindenting 190 lines to fix nothing. The predicate now states the defect exactly:
 the danger is the **combination** of a `finally` that exits and no handler recording the crash.
 
