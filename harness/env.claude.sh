@@ -58,14 +58,26 @@ fi
 #      real one. Do not "fix" this by analogy in either direction.
 #   2. AUTH DOES NOT FOLLOW. First use of this harness requires one interactive login:
 #      run `claude` once after sourcing this file and sign in. Until then every crew spawn
-#      lands on a signed-out session. WHERE the credential lands is macOS-subtle (review
-#      finding, VERIFIED): the real install's OAuth token lives in the login KEYCHAIN
-#      (`security find-generic-password -s "Claude Code-credentials"` returns it and
-#      ~/.claude/.credentials.json does not exist), with a .credentials.json file only as
-#      a fallback path in the binary. So the harness login may SHARE the owner's keychain
-#      item rather than isolate — settle it at the first login and record the answer in
-#      docs/SHIP.md §5. The whitelist .gitignore covers the file-fallback case either way:
-#      nothing credential-shaped can be committed.
+#      lands on a signed-out session — since 2026-08-02 `hb-fleet.sh preflight` and
+#      doctor.py both NAME that state, instead of leaving it to a ready-wait timeout that
+#      reports only the symptom.
+#
+#      WHERE the credential lands is SETTLED (MEASURED 2026-08-02), and the answer replaces
+#      the "may share the owner's item" reading this block used to carry: it ISOLATES. On
+#      macOS the token is a login KEYCHAIN item, not a file — ~/.claude/.credentials.json
+#      does not exist — and the service name is DERIVED FROM THE CONFIG ROOT: the default
+#      root uses the bare service name, a redirected root gets that name plus a suffix taken
+#      from a hash of CLAUDE_CONFIG_DIR. Two items exist on this machine, one per root, each
+#      created at its own login. Two consequences: a harness logout does NOT touch the main
+#      install's auth, and the harness root must be logged in once per machine on its own.
+#
+#      The isolation claim is cross-checked, not inferred from the item names alone: an empty
+#      redirected root reports signed out while the owner's default root reports signed in,
+#      and a redirected root holding a COPIED .claude.json with a complete oauthAccount block
+#      STILL reports signed out — so the profile file is not the credential, and no amount of
+#      config-dir copying carries a login across. The whitelist .gitignore covers the
+#      file-fallback case on platforms with no keychain: nothing credential-shaped can be
+#      committed either way.
 #
 # Project-scope config (.claude/ under a session's cwd) is NOT redirected — that is the
 # deliberate keep, mirroring env.sh's project-AGENTS.md decision.

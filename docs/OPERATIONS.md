@@ -45,6 +45,9 @@ script's own header and `docs/SHIP.md`.
 
 | Command | What |
 |---|---|
+| `hb-fleet.sh start [--no-nvim] [--no-grid]` | **The verb.** Preflight, then `up` with the optional panes detected rather than flagged, then attach. Idempotent: re-running on a live fleet reattaches |
+| `hb-fleet.sh help` | The command card + cockpit key map. Same text as `C-b ?` in the cockpit and the bridge pane's banner — the script header is the single owner |
+| `hb-fleet.sh preflight` | Can this machine run a fleet right now? Auth, tmux (and whether it has `display-popup`), nvim, checkout+bun, rig venv. Blockers exit 2; advisories only cost an optional pane |
 | `hb-fleet.sh up [--nvim] [--grid]` | Bring the fleet session up (idempotent); `--grid` adds a fleet.sh viewport pane |
 | `hb-fleet.sh spawn <name> --dir DIR [--model M] [--brief FILE] [--slot]` | One crewmate; `--slot` leases a pool worktree (`harness/pool.py`, Mac-only) |
 | `hb-fleet.sh ls` / `state [name]` | Census (manifest × live panes) / per-crew liveness + hook channel + screen read |
@@ -101,7 +104,7 @@ these are the ones operators actually hit.
 | Grid's `x` retires nothing | The server plugin is not loaded (harness config not applied) — retirement lives ONLY there since Phase 7 |
 | API/grid shows 0 sessions | Missing `x-opencode-directory` header / wrong project dir — you are addressing a different instance |
 | Session boots with no model pin | Wrong `HARNESS_ROOT` (env.sh refuses loudly) — or on Windows, a POSIX-shaped path crossed the process boundary; run the doctor |
-| Crewmate spawns signed out | The redirected config root needs its one-time login (env.claude.sh header) |
+| Crewmate spawns signed out | The redirected config root needs its one-time login (env.claude.sh header). `spawn` refuses on this now rather than timing out — if you are seeing a login screen instead of a refusal, the token EXPIRED rather than being absent, which the detector cannot see |
 | Crew constraints stale on a PC | `CLAUDE.md` is a copy there, not a symlink — re-source `harness/env.claude.sh` (it refreshes drift); the doctor flags it |
 | Fleet `state` says "no hook events" forever | `HB_FLEET_DIR` unset (interactive shells are hook-silent by design), or no `python`/`python3` on PATH — the hook is fail-open and will not error |
 | A probe prints green on a fresh clone | Green is not evidence that anything ran — floors catch it now, but read `docs/CLONE.md` before trusting any suite run from a new environment |

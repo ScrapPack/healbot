@@ -31,6 +31,7 @@ CFG = os.path.join(HARNESS, "claude")
 HOOK = os.path.join(CFG, "hooks", "fleet-state.sh")
 FLEET = os.path.join(HARNESS, "hb-fleet.sh")
 ENVSH = os.path.join(HARNESS, "env.claude.sh")
+DOCTOR = os.path.join(HARNESS, "doctor.py")
 SKILL_CANON = os.path.join(HARNESS, "skills", "firstmate.md")
 SKILL_INSTALLED = os.path.expanduser("~/.agents/skills/firstmate/SKILL.md")
 
@@ -51,7 +52,10 @@ CONFIG_MATERIALIZED = Env(
 # a floor nine below the count cannot catch a probe that loses eight rows. Two skips budgeted,
 # one per environment-bound row: in the MAIN checkout both requirements hold and this run
 # records `"count": 0`, which is the property firstmate asserts at merge-back.
-r = Results(expect=33, skip_max=2)
+# 33 through the 2026-08-01 environment-requirement work. The 2026-08-02 cockpit build adds
+# eleven: nine for the auth preflight (four predicates, five mutation legs) and two for the
+# re-runnable-`start` pane marker. 44.
+r = Results(expect=44, skip_max=2)
 
 
 def sh_n(path):
@@ -258,6 +262,113 @@ try:
             pane_env_injection(src))
     r.check("MUTATION: dropping the -e injection is caught",
             not pane_env_injection(src.replace('-e "HB_FLEET_DIR=$HB_FLEET_DIR"', "")))
+
+    # -- the auth preflight (new 2026-08-02) ---------------------------------------
+    # Every predicate below reads source, so every one carries a mutation. The behaviour
+    # they guard was MEASURED on claude 2.1.220 the day they were written: `claude auth
+    # status` exits 1 with no credential and 0 with one, honours CLAUDE_CONFIG_DIR, and does
+    # NOT read .claude.json — a config dir holding a copied profile with a complete
+    # oauthAccount block still exits 1.
+    def fn_body(s, name):
+        # The closing brace is matched at the function's OWN indent (backreference), because
+        # some of these are defined inside a case branch and close on `  }` — anchoring to
+        # column 0 silently returned "" for those, and every predicate reading an empty body
+        # is a predicate that cannot go red.
+        m = re.search(r"\n([ \t]*)" + re.escape(name) + r"\(\)\s*\{.*?\n\1\}", s, re.S)
+        return m.group(0) if m else ""
+
+    def asks_the_binary(s):
+        # Two clauses, one per way this can rot. It must ASK the binary, and it must not
+        # degrade into reading the profile — the profile read is green on exactly the state
+        # the guard exists to catch, which makes it the tempting and wrong simplification.
+        # Body-anchored: the comment block above the function names both `auth status` and
+        # `.claude.json`, so a file-wide match would stay green on a gutted function.
+        body = fn_body(s, "hb_auth_state")
+        return ("auth status" in body
+                and ".claude.json" not in body and "oauthAccount" not in body)
+
+    r.check("the auth detector asks `claude auth status`, and never reads the profile file",
+            asks_the_binary(src))
+    r.check("MUTATION: gutting the auth-status call is caught",
+            not asks_the_binary(src.replace('"$HB_CLAUDE" auth status', "true #", 1)))
+    r.check("MUTATION: a profile read added alongside it is caught",
+            not asks_the_binary(src.replace(
+                '"$HB_CLAUDE" auth status >/dev/null 2>&1 || return 1',
+                '"$HB_CLAUDE" auth status >/dev/null 2>&1 || return 1\n'
+                '  grep -q oauthAccount "$CLAUDE_CONFIG_DIR/.claude.json"', 1)))
+
+    def spawn_block(s):
+        m = re.search(r"\nspawn\)\n.*?\n  ;;\n", s, re.S)
+        return m.group(0) if m else ""
+
+    def auth_before_lease(s):
+        # ORDERING, and the workload that could violate it is a --slot spawn: the guard must
+        # refuse BEFORE pool.py hands out a worktree, or a spawn that cannot possibly come up
+        # still costs the pool a lease. Read from the spawn block alone — `pool.py` also
+        # appears in two comments elsewhere in the file.
+        block = spawn_block(s)
+        guard, lease = block.find("hb_auth_guard"), block.find("pool.py")
+        return guard > 0 and lease > 0 and guard < lease
+
+    r.check("spawn refuses a signed-out root BEFORE it leases a pool worktree",
+            auth_before_lease(src))
+    r.check("MUTATION: the guard moved after the lease is caught",
+            not auth_before_lease(src.replace("  hb_auth_guard || exit 2\n", "", 1).replace(
+                '  [ -d "${DIR:-}" ]', "  hb_auth_guard || exit 2\n  [ -d \"${DIR:-}\" ]", 1)))
+
+    def usage_range_complete(s):
+        # hb_header() prints a LINE RANGE of this file's own header, so inserting a command
+        # line shifts the selector paragraph down and a stale end bound silently truncates its
+        # last line. Measured twice while building: 22 -> 23 for `preflight`, 23 -> 25 for
+        # `start`/`help`, both by hand. The stakes rose when the range stopped feeding only
+        # `usage` — the C-b ? popup and the bridge pane's captain card render it too, so a
+        # short range now truncates the cockpit's own help, not just an error message.
+        m = re.search(r"hb_header\(\) \{ sed -n '4,(\d+)p'", s)
+        if not m:
+            return False
+        end = int(m.group(1))
+        lines = s.split("\n")
+        if end > len(lines):
+            return False
+        printed = lines[3:end]  # sed counts from 1; slice from 0
+        return (any(line.startswith("#   preflight") for line in printed)
+                and printed[-1].rstrip().endswith("is the supported form."))
+
+    r.check("hb_header() still prints the whole header: the preflight line AND the last line "
+            "of the selector paragraph", usage_range_complete(src))
+    r.check("MUTATION: an end bound one line short is caught",
+            not usage_range_complete(re.sub(
+                r"(hb_header\(\) \{ sed -n '4,)(\d+)(p')",
+                lambda m: m.group(1) + str(int(m.group(2)) - 1) + m.group(3), src, count=1)))
+
+    def panes_are_idempotent(s):
+        # `start` runs `up` on every invocation, including against a live fleet, so an
+        # unguarded split adds a second nvim and a second grid pane per run. The guard is a
+        # pane-scoped @hb_role marker checked BEFORE the split — ordering, so the assertion is
+        # an ordering one. Negative control MEASURED 2026-08-02: clearing @hb_role on a live
+        # nvim pane and re-running `up --nvim` produced the duplicate, which is what makes the
+        # marker load-bearing rather than incidentally correct.
+        body = fn_body(s, "hb_add_pane")
+        check, split = body.find("hb_has_role"), body.find("split-window")
+        return check > 0 and split > 0 and check < split and "@hb_role" in body
+
+    r.check("optional bridge panes check their marker BEFORE splitting, so `start` is "
+            "re-runnable", panes_are_idempotent(src))
+    r.check("MUTATION: dropping the marker check is caught",
+            not panes_are_idempotent(src.replace('    hb_has_role "$role" && return 0\n', "", 1)))
+
+    def auth_row_gates_the_tier(s):
+        # A doctor row nothing reads is a decoration with a good name. The consequence of a
+        # signed-out root is the claude tier reading NOT YET, and that only happens while the
+        # row's name is in claude_ok's list.
+        return ('"harness claude auth"' in s
+                and bool(re.search(r'claude_ok = ok\([^)]*"harness claude auth"[^)]*\)', s)))
+
+    doc = open(DOCTOR).read()
+    r.check("doctor's auth row is wired into the claude tier, not merely printed",
+            auth_row_gates_the_tier(doc))
+    r.check("MUTATION: dropping the row from claude_ok is caught",
+            not auth_row_gates_the_tier(doc.replace(', "harness claude auth")', ")", 1)))
 
     # -- firstmate skill: canonical vs installed twin, and the shell-hole ban ------
     canon = open(SKILL_CANON).read()

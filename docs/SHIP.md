@@ -68,11 +68,14 @@ Two facts earned by the doctor probe, both traps:
   settings.json, crew-constraints.md, hooks/fleet-state.sh) — so no file-shaped
   credential state can be committed. `probe_fleet_claude.py` asserts the ignore both
   ways. The review corrected the stronger claim this paragraph first made: on macOS the
-  real install's OAuth token lives in the login KEYCHAIN (VERIFIED:
-  `security find-generic-password -s "Claude Code-credentials"` returns it and
-  `~/.claude/.credentials.json` does not exist), with the file only a fallback path in
-  the binary — so the harness login may SHARE the owner's keychain item rather than
-  isolate it. The first login settles that (§5).
+  real install's OAuth token lives in the login KEYCHAIN, not in a config-dir file, with
+  the file only a fallback path in the binary — which left open whether the harness login
+  SHARES the owner's keychain item. **CLOSED 2026-08-02: it does not.** The keychain
+  service name is derived from the config root, so each root gets its own item and a
+  harness logout does not touch the main install (§5 item 3b; `harness/env.claude.sh`'s
+  CLAUDE_CONFIG_DIR block owns the record and the cross-checks). Since the same day the
+  signed-out state is also DETECTED rather than discovered — `hb-fleet.sh preflight`,
+  doctor.py's `harness claude auth` row, and `spawn`'s own guard.
 
 ## 3. The fleet (`harness/hb-fleet.sh`, the state channel, the firstmate skill)
 
@@ -150,8 +153,11 @@ probe_twin pattern — and asserts the body carries no `!`cmd`` shell-substituti
 
 ## 5. Open after this phase
 
-1. **One-time auth**: `. harness/env.claude.sh && claude`, log in, exit. Until then every
-   crew spawn fails its ready-wait signed-out. Owner action.
+1. **One-time auth**: `. harness/env.claude.sh && claude`, log in, exit. DONE on this
+   machine 2026-08-01. The state is no longer silent: since 2026-08-02 a signed-out root is
+   named by `hb-fleet.sh preflight`, by doctor.py's `harness claude auth` row (which gates
+   the claude tier), and by `spawn` itself, which refuses in milliseconds instead of letting
+   the ready-wait time out on a symptom. Still owner action on any NEW machine.
 2. **Pin the screen markers.** Ready is MEASURED and pinned (2026-08-01, first live
    crew run): under the `bypassPermissions` default the idle footer reads
    `bypass permissions on` — the pre-bypass hint `? for shortcuts` stopped rendering
@@ -173,12 +179,16 @@ probe_twin pattern — and asserts the body carries no `!`cmd`` shell-substituti
    re-validated by the binary since, and whether bypass mode suppresses the Notification
    event for the dialogs it does NOT remove (bypass acceptance, per-directory trust) is
    UNVERIFIED. Same first-crewmate session settles both.
-3b. **Settle where the harness login lands.** VERIFIED on this machine: the real
-   install's token is a login-keychain item (`Claude Code-credentials`), not a config-dir
-   file. Whether a login under the redirected root creates a second keychain item, reuses
-   the owner's, or writes the `.credentials.json` fallback into `harness/claude/` is
-   unknown until the one-time login runs. If it shares the owner's item, say so in this
-   document and treat harness logout as touching the main install's auth.
+3b. **Settle where the harness login lands. CLOSED 2026-08-02: it ISOLATES.** A login under
+   the redirected root creates its OWN login-keychain item; it does not reuse the owner's and
+   does not write the `.credentials.json` fallback. The service name is derived from the
+   config root, so each root gets its own item, and a harness logout does not touch the main
+   install's auth. `harness/env.claude.sh`'s CLAUDE_CONFIG_DIR block owns the full record,
+   including the two cross-checks that make this more than an inference from item names — an
+   empty redirected root reads signed-out while the default root reads signed-in, and a
+   redirected root holding a copied `.claude.json` with a complete `oauthAccount` block still
+   reads signed-out. That second one also settles a design question the detector depended on:
+   the profile file is not the credential, so no config-dir copy carries a login across.
 4. **Retirement context window: provisional marker at ~300,000 (30% of window), INFERRED.**
    Validated 2026-08-01 against the planning-stage design rule (degradation marker at
    ~300K = 30% of the context limit on a 1M architecture): the crew default resolves to
@@ -207,7 +217,7 @@ probe_twin pattern — and asserts the body carries no `!`cmd`` shell-substituti
 
 | Check | | |
 |---|---|---|
-| `probe_fleet_claude.py` | **33 rows** (floor 33, `skip_max=2`) | free — live hook executions, every mutation control, the arms-tree separation, the CLAUDE.md symlink convention. Was `29/29` (floor 20) through Phase 13; the 2026-08-01 environment-requirement work split the symlink row four ways and raised the floor to the count the probe actually produces. MEASURED in slot-2 that day: `31/31 measured passed, 2 NOT MEASURED HERE (budget 2)`, exit 0. An earlier correction stands: this row once read `26/26`, which was wrong when written — both close records cited below record `29/29 passed (expected at least 20)` and e3ea083's message says "29 checks" |
+| `probe_fleet_claude.py` | **44 rows** (floor 44, `skip_max=2`) | free — live hook executions, every mutation control, the arms-tree separation, the CLAUDE.md symlink convention, and since 2026-08-02 the auth preflight (four predicates, five mutation legs): the detector asking the binary rather than the profile, `spawn` refusing before it leases a pool worktree, `usage()`'s line range still covering its whole header, and doctor's auth row being wired into the claude tier rather than merely printed. MEASURED 2026-08-02 on the main checkout: `44/44 measured passed, 0 NOT MEASURED HERE (budget 2)`, exit 0. Was `29/29` (floor 20) through Phase 13; the 2026-08-01 environment-requirement work split the symlink row four ways and raised the floor to the count the probe actually produces. MEASURED in slot-2 that day: `31/31 measured passed, 2 NOT MEASURED HERE (budget 2)`, exit 0. An earlier correction stands: this row once read `26/26`, which was wrong when written — both close records cited below record `29/29 passed (expected at least 20)` and e3ea083's message says "29 checks" |
 | `probe_rig_contract.py` | exit 0 | the new probe satisfies the six rig contracts. **40/40** since 2026-08-01, when contract 7 (environment guards) added eleven rows |
 | free suite before the build | 20/20 probes exit 0 | run at phase start, this session |
 | free suite after the build | 21/21 probes exit 0 | includes the arm-factory red found and fixed mid-phase (§2) |
@@ -222,8 +232,8 @@ now carry a declared environment requirement (`rig.Env`, `gate/GATE.MAP.md` "Tie
 slot"): in a slot they record a counted, named SKIP and the tier's verdict is `declared-skip`;
 in the main checkout the requirements hold, the rows run, and the verdict is a plain `pass`.
 
-The probe is 33 rows now (floor raised 20 → 33, `skip_max=2`), because the first of the two was
-also split:
+The probe is 44 rows now (floor 20 → 33 on 2026-08-01, → 44 on 2026-08-02 with the cockpit build
+(auth preflight + the re-runnable-`start` pane marker); `skip_max=2` throughout), because the first of the two was also split:
 
 - **`probe_fleet_claude.py:192`, the CLAUDE.md symlink** — now four rows, of which only the
   last is environment-bound. The symlink is untracked and ignored by the whitelist's catch-all

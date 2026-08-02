@@ -38,9 +38,15 @@ def which(name):
     return shutil.which(name)
 
 
-def run(cmd, cwd=ROOT):
+def run(cmd, cwd=ROOT, env_extra=None):
+    """env_extra OVERLAYS os.environ rather than replacing it — a bare env= would strip PATH
+    and HOME and turn every 'is this tool healthy' row into a fabricated failure."""
+    env = None
+    if env_extra:
+        env = dict(os.environ)
+        env.update(env_extra)
     try:
-        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=60)
+        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=60, env=env)
         return p.returncode, (p.stdout + p.stderr).strip()
     except FileNotFoundError:
         return None, "not found"
@@ -311,6 +317,50 @@ def check_claude_md():
             "source harness/env.claude.sh once in this clone")
 
 
+def check_claude_auth():
+    """Is the REDIRECTED config root signed in? The trap this row exists for is that auth does
+    not follow the redirect (env.claude.sh's CLAUDE_CONFIG_DIR block): the owner's own install
+    can be signed in while the harness root is not, and nothing says so until a crewmate spawns
+    into a login screen and times out.
+
+    `claude auth status` is the detector; hb-fleet.sh's AUTH DETECTION block owns the record of
+    what was measured about it and why the cheaper checks were rejected. The one property that
+    shapes THIS row: it does not read .claude.json, so a stale profile cannot produce a false
+    green here, and PASS means a credential is PRESENT rather than live.
+
+    WARN, never FAIL: a fresh clone has legitimately never logged in, and the fix is one
+    interactive command. The tier summary is what carries the consequence. Identity fields in
+    the JSON (email, org) are deliberately not printed — doctor output gets pasted around.
+    """
+    cfg = os.path.join(HARNESS, "claude")
+    if not which("claude"):
+        row(SKIP, "harness claude auth", "no claude on PATH — nothing to ask (see the claude row)")
+        return
+    if not os.path.isdir(cfg):
+        row(WARN, "harness claude auth", f"no config root at {cfg} — check_configs owns that finding")
+        return
+    code, out = run(["claude", "auth", "status", "--json"], env_extra={"CLAUDE_CONFIG_DIR": cfg})
+    if code is None:
+        row(SKIP, "harness claude auth", f"could not run `claude auth status`: {out}")
+        return
+    try:
+        logged_in = json.loads(out).get("loggedIn") is True
+    except (ValueError, AttributeError):
+        # Exit code is the documented interface; JSON is the convenience. If the shape ever
+        # changes, fall back rather than reporting a signed-in root as broken.
+        logged_in = code == 0
+        row(WARN if not logged_in else PASS, "harness claude auth",
+            f"`auth status --json` did not parse ({out[:80]!r}) — fell back to exit code {code}")
+        return
+    if logged_in:
+        row(PASS, "harness claude auth", f"signed in at {os.path.relpath(cfg, ROOT)} "
+                                         "(credential present; liveness unproven until the first turn)")
+    else:
+        row(WARN, "harness claude auth",
+            f"SIGNED OUT at {os.path.relpath(cfg, ROOT)} — every crew spawn would land on a login "
+            "screen. Fix once: . harness/env.claude.sh && claude   (sign in, then exit)")
+
+
 # -- platform-bound tiers -------------------------------------------------------------
 
 
@@ -346,9 +396,10 @@ def tier_summary():
     # other than crew-constraints.md FAILs under the "materialized" name and left this tier
     # reading READY over a red row. Match the family, not a spelling.
     crew_fail = any(s == FAIL and n.startswith("crew constraints") for s, n, _ in ROWS)
-    claude_ok = ok("git", "claude", "claude harness settings") and not crew_fail
+    claude_ok = ok("git", "claude", "claude harness settings", "harness claude auth") and not crew_fail
     tiers.append(("claude code workflow (env.claude.sh + settings pin)",
-                  claude_ok, "needs git, claude CLI, settings.json, constraints in sync"))
+                  claude_ok, "needs git, claude CLI, settings.json, constraints in sync, "
+                             "and the redirected root signed in"))
     tiers.append(("opencode workflow (env.sh + fork TUI/grid)",
                   ok("bun", "opencode/ checkout", "opencode harness config"),
                   "needs bun + the reconstituted checkout (fork/README.md)"))
@@ -384,6 +435,7 @@ def main():
         check_opencode_cli()
         check_configs()
         check_claude_md()
+        check_claude_auth()
         check_fleet_and_rig()
     width = max(len(n) for _, n, _ in ROWS)
     for status, name, detail in ROWS:

@@ -3,6 +3,9 @@
 #
 #   ~/Desktop/healbot/harness/hb-fleet.sh <command> [args]
 #
+#   start [--no-nvim] [--no-grid]             preflight + up + attach. THE verb; start here
+#   help                                      this card (also C-b ? inside the cockpit)
+#   preflight                                 can this machine run a fleet right now?
 #   up    [--nvim] [--grid]                   bring the fleet session up (idempotent)
 #   spawn <name> --dir DIR [--model M] [--brief FILE] [--slot]
 #   ls                                        census: manifest x live panes
@@ -59,9 +62,12 @@
 # and record the pinned strings in docs/SHIP.md when the first crew comes up.
 #
 # AUTH. Crew sessions run under CLAUDE_CONFIG_DIR = harness/claude, which needs its
-# ONE-TIME interactive login first (env.claude.sh header). A signed-out crewmate is the
-# first thing `spawn`'s ready-wait will fail on. Resume hints below only work from a shell
-# that sourced env.claude.sh — a bare `claude --resume` looks in the wrong config root.
+# ONE-TIME interactive login first (env.claude.sh header, which also records where the
+# credential lands and why the harness login does not touch the owner's). A signed-out root
+# used to surface as `spawn`'s ready-wait timing out after HB_SPAWN_TIMEOUT seconds, naming
+# the symptom and hiding the cause; since 2026-08-02 `preflight` reports it and `spawn`
+# refuses on it in milliseconds. Resume hints below only work from a shell that sourced
+# env.claude.sh — a bare `claude --resume` looks in the wrong config root.
 
 set -eu
 
@@ -72,6 +78,11 @@ if [ ! -f "$FLEET_ROOT/env.claude.sh" ]; then
   exit 1
 fi
 REPO="$(cd "$FLEET_ROOT/.." && pwd)"
+# The absolute form of $0. Anything that crosses into tmux — a key binding, the bridge pane's
+# startup command — is run later, by a different process, from a directory we do not choose,
+# so a relative $0 would resolve to nothing at the moment it mattered and the failure would be
+# a silently empty popup rather than an error.
+SELF="$FLEET_ROOT/$(basename "$0")"
 
 HB_SOCKET="${HB_SOCKET:-healbot}"
 HB_RUN="${HB_RUN:-hb-main}"
@@ -91,6 +102,48 @@ HARNESS_ROOT="$FLEET_ROOT" . "$FLEET_ROOT/env.claude.sh"
 t() { tmux -L "$HB_SOCKET" "$@"; }
 
 py() { if command -v python3 >/dev/null 2>&1; then python3 "$@"; else python "$@"; fi; }
+
+# AUTH DETECTION. `claude auth status` is the detector, and it is the detector because three
+# properties were MEASURED on 2.1.220 (2026-08-02), not assumed:
+#   1. It EXITS 1 with no credential and 0 with one, so sh needs no JSON parsing. The JSON it
+#      prints on stdout is a convenience for doctor.py, not the interface here.
+#   2. It honours CLAUDE_CONFIG_DIR, which the env.claude.sh source above has already pointed
+#      at the HARNESS root — so the answer is about the root crew actually spawn under, never
+#      the owner's default. (No line citation on purpose: it would rot on the next insert.)
+#   3. It does NOT read .claude.json. A config dir holding a copied profile with a complete
+#      oauthAccount block still exits 1. That killed the cheaper "grep the profile" check,
+#      which would have gone GREEN on exactly the state this guard exists to catch.
+# It is LOCAL — unchanged behind a black-hole proxy, same ~0.2s — so it proves a credential is
+# PRESENT, not that the token is live. An expired token passes here and dies at the crewmate's
+# first turn; the refusal text says so rather than promising more than the check measured.
+#
+# Exit codes are the interface, same posture as the gate: 0 authed, 1 signed out, 2 no binary.
+# A missing binary is a DIFFERENT fact from a signed-out root and must not be reported as one:
+# `$HB_CLAUDE auth status` on a nonexistent path also exits non-zero, and collapsing the two
+# would send the operator to a login screen that is not the problem.
+hb_auth_state() {
+  case "$HB_CLAUDE" in
+    */*) [ -x "$HB_CLAUDE" ] || return 2 ;;
+    *) command -v "$HB_CLAUDE" >/dev/null 2>&1 || return 2 ;;
+  esac
+  "$HB_CLAUDE" auth status >/dev/null 2>&1 || return 1
+  return 0
+}
+
+hb_auth_guard() {  # loud, actionable refusal; called before anything that launches claude
+  if hb_auth_state; then return 0; else rc=$?; fi
+  if [ "$rc" = 2 ]; then
+    echo "hb-fleet: no claude binary at '$HB_CLAUDE' — install it, or point HB_CLAUDE at it." >&2
+  else
+    echo "hb-fleet: the harness config root is SIGNED OUT, so every crewmate would spawn into" >&2
+    echo "hb-fleet: a login screen and time out after ${HB_SPAWN_TIMEOUT}s. Fix it once, interactively:" >&2
+    echo "hb-fleet:   . $FLEET_ROOT/env.claude.sh && claude      (sign in, then exit)" >&2
+    echo "hb-fleet: config root: $CLAUDE_CONFIG_DIR" >&2
+    echo "hb-fleet: (this checks that a credential EXISTS, not that it is unexpired — an" >&2
+    echo "hb-fleet:  expired token passes here and fails at the crewmate's first turn.)" >&2
+  fi
+  return 1
+}
 
 # Manifest: one JSON line per spawn — {name, pane, dir, sid, transcript, model, at}.
 # The durable join between tmux, the worktree, and the claude session; it survives
@@ -156,11 +209,75 @@ pane_dead() {  # 0 = dead or missing, 1 = alive pane
   return 0
 }
 
-usage() { sed -n '4,22p' "$0"; exit 1; }
+# The range is the header's command list PLUS the selector paragraph, and it is a LINE range
+# into this file: inserting a command line above shifts the paragraph and silently truncates
+# the last line of it. Bumped 22 -> 23 for `preflight`, 23 -> 25 for `start`/`help`.
+# probe_fleet_claude.py asserts both halves are still inside the range, so the next person
+# gets a red rather than a quietly shortened header.
+hb_header() { sed -n '4,25p' "$0"; }
+
+usage() { hb_header; exit 1; }
+
+# ONE owner for the command list: the header above. The popup, the captain's card, and
+# `usage` all render THAT, so a command added to the header appears in every surface and
+# cannot go stale in two of them (the prose-copy rule, citation-hygiene skill). Only the key
+# map is extra here, because tmux keys are not commands and live nowhere else.
+hb_help() {
+  hb_header | sed 's/^#\{1,\} \{0,1\}//; s/^#$//'
+  cat <<'EOF'
+
+COCKPIT KEYS  (press the tmux prefix C-b first, then the key)
+  ?    this card                 z    zoom the pane under the cursor
+  0    bridge window             1    crew window
+  d    detach — the fleet keeps running, reattach with `start` or `attach`
+  [    scrollback (q leaves)     :    tmux command prompt
+
+THE CAPTAIN'S SEAT is the bridge shell. To delegate rather than drive:
+  claude          then  /firstmate      — the controller skill runs the crew for you
+Census is `ls`, never the status bar: the bar names the fleet, `ls` counts it.
+EOF
+}
 
 cmd="${1:-}"; [ -n "$cmd" ] && shift || usage
 
 case "$cmd" in
+
+start)
+  # THE one verb: preflight, then up, then attach. The optional panes are DETECTED, not
+  # flagged. `--nvim`/`--grid` were opt-in switches you had to already know existed, which is
+  # how a fleet that can show you an editor and a live grid ended up presenting as a bare
+  # shell. Absence is never a refusal here — a missing tool costs exactly its own pane, and
+  # preflight has already named which one and why.
+  NO_NVIM=0; NO_GRID=0
+  while [ $# -gt 0 ]; do case "$1" in
+    --no-nvim) NO_NVIM=1; shift;;
+    --no-grid) NO_GRID=1; shift;;
+    *) usage;;
+  esac; done
+  "$SELF" preflight || exit $?
+  set --
+  if [ "$NO_NVIM" = 0 ] && command -v nvim >/dev/null 2>&1; then
+    set -- "$@" --nvim
+  fi
+  if [ "$NO_GRID" = 0 ] && [ -f "$REPO/opencode/packages/opencode/src/index.ts" ] \
+     && command -v bun >/dev/null 2>&1; then
+    set -- "$@" --grid
+  fi
+  "$SELF" up "$@"
+  # Attaching from inside tmux is the one thing `start` will not do: tmux refuses to nest and
+  # the error it prints describes tmux's rule rather than the operator's situation. The fleet
+  # is already up by this point, so this is a report, not a failure.
+  if [ -n "${TMUX:-}" ]; then
+    echo "hb-fleet: fleet '$HB_RUN' is up, but this shell is already inside tmux."
+    echo "hb-fleet: detach first (C-b d) and re-run, or from another terminal: $SELF attach"
+    exit 0
+  fi
+  exec "$SELF" attach
+  ;;
+
+help)
+  hb_help
+  ;;
 
 up)
   WANT_NVIM=0; WANT_GRID=0
@@ -176,7 +293,12 @@ up)
   else
     # -f /dev/null: the user's ~/.tmux.conf must not leak keybinds/hooks into fleet
     # behaviour. -x/-y: a detached session's panes otherwise default small.
-    t -f /dev/null new-session -d -s "$HB_RUN" -n bridge -x 220 -y 50 -c "$REPO"
+    # The bridge pane prints the captain's card once and then EXECS an ordinary shell, so the
+    # card is a login banner rather than a process sitting in the captain's way. It is here,
+    # in the creation branch only, because a re-run of `up` or `start` must not redraw it over
+    # work in progress — the same reason `up` reuses a live session instead of rebuilding it.
+    t -f /dev/null new-session -d -s "$HB_RUN" -n bridge -x 220 -y 50 -c "$REPO" \
+      -- sh -c "'$SELF' help; exec \"\${SHELL:-/bin/sh}\""
   fi
 
   # Options are re-asserted on every `up`, not only first creation: the server auto-exits
@@ -197,16 +319,56 @@ up)
   # single-quoted inside the run-shell string; pane titles are kebab-validated names.
   t set-hook -t "$HB_RUN" pane-died "run-shell \"echo died #{hook_pane} #{pane_title} >> '$HB_FLEET_DIR/deaths.log'\""
 
+  # THE COCKPIT'S ONLY ALWAYS-VISIBLE AFFORDANCE. Stock tmux says nothing about what this
+  # session is or how to drive it, which is most of why a running fleet read as a bare shell:
+  # the help lived in a README nobody had open. SESSION-scoped, same reasoning as the
+  # pane-died hook (guardrail 6) — a second fleet on this socket must not wear this one's name.
+  #
+  # Deliberately NO crew count. A number in a permanently visible surface has to be right
+  # every second or it manufactures exactly the wrong belief this repo spends its effort
+  # removing, and every cheap version is wrong for part of a fleet's life: live panes count
+  # the placeholder shell before the first spawn, manifest rows count crewmates that have
+  # since died. `ls` owns the census, is exact, and is one keystroke away.
+  t set -t "$HB_RUN" status on
+  t set -t "$HB_RUN" status-interval 5
+  t set -t "$HB_RUN" status-style "bg=colour236,fg=colour252"
+  t set -t "$HB_RUN" status-left " #[bold]#S#[nobold] @ $HB_SOCKET "
+  t set -t "$HB_RUN" status-left-length 48
+  t set -t "$HB_RUN" status-right " C-b  ?:help  z:zoom  0:bridge  1:crew  d:detach "
+  t set -t "$HB_RUN" status-right-length 64
+
+  # Key bindings are SERVER-global in tmux — there is no session-scoped key table — so this
+  # one is shared by every fleet on this socket. That is acceptable here and ONLY here,
+  # because the popup renders static text out of this script and carries no per-fleet state;
+  # anything fleet-specific must not be bound this way. Without -E the popup stays up until
+  # it is dismissed (q or Escape), which is what makes it readable rather than a flash.
+  # `?` shadows tmux's default list-keys binding, so the card names `:` to keep the full
+  # binding list one prompt away.
+  t unbind -T prefix '?' 2>/dev/null || true
+  t bind -T prefix '?' display-popup -w 84 -h 28 "'$SELF' help"
+
   t list-windows -t "$HB_RUN" -F '#{window_name}' | grep -qx crew || \
     t new-window -d -t "$HB_RUN" -n crew -c "$REPO"
 
+  # Optional panes carry a PANE-SCOPED marker (`@hb_role`) rather than being recognised by
+  # title or current command: nvim rewrites its own pane title through the terminal, and the
+  # grid pane's command is whatever fleet.sh ends up exec'ing. Without a marker, every re-run
+  # of `up` — and so every `start` — splits another copy of both panes.
+  hb_has_role() { t list-panes -t "$HB_RUN:bridge" -F '#{@hb_role}' 2>/dev/null | grep -qx "$1"; }
+  hb_add_pane() {  # hb_add_pane <role> <split-flag> <command...>
+    role="$1"; flag="$2"; shift 2
+    hb_has_role "$role" && return 0
+    pane="$(t split-window "$flag" -d -t "$HB_RUN:bridge" -c "$REPO" -P -F '#{pane_id}' -- "$@")"
+    t set -p -t "$pane" @hb_role "$role"
+  }
+
   if [ "$WANT_NVIM" = 1 ] && command -v nvim >/dev/null 2>&1; then
-    t split-window -d -h -t "$HB_RUN:bridge" -c "$REPO" -- nvim
+    hb_add_pane nvim -h nvim
   fi
   if [ "$WANT_GRID" = 1 ]; then
     # The opencode fleet grid as a viewport pane. fleet.sh's server is nohup'd/disowned by
     # its own design, so this pane is disposable — killing it never kills that fleet.
-    t split-window -d -v -t "$HB_RUN:bridge" -c "$REPO" -- "$FLEET_ROOT/fleet.sh"
+    hb_add_pane grid -v "$FLEET_ROOT/fleet.sh"
   fi
   if [ "$HB_RUN" = "hb-main" ]; then
     echo "hb-fleet: up. attach with: $0 attach   (state dir: $HB_FLEET_DIR)"
@@ -230,6 +392,11 @@ spawn)
     *) usage;;
   esac; done
   t has-session -t "$HB_RUN" 2>/dev/null || { echo "hb-fleet: no session — run '$0 up' first" >&2; exit 2; }
+  # Before the pool lease, not after: a --slot spawn that cannot possibly come up must not
+  # first take a worktree off the pool. This is also the whole reason the detector exists —
+  # without it a signed-out root costs HB_SPAWN_TIMEOUT seconds of ready-wait per crewmate
+  # and reports "timed out", which names the symptom and hides the cause (script header, AUTH).
+  hb_auth_guard || exit 2
   if manifest_get "$NAME" pane >/dev/null 2>&1; then
     P="$(manifest_get "$NAME" pane)"
     if ! pane_dead "$P"; then
@@ -460,6 +627,66 @@ msgs = backend.normalize(backend.read_transcript(sys.argv[1], sys.argv[2]), sys.
 last = next((m for m in reversed(msgs) if m["info"]["role"] == "assistant"), None)
 print(backend.occupancy(last["info"]["tokens"]) if last else 0)
 PY
+  ;;
+
+preflight)
+  # What this machine can carry for a fleet run, before anything is built. Deliberately NOT a
+  # second doctor.py: doctor answers "is this a working healbot checkout", this answers "can
+  # `up` + `spawn` succeed right now", and auth is the row only this one can ask (doctor is
+  # stdlib-only and must not source env.claude.sh — this script already did, at line 89).
+  # Blockers exit 2, matching the gate's "a check ran and said no"; advisories never fail the
+  # command, because every one of them costs only an optional pane.
+  BLOCKED=0
+  say() { printf '  [%-5s] %s\n' "$1" "$2"; }
+  echo "hb-fleet preflight — fleet '$HB_RUN' on socket '$HB_SOCKET'"
+
+  if hb_auth_state; then
+    say OK "claude authed at $CLAUDE_CONFIG_DIR (credential present; liveness unproven)"
+  else
+    case $? in
+      2) say BLOCK "no claude binary at '$HB_CLAUDE' — install it, or set HB_CLAUDE";;
+      *) say BLOCK "claude is SIGNED OUT at $CLAUDE_CONFIG_DIR — . $FLEET_ROOT/env.claude.sh && claude";;
+    esac
+    BLOCKED=1
+  fi
+
+  if command -v tmux >/dev/null 2>&1; then
+    TV="$(tmux -V 2>/dev/null | tr -dc '0-9.' | cut -d. -f1,2)"
+    case "$TV" in
+      [0-9]*.[0-9]*)
+        # display-popup landed in tmux 3.2; below that the help overlay is the only casualty.
+        if [ "${TV%%.*}" -gt 3 ] || { [ "${TV%%.*}" = 3 ] && [ "${TV#*.}" -ge 2 ]; }; then
+          say OK "tmux $TV (display-popup available, so the help overlay works)"
+        else
+          say WARN "tmux $TV is below 3.2 — no display-popup, so '?' prints to the pane instead"
+        fi;;
+      *) say WARN "tmux present but its version did not parse ('$(tmux -V 2>&1)') — assuming no popup";;
+    esac
+  else
+    say BLOCK "tmux missing — the fleet IS tmux (on a PC that means WSL2, docs/WINDOWS.md)"
+    BLOCKED=1
+  fi
+
+  if command -v nvim >/dev/null 2>&1; then
+    say OK "nvim present — the editor pane can be built"
+  else
+    say WARN "nvim missing — skipping the editor pane (nothing else is affected)"
+  fi
+
+  if [ -f "$REPO/opencode/packages/opencode/src/index.ts" ] && command -v bun >/dev/null 2>&1; then
+    say OK "opencode checkout + bun — the grid pane can be built"
+  else
+    say WARN "no opencode checkout or no bun — skipping the grid pane (fork/README.md rebuilds it)"
+  fi
+
+  if [ -x "$VENVPY" ]; then
+    say OK "rig venv present — 'spawn --slot' can lease a pool worktree"
+  else
+    say WARN "rig venv absent — 'spawn --slot' will fail; pass --dir explicitly (.carryover/verified/README.md)"
+  fi
+
+  [ "$BLOCKED" = 0 ] || { echo "hb-fleet: preflight BLOCKED — fix the rows above, then re-run." >&2; exit 2; }
+  echo "hb-fleet: preflight clear."
   ;;
 
 attach)

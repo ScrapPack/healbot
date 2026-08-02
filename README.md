@@ -84,6 +84,7 @@ python3 -m venv .carryover/verified/venv && .carryover/verified/venv/bin/pip ins
 . harness/env.sh && opencode          # one session, harness switches applied
 harness/fleet.sh                      # or: server + control terminal, sessions survive the client
 . harness/env.claude.sh && claude     # the Claude Code half (one-time login on first use)
+harness/hb-fleet.sh start             # the crew cockpit: preflight, build, attach
 ```
 
 `opencode` on that second line is whatever is on your `PATH`. The harness config reaches a
@@ -91,6 +92,12 @@ released binary — TESTED: the model pin, compaction off, and the retirement pl
 on one — but the `/healbot` grid is a builtin of the **fork**, so it exists only when
 opencode runs from the reconstituted checkout. `harness/fleet.sh` resolves that itself and
 says so when it has to fall back.
+
+`hb-fleet.sh start` is the whole bring-up: it preflights the machine, builds the tmux
+session, adds the editor and grid panes **if** this machine has what they need (each absence
+is a named skip, never a refusal), and attaches. Re-running it on a live fleet just
+reattaches. Inside the cockpit, `C-b ?` is the command card; the one-time login the preflight
+asks for is the Claude Code half above.
 
 `docs/OPERATIONS.md` is the full command surface, including the crew fleet
 (`harness/hb-fleet.sh`) and the gate.
