@@ -288,6 +288,184 @@ retirement rigs prompt against — so the suite could not be re-run from a fresh
 `rig.fixtures()` now builds them; `rig.db(name)` gives each rig its own isolated DB. Override
 the work directory with `HEALBOT_RIG_WORK` if you want it off the repo.
 
+## The refusal A/B entrypoints
+
+The files below are the OUTCOME half of the suite: probes and rigs answer "does the code do
+what the map says", these answer "does a harness change make the agent better or worse". None
+carry a `probe_`/`verify_` name, on purpose: they are drivers and libraries, so
+`probe_rig_contract.py`'s sweep does not pick them up, and their contracts are held instead by
+dedicated free probes named per file below. Each of those probes declares its own
+`Results(expect=N)` floor, which is where the numbers live; this section quotes no scores.
+Anything here that reaches a model spends credits, so the paid-run-protocol skill governs
+every launch. `AB-HANDOFF.md` (this directory) is the design brief the half was built from;
+`docs/REFUSAL-BASELINE.md` holds the question, `docs/REFUSAL-RESCORE.md` the closed full run
+and the corpus-v2 fixes, and `hb/ab-runs/refusal-full-archived-20260731/ARCHIVED.md` the
+stranded first launch.
+
+**`ab.py` is the A/B library: arms, the pinned turn, the scorer, the paired statistics.** An
+ARM is a complete runtime configuration, a STUDY is a fixed corpus of prompts, and the model is
+pinned identically in every arm (`PIN`, `ab.py:54`) because varying the model and the harness
+at once measures neither. It owns the two ENVIRONMENT arms (`ARMS`, `ab.py:73-96`: `harness`
+sources env.sh, `stock` inherits the user's real `~/.config/opencode`); `serve_arm()`
+(`ab.py:99-130`), which strips the three env.sh exports that would otherwise leak into the
+stock arm and silently equalize the very contrast under test (`:120-121`); `ask()`
+(`ab.py:133-141`, one synchronous pinned turn returning the raw transcript); and the shape
+classifier `score()` (`ab.py:255-311`), whose outcomes are comply / hedge / de_escalate /
+refuse_model / refuse_provider / empty plus a `needs_review` flag for whatever it cannot
+cleanly separate. The DECLINE patterns are FIRST-PERSON ONLY (`ab.py:221-229`): Set A's
+compliant answers are saturated with "malware"/"exploit" vocabulary, so a topic grep returns a
+confident, exactly-backwards refusal rate. `probe_refusal_scoring.py` holds that inversion as
+a hand-labeled fixture and REQUIRES the naive grep to fail it; do not weaken that probe.
+`provider_blocked()` (`ab.py:169-188`) is the scorer's one exact discriminator, structural on
+`finish: "content-filter"`, separating "the model declined" from "the provider blocked".
+`delivered()` (`ab.py:314-318`) is the binary the paired test runs on; `mcnemar_exact()`
+(`ab.py:324-341`) and `wilson()` (`ab.py:344-354`) are the statistics. Runs persist under
+`hb/ab-runs/<study>-<tag>/` (`ab.py:50`) with every turn's full transcript in `rows.json`
+(`ab.py:404-412`), so every number is re-derivable and auditable without spending again.
+
+**`run_refusal.py` is the Set A driver, first generation, now pinned by its own history.** It
+runs the refusal corpus over the two environment arms on ports 4771/4772 (`run_refusal.py:33`)
+and owns the Set A corpus contract (`validate_study()`, `run_refusal.py:36-78`): exactly 25
+probes, five families of five, every probe carrying an `artifact` regex that must match its
+inline compliant fixture, miss its topic-matched negative, and miss a generic refusal
+(`:68-73`). `probe_refusal_fixtures.py` re-checks those regexes against the realistic corpus
+in `studies/refusal/fixtures/` because hand-written fixtures passed while two of the first
+four regexes exercised on real output were wrong. The run ledger is the shape the second
+driver later copied: checkpoint after every row, reserve-before-send (`run_refusal.py:486-494`),
+an interrupted ambiguous turn REFUSES to be repeated without `--retry-pending` (`:466-474`),
+`--rescore` re-derives labels from saved transcripts with zero model calls after verifying
+every saved prompt against the corpus (`:388-397`), and the pin is asserted from the returned
+transcript after every persisted row (`:512-514`). Its meta pins the corpus, scorer and driver
+bytes (`run_refusal.py:286-287`) and resume refuses drift (`:363-367`), which is exactly why
+this file no longer moves: the archived run's meta records `driver_sha256` over its exact
+bytes, so pluggability went into a new driver instead of an edit (`run_study.py:3-11`). Its
+one real weakness is that it reads the LIVE `studies/refusal/set_a.json` on every invocation
+(`run_refusal.py:338`), so a corpus edit after paid rows exist orphans the spend. That is what
+stranded `refusal-full` at 24/150 rows on 2026-07-31; ARCHIVED.md is the record, and the run
+was archived BY RENAME so the tag-derived path can never resume it. Free guard:
+`probe_refusal_driver.py`. Companions: `verify_refusal_a.py` reads a completed run back
+without spending, and holds `needs_review` rows out of the aggregate until a human outcome is
+supplied; `verify_refusal_b.py` is the Set B negative control (permission gating on
+`studies/refusal/set_b.json`, scored on the gate event, not on model text).
+
+**`run_study.py` is the second-generation driver: a pluggable per-study scorer over frozen
+synthesized arms, built ALONGSIDE `run_refusal.py` rather than editing it.** Three designs
+distinguish it, and each exists because the first launch died of the alternative:
+
+- **The scorer is the study's, not the driver's.** A study definition is a module
+  `study_<name>.py` in this directory owning `validate()`/`score()`/`delivered()` plus an
+  optional `pilot()`, enforced at load (`run_study.py:106-109`). meta pins BEHAVIOR, not a
+  wrapper: `sources_sha256` records one sha per file the definition declares in `SOURCES`,
+  plus the driver itself (`run_study.py:121-125`), so delegated logic cannot drift behind an
+  unchanged wrapper hash. A scorer returning a driver-reserved row key is refused outright,
+  because those keys are spend evidence (`DRIVER_KEYS`, `run_study.py:84-87`).
+- **Arms are frozen at creation, never inherited.** `--arms-spec` is a JSON list
+  (`arms-tdd.json` is the live example: `base`, plus one arm adding the tdd skill), and it is
+  read exactly ONCE, at run creation (`load_armspec`, `run_study.py:429-454`); `create_run()`
+  writes the frozen corpus, then the frozen arms, then meta (`run_study.py:493-516`). A new
+  run REQUIRES the spec (`:718-719`); a resume REFUSES it (`:711-712`). After creation the run
+  directory owns the bytes (`run_study.py:56-58`). The driver contains no environment arm at
+  all: `ab.ARMS` and `ab.serve_arm` are deliberately unreferenced, and
+  `probe_study_driver.py` asserts that from the AST (`run_study.py:24-26`).
+- **The corpus is frozen the same way.** The live `studies/` file is read exactly once, at
+  creation; resume and `--rescore` read the run directory's own `corpus.json`
+  (`run_study.py:699-700`), so the live-corpus edit that blocked `refusal-full`'s resume
+  cannot recur here. A tag whose directory this driver did not create is refused, never
+  adopted (`:694-697`), and resume re-verifies the frozen arm manifests against the digests
+  meta recorded at freeze (`verify_frozen_arms`, `run_study.py:472-486`).
+
+A probe may also carry a HIDDEN EXECUTABLE CHECK: a shebang script frozen with the corpus, run
+after the turn in a pooled disposable workspace (`harness/pool.py`) the turn's session was
+bound to, with the script body written OUTSIDE the workspace so the model can never read the
+test it is scored by (`run_study.py:335-368`). The result lands on the row as raw evidence,
+and `--rescore` re-reads the RECORDED result rather than re-running a check against a restored
+tree (`:311-315`). Servers take ports 4791+i (`run_study.py:80`). Free guard:
+`probe_study_driver.py`, which exercises each refusal above with the violating state actually
+present. The recorded execution: `refusal tdd-full-1`, 150 rows complete, `base` vs
+`plus-tdd` on frozen corpus `771ce241`, a powered null (both arms delivered 75/75, exact
+McNemar p = 1.0) with 27 `needs_review` rows re-scored to 12 under corpus v2;
+`docs/REFUSAL-RESCORE.md` is the record.
+
+**`study_refusal.py` is instance one of the study-definition contract, and it is deliberately
+nearly empty.** The refusal scorer was born in `ab.py` and its corpus contract in
+`run_refusal.py`, and both are pinned by paid rows, so this definition DELEGATES: `validate()`
+is `run_refusal.validate_study`, `score()` wraps `ab.score` (dropping the `models` key the
+driver's `pin_result` owns, adding `family`), `delivered()` is `ab.delivered`
+(`study_refusal.py:43-55`). `SOURCES` declares all three files (`study_refusal.py:40`), so an
+`ab.py` edit surfaces as `sources_sha256` drift even while this wrapper stays byte-identical.
+The `check` parameter is accepted and ignored: refusal probes classify transcript shape and
+produce no work product to check (`study_refusal.py:20-23`).
+
+**`arms.py` is the arm factory: synthesized, frozen runtime configs, base plus at most ONE
+delta skill.** Environments move: the stock arm changed twice on 2026-07-31 alone, which is
+what made frozen arms a precondition for ever launching again. A synthesized arm inverts the
+dependency, so the study owns the config bytes. `define()` refuses a delta body carrying the
+`` !`cmd` `` shell-substitution hole (`arms.py:107-111`). `freeze()` snapshots every base
+config file with per-file sha256 into `<run>/arms/<name>/` and fails CLOSED on an
+unconstituted base: no `package-lock.json` or no `node_modules`, no freeze (`arms.py:132-140`).
+`materialize()` rebuilds a live `XDG_CONFIG_HOME` from the snapshot, byte-verifying every file
+(`arms.py:191-197`) and refusing on lockfile drift (`:218-234`); `node_modules` itself is NOT
+frozen, the lockfile pins it. `serve()` boots the arm with `XDG_CONFIG_HOME` at the
+materialized directory and BOTH external-skill switches pinned off (`arms.py:250-252`), so the
+only skill any arm can see is the one its manifest declares. The repo's `SKILL.md` filename
+ban is satisfied by construction: the tracked snapshot stores the delta as `_delta_skill.md`,
+and only `materialize()` writes a literal `SKILL.md`, into `hb/arms/`, which `.gitignore`'s
+`hb/*` rule ignores (`arms.py:21-28`, `:163-167`). Guard: `probe_arm_factory.py`, already in
+the free list above.
+
+**`backend.py` makes the second PROGRAM addressable: an arm is a configuration, a backend is
+the program that runs it.** It normalizes Claude Code's persisted JSONL transcripts into
+opencode's message shape, the vocabulary every existing consumer already reads, rather than
+inventing a neutral third schema (`backend.py:10-17`). The `STOP_REASON` map
+(`backend.py:76-83`) carries the one load-bearing row, `"refusal"` to `"content-filter"`: drop
+it and every provider block silently reclassifies as a model refusal (`:70-75`). `thinking`
+blocks are dropped, because a model that reasons "I can't just refuse this" and then complies
+must not score as refusing on its own scratchpad (`backend.py:149-157`), and sidechain records
+are excluded, because sub-agent turns carry their own model and token accounting
+(`:173-180`). `ClaudeCodeBackend` spawns the installed CLI headless and re-reads the
+transcript it persisted (`backend.py:230-281`); `OpencodeBackend` wraps `ab.serve_arm` behind
+the same two methods (`backend.py:284-315`). A Claude Code arm deliberately CANNOT join Set A:
+the method is the model held constant, and Claude Code serves Anthropic models, so this
+backend measures Claude Code sessions (occupancy, retirement, handoff), it is not a third arm
+(`backend.py:23-31`). Free guard: `probe_backend.py`, run against transcripts Claude Code
+already wrote on this machine.
+
+**The frozen-corpus catalog: `studies/refusal/frozen/` keeps every retired Set A version as
+bytes, named by corpus-hash prefix.** A plain entry hashes to its own name prefix; a derived
+variant keeps its parent's prefix plus a label, and its own hash is recorded where it is used.
+`set_a-41fecb7f.json` is the original freeze, the corpus whose prompts the archived run's 24
+rows carry. `set_a-41fecb7f-regexfix.json` is the prompt-preserving variant of it (own hash
+`39f98c53`) built so the archive rescore could fix regexes WITHOUT touching prompts; ARCHIVED.md
+records it verifying all 24 saved prompts with zero mismatches, and also that it reddens
+`probe_refusal_fixtures.py`, so it was never a candidate to stay live.
+`set_a-771ce241-overhaul.json` is the full overhaul, the version `refusal tdd-full-1` froze
+and ran. Every hash in this paragraph was re-derived 2026-08-02 with `corpus_hash()`
+(`run_refusal.py:81-83`). The live `set_a.json` sits downstream of 771ce241 via corpus v2's
+four regex and two prompt fixes (`docs/REFUSAL-RESCORE.md`); its current hash is whatever
+`run_refusal.py --check` prints, and this document deliberately does not record a number the
+live file moves out from under. The catalog rule is the corpus half of archive-never-delete: a
+version any paid run consumed exists forever, in that run's own frozen `corpus.json`, and, if
+it was ever the live file, here under its hash BEFORE the live file moves on.
+
+**Study DBs are measurement corpus, and the archive rules above apply to them with no study
+exception.** Every study turn lands in per-arm DBs under `hb/`: `ab-refusal-<tag>-<arm>.db`
+(`run_refusal.py:436`) and `study-<study>-<tag>-<arm>.db` (`run_study.py:796`), both through
+`rig.db()` (`rig.py:42-49`), which puts them inside the `hb/*.db` glob that
+`probe_turn_growth.py` derives `worst_turn` from. So never delete one; that deletes the
+measurement. They are single-use by construction: the tag is baked into the name, a new study
+is a new tag with fresh DBs, and an archived run's DBs keep their names in the corpus
+(ARCHIVED.md, again). Two ledger obligations attach to every new run, both the
+paid-run-protocol skill's: `.gitignore` ignores `hb/*` wholesale and un-ignores each paid DB
+BY NAME, and its own comment warns that a new paid DB without its negation line is "silently
+unprotected"; and the WAL must be folded in (`PRAGMA wal_checkpoint(TRUNCATE)`) before
+committing a corpus update so the committed bytes are self-contained (if the update includes
+`errorstate.db`/`focus.db`, checkpoint AFTER `gate/tier2.py`, which rewrites both). Run
+directories under `hb/ab-runs/` are tracked evidence in full: rows, meta, server logs, frozen
+arms and corpus. A dead run is archived BY RENAME, the way `refusal-full` became
+`refusal-full-archived-20260731`, so the tag-derived path can never silently resume and
+respend it; `run_study.py` additionally refuses to adopt any directory it did not create
+(`run_study.py:694-697`).
+
 ## What is different from the void run, and why it matters
 
 | | void run | this rig |
