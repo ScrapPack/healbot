@@ -12,13 +12,17 @@ Claude-code and external skills are switched off for the same reason.
 import json
 import os
 import sys
+import tempfile
 import threading
 import time
 import urllib.request
 
-# Scratch root for the rig's isolated XDG roots, DB and project dir — overridable, disposable.
-# term.py lives next to this file (not in the scratch dir, where the original session had it).
-S = os.environ.get("HEALBOT_VERIFY_SCRATCH", "/tmp/healbot-legacy-verify")
+# Scratch root for the rig's isolated XDG roots, DB and project dir. FRESH per run by
+# default: the grid-header assertions count EVERY session in the DB (the single-use rig
+# trap, HARNESS.md Traps), so a reused root goes red for reasons unrelated to the code
+# under test. Set HEALBOT_VERIFY_SCRATCH to keep or reuse a workspace deliberately.
+# term.py lives next to this file, not in the scratch dir.
+S = os.environ.get("HEALBOT_VERIFY_SCRATCH") or tempfile.mkdtemp(prefix="healbot-legacy-verify-")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from term import Term  # noqa: E402
 

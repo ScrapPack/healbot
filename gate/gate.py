@@ -239,32 +239,87 @@ HOME_EXEMPT = (".carryover/verified/hb/",)
 
 def _home_anchored(line):
     """True when the line carries a real machine-anchored home path. A mark hit counts only
-    when the next char is alphanumeric (so /Users/<you>, /c/Users/... and placeholders
-    pass) and, for the slash-rooted marks, the char before is not a path/word continuation
-    (so ./home/footer imports and api/Users/123 routes pass). The drive marks skip the
-    before-guard — their preceder is legitimately a drive letter."""
+    when the next char is alphanumeric — /Users/<you>, /c/Users/... and $-placeholders
+    pass. For the slash-rooted marks, the char before must not be a word or relative-path
+    continuation (./home/footer imports, api/Users/123 routes) — EXCEPT the single-letter
+    drive segment (/c/Users/<name>, the MSYS form harness/env.sh:32-39 documents), which
+    counts. A bare '/' before also counts: file:///Users/<name> is an anchored path. The
+    drive-colon marks skip the before-guard; their preceder is the drive letter. The first
+    shipped draft excluded '/' and all alpha preceders, which passed exactly those two real
+    shapes — the 2026-08-02 review's finding, re-derived here."""
     for mark in HOME_MARKS:
         i = line.find(mark)
         while i >= 0:
-            before = line[i - 1] if i else ""
             after = line[i + len(mark):i + len(mark) + 1]
-            if after.isalnum() and (mark[0] == ":" or not (before.isalnum() or before in "._-~/\\")):
-                return True
+            if after.isalnum():
+                # i == 0 must short-circuit: before would be "", and `"" in <str>` is
+                # always True, which silently un-anchors every line-start path. Caught by
+                # the truth-table matrix, missed by two ad-hoc poison controls whose lines
+                # happened to carry a leading space.
+                if mark[0] == ":" or i == 0:
+                    return True
+                before = line[i - 1]
+                msys_drive = before.isalpha() and line[i - 2:i - 1] == "/"
+                if msys_drive or not (before.isalnum() or before in "._-~\\"):
+                    return True
             i = line.find(mark, i + 1)
     return False
 
 
+# Standing negative controls for _home_anchored, validated before every scan: a predicate
+# whose truth table drifts must ERROR the check rather than scan with it. This exists
+# because the table already caught a real one — the i == 0 empty-`before` bug above — that
+# two ad-hoc poison controls missed. Control strings are assembled at runtime from split
+# literals so this file's own source never carries an anchored path, keeping the scan
+# self-applicable with no self-exemption (a guard that exempts itself is the defect
+# probe_rig_contract.py hunts).
+_J = "".join
+_MATRIX = (
+    (_J(("/Use", "rs/name/x")), True),           # line-start anchor (the i == 0 bug)
+    (_J(("cd /Use", "rs/name/repo")), True),
+    (_J(('PATH="/Use', 'rs/name/bin"')), True),
+    (_J(("/c/Use", "rs/name/x")), True),         # MSYS drive form (review finding)
+    (_J(("file:///Use", "rs/name/db")), True),   # file URL (review finding)
+    (_J(("C:\\Use", "rs\\name\\x")), True),
+    (_J(("C:/Use", "rs/name/x")), True),
+    (_J(("/ho", "me/name/x")), True),
+    (_J(('import x from "./ho', 'me/footer"')), False),   # relative import
+    (_J(("api/Use", "rs/123")), False),                   # route segment
+    (_J(("shaped (/c/Use", "rs/...)")), False),           # doc example, placeholder dots
+    (_J(("/Use", "rs/<you>/x")), False),                  # placeholder segment
+    (_J(("~/ho", "me/x")), False),
+    (_J(("path/to/ho", "me/x")), False),
+)
+
+
 def home_paths():
-    """Full-tree scan, not change-scoped: the invariant is about the tracked tree, and a
+    """Full-tree scan, not change-scoped: the invariant is about the tree, and a
     change-scoped check would have grandfathered exactly the files this rule exists for.
-    Byte-stable by construction, not by luck: hits are sorted and content-derived, nothing
-    embeds a time or a directory order. The walk's ability to fire is not hypothetical —
-    the pre-anchor draft of _home_anchored flagged builtins.ts's ./home/ imports."""
+    Untracked-unignored files are included for the same reason changed_files includes them
+    (gate.py:78-91): a gate that cannot see a new file cannot guard the change adding one —
+    the first draft scanned `git ls-files` alone and was blind to this session's own
+    untracked LICENSE while it sat in the working tree. The corpus exemption is BY PATH
+    only; a stray .db outside it is exactly the artifact this check should name.
+    Byte-stable by construction: hits are sorted and content-derived, nothing embeds a time
+    or a directory order. Fire capability is OBSERVED, not assumed: a poisoned tracked file
+    (/Users/<x> shape with a real segment) went BLOCKED and the cleaned tree PASS with the
+    shipped predicate, same session (2026-08-02)."""
     t0 = time.time()
-    out = sh(["git", "ls-files", "-z"])["out"]
+    broken = [s for s, want in _MATRIX if _home_anchored(s) != want]
+    if broken:
+        return {
+            "check": "home-paths",
+            "why": "predicate truth table no longer holds — fix _home_anchored before trusting any scan",
+            "cmd": "static", "code": None, "secs": round(time.time() - t0, 2),
+            "sha256": hashlib.sha256("\n".join(broken).encode()).hexdigest(),
+            "tail": [f"{len(broken)} matrix row(s) broken, first: {broken[0]!r}"],
+            "state": ERROR, "out": "\n".join(repr(s) for s in broken),
+        }
+    out = (sh(["git", "ls-files", "-z"])["out"]
+           + sh(["git", "ls-files", "-z", "--others", "--exclude-standard"])["out"])
     hits = []
     for rel in out.split("\0"):
-        if not rel or rel.startswith(HOME_EXEMPT) or rel.endswith(".db"):
+        if not rel or rel.startswith(HOME_EXEMPT):
             continue
         try:
             with open(f"{ROOT}/{rel}", encoding="utf-8", errors="ignore") as fh:
