@@ -114,7 +114,7 @@ def tier1():
     for name, cmd, cwd, why in TIER1:
         r = sh(cmd, cwd=cwd)
         rows.append({
-            "check": name, "why": why, "cmd": " ".join(cmd), "cwd": os.path.relpath(cwd, ROOT),
+            "check": name, "why": why, "cmd": f"{os.path.relpath(cmd[0], ROOT)} {' '.join(cmd[1:])}", "cwd": os.path.relpath(cwd, ROOT),
             "code": r["code"], "secs": round(r["secs"], 2),
             # The hash is the evidence. It is over RAW output because determinism was measured
             # rather than hoped for; if a check is ever added whose output is not byte-stable,
@@ -224,6 +224,68 @@ def banned_names(files):
 
 
 # ==========================================================================================
+# HOME PATHS — public-repo invariant: live files carry no machine-anchored home path
+# ==========================================================================================
+HOME_MARKS = ("/Users/", "/home/", ":\\Users\\", ":/Users/")
+# The recorded corpus is exempt BY PATH, not by pattern: the session DBs, A/B run records and
+# server logs under hb/ are measured artifacts of runs on a named machine. Rewriting them to
+# redact is an owner decision about evidence, not a lint's call — and git history retains
+# every pre-scrub byte anyway, so the exemption costs nothing history has not already spent.
+# Everything OUTSIDE it must derive its paths (env.sh HARNESS_ROOT, doctor.py ROOT, the
+# legacy rigs' __file__ pattern) or placeholder them (the plist's install-time render,
+# AFK.md's $SCRATCH).
+HOME_EXEMPT = (".carryover/verified/hb/",)
+
+
+def _home_anchored(line):
+    """True when the line carries a real machine-anchored home path. A mark hit counts only
+    when the next char is alphanumeric (so /Users/<you>, /c/Users/... and placeholders
+    pass) and, for the slash-rooted marks, the char before is not a path/word continuation
+    (so ./home/footer imports and api/Users/123 routes pass). The drive marks skip the
+    before-guard — their preceder is legitimately a drive letter."""
+    for mark in HOME_MARKS:
+        i = line.find(mark)
+        while i >= 0:
+            before = line[i - 1] if i else ""
+            after = line[i + len(mark):i + len(mark) + 1]
+            if after.isalnum() and (mark[0] == ":" or not (before.isalnum() or before in "._-~/\\")):
+                return True
+            i = line.find(mark, i + 1)
+    return False
+
+
+def home_paths():
+    """Full-tree scan, not change-scoped: the invariant is about the tracked tree, and a
+    change-scoped check would have grandfathered exactly the files this rule exists for.
+    Byte-stable by construction, not by luck: hits are sorted and content-derived, nothing
+    embeds a time or a directory order. The walk's ability to fire is not hypothetical —
+    the pre-anchor draft of _home_anchored flagged builtins.ts's ./home/ imports."""
+    t0 = time.time()
+    out = sh(["git", "ls-files", "-z"])["out"]
+    hits = []
+    for rel in out.split("\0"):
+        if not rel or rel.startswith(HOME_EXEMPT) or rel.endswith(".db"):
+            continue
+        try:
+            with open(f"{ROOT}/{rel}", encoding="utf-8", errors="ignore") as fh:
+                text = fh.read()
+        except OSError:
+            continue
+        for ln, line in enumerate(text.split("\n"), 1):
+            if _home_anchored(line):
+                hits.append(f"{rel}:{ln} {line.strip()[:80]}")
+    hits.sort()
+    return {
+        "check": "home-paths", "why": "public repo — no machine-anchored home path outside the recorded corpus",
+        "cmd": "static", "code": 1 if hits else 0, "secs": round(time.time() - t0, 2),
+        "sha256": hashlib.sha256(("\n".join(hits)).encode()).hexdigest(),
+        "tail": [f"{len(hits)} hit(s), first: {hits[0]}" if hits else "clean"],
+        "state": BLOCKED if hits else PASS,
+        "out": "\n".join(hits),
+    }
+
+
+# ==========================================================================================
 def main():
     args = sys.argv[1:]
     base = None
@@ -246,6 +308,7 @@ def main():
     rows += lint(files)
     print("\n-- invariants --", flush=True)
     rows.append(banned_names(files))
+    rows.append(home_paths())
 
     for r in rows:
         mark = {PASS: "ok  ", BLOCKED: "BLOCK", ERROR: "ERROR", SKIPPED: "skip"}[r["state"]]
