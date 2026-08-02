@@ -489,8 +489,8 @@ at those lines. Counted over every tracked file, `HARNESS.md:NNN` appears **22**
 across **7**. Four of those are inside `fork/healbot-fork.patch` and are not pointers at
 all — frozen text in a recorded diff, and two of them are the stale pointer at line 316 of
 HARNESS.md that §8.1 is about (written out rather than in live `file:line` form, per the
-citation-hygiene rule: the probe cannot tell a specimen from a pointer). That leaves **18 live pointers across 6 files**, of which **11 target a line
-below the table**. Repairing those means editing two dated phase records during a
+citation-hygiene rule: the probe cannot tell a specimen from a pointer). That leaves **18
+live pointers across 6 files**, of which **11 target a line below the table**. Repairing those means editing two dated phase records during a
 presentation pass, with a parallel session already writing to HARNESS.md. Named here so it
 is a task and not a silence.
 
