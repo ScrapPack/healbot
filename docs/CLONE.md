@@ -475,3 +475,14 @@ line either — so the method was wrong, not the binary. The plugin initializes 
 first request for a directory; one `curl` at the server and the arming line appears on the
 released binary at the shipped 180,000 gate. Without the positive control this walk would
 have reported that the harness does not retire on a released opencode, which is false.
+
+**And a third, from the push review of this very section.** Two findings, both real. The
+correction added to `fork/README.md` said "all five code paths in the overlay" while naming
+three — a fresh wrong count inside the paragraph that exists to fix a wrong count; the
+overlay is 14 maps plus exactly three non-map files. And the doctor's new `opencode CLI` row
+called anything on `PATH` a RELEASED build, which is an unmeasured claim about a file: a
+`bun link` from the checkout puts a FORK build on `PATH` and would have been reported
+grid-less on the doctor's own authority — §8.3's defect, reintroduced by §8.3's own fix. The
+row now resolves the symlink chain (the one case settleable for free) and states the
+CONDITIONAL for every other, with both branches mutation-controlled. **A pass that corrects
+counts and unmeasured claims is exactly where a new one gets written down.**

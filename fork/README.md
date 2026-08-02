@@ -32,8 +32,10 @@ maps and copied each into the local checkout **by hand** — which kept `fork/` 
 `opencode/` in agreement, so `probe_twin.py` stayed green on the machine that made the
 change, while the patch, a third copy that nothing compares against anything, silently
 stopped reproducing the overlay. Both differences are citation text in `.MAP.md` files; all
-five code paths in the overlay (`healbot.tsx`, `builtins.ts`, `.opencode/opencode.jsonc`
-included) are byte-identical.
+**three** non-map files in the overlay — `healbot.tsx`, `builtins.ts` and
+`.opencode/opencode.jsonc`, the 17 being 14 maps plus those three — are byte-identical.
+(The push review caught "five" here, which would have been a fresh wrong count inside the
+paragraph that exists to fix a wrong count.)
 
 **`fork/` is the authority, the patch is the base-relative bootstrap**, so the repair is a
 step in the reconstitution below rather than a regenerated patch: regenerating would break

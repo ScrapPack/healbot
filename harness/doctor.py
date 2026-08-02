@@ -229,19 +229,35 @@ def check_opencode_cli():
     Deliberately never a FAIL and deliberately not wired into the opencode tier: the fork
     path runs from source under bun (`harness/fleet.sh`), so a released binary is optional
     and its absence costs only the single-session convenience form.
+
+    WHAT THIS ROW MAY NOT SAY (push-review finding on its first draft, and it was right): it
+    called anything on PATH a RELEASED build, which is an unmeasured claim about a file — a
+    `bun link` from the checkout puts a FORK build on PATH and would have been reported
+    grid-less on the doctor's own authority, the exact wrong-belief shape three lines up. The
+    one case that can be settled cheaply is settled: resolve the symlink chain and see
+    whether it lands inside this repo's checkout. Everything else gets the CONDITIONAL — the
+    grid is a fork builtin, so a binary not built from `opencode/` does not have it — which
+    is true without measuring the bytes. `strings <bin> | grep healbot` is what would settle
+    the rest, and reading 138 MB is not this file's job.
     """
     oc = which("opencode")
     fork = os.path.exists(os.path.join(ROOT, "opencode", "packages", "opencode", "src", "index.ts"))
-    if fork and oc:
-        row(PASS, "opencode CLI", f"{oc} — RELEASED build, so no /healbot on it; "
-                                  "harness/fleet.sh runs the fork from source, grid included")
+    from_checkout = bool(oc) and os.path.realpath(oc).startswith(
+        os.path.realpath(os.path.join(ROOT, "opencode")) + os.sep)
+    if oc and from_checkout:
+        row(PASS, "opencode CLI", f"{oc} — resolves INTO {os.path.join(ROOT, 'opencode')}, so it is a "
+                                  "fork build and has /healbot")
+    elif fork and oc:
+        row(PASS, "opencode CLI", f"{oc} — does not resolve into opencode/, so `. harness/env.sh && "
+                                  "opencode` runs a non-fork build and /healbot is a fork builtin. "
+                                  "harness/fleet.sh runs the checkout from source, grid included")
     elif fork:
         row(PASS, "opencode CLI", "not on PATH — fine: harness/fleet.sh runs the fork from "
                                   "source under bun. `. harness/env.sh && opencode` needs one")
     elif oc:
-        row(WARN, "opencode CLI is the released build", f"{oc} — the harness config reaches it "
-                                                        "(pin, compaction off, retirement), but /healbot is a fork "
-                                                        "builtin; reconstitute per fork/README.md to get the grid")
+        row(WARN, "opencode CLI without a checkout", f"{oc} — the harness config reaches it "
+                                                     "(pin, compaction off, retirement), but /healbot is a fork "
+                                                     "builtin; reconstitute per fork/README.md to get the grid")
     else:
         row(WARN, "no opencode at all", "no checkout and nothing on PATH — neither form of the "
                                         "opencode half can start (fork/README.md)")
