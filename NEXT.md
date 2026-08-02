@@ -25,8 +25,8 @@ never by line).
 Continue the healbot build at ~/Desktop/healbot. Phase 14 (windows parity for the
 daily-driver halves, doctor preflight, public-repo hardening: LICENSE, the path scrub, the
 gate's home-paths invariant — docs/WINDOWS.md, README.md) is complete; the fork overlay is
-pinned at 509f4c0b1 (the pin is recorded in fork/README.md and healbot-fork.patch;
-probe_twin.py verifies fork/ and the checkout agree byte-for-byte, floor 17 overlay files).
+pinned at 509f4c0b1 (the pin is recorded in fork/README.md — the patch itself carries no
+hash; probe_twin.py verifies fork/ and the checkout agree byte-for-byte, floor 17 files).
 
 READ FIRST: HARNESS.md, the root index. Stop when you can name the file that owns any given
 behaviour; follow its pointers into the phase docs on demand instead of reading the tree.
