@@ -125,7 +125,7 @@ Measured at cwd `~/Desktop/healbot`:
 | File | Baseline arm | Harness arm | Content-policy? |
 |---|---|---|---|
 | `~/.config/opencode/AGENTS.md` | absent (VERIFIED `ls`) | absent | — |
-| `~/.claude/CLAUDE.md` (698 B) | **loads** (first `globalFiles` match) | **disabled** (`OPENCODE_DISABLE_CLAUDE_CODE=true`, `env.sh:69`) | No — it is the user's "Evidence over reasoning" method guidance, not a content clamp. But it is an **asymmetric confound**. |
+| `~/.claude/CLAUDE.md` (698 B) | **loads** (first `globalFiles` match) | **disabled** (`OPENCODE_DISABLE_CLAUDE_CODE=true`, `env.sh:84`) | No — it is the user's "Evidence over reasoning" method guidance, not a content clamp. But it is an **asymmetric confound**. |
 | project `AGENTS.md`/`CLAUDE.md`/`CONTEXT.md` | none at `~/Desktop/healbot` (VERIFIED) | none | — |
 
 So the baseline arm carries **+698 B of user global prose** the harness arm does not. Not policy,
@@ -245,8 +245,8 @@ must remove them. The mechanism is already the harness:
 | Confound | Baseline arm has | Harness arm has | Equalize by | Mechanism (file:line) |
 |---|---|---|---|---|
 | C1 base prompt | `gpt.txt` 9,284 B (persona `:1-3`) | `build.md` ~1,729 B | serve `build.md` in **both** | `agent/build.md` via the ternary `llm/request.ts:60` |
-| C2 global instructions | `~/.claude/CLAUDE.md` +698 B | disabled | disable in **both** | `OPENCODE_DISABLE_CLAUDE_CODE=true`, `env.sh:69` |
-| C3 skills metadata | 18 skills ~7,900 B | 1 skill ~820 B | disable external skills in **both** | `OPENCODE_DISABLE_EXTERNAL_SKILLS=true`, `env.sh:55` |
+| C2 global instructions | `~/.claude/CLAUDE.md` +698 B | disabled | disable in **both** | `OPENCODE_DISABLE_CLAUDE_CODE=true`, `env.sh:84` |
+| C3 skills metadata | 18 skills ~7,900 B | 1 skill ~820 B | disable external skills in **both** | `OPENCODE_DISABLE_EXTERNAL_SKILLS=true`, `env.sh:70` |
 
 **The conclusion this forces, and it is the honest one:** an "equalized baseline" is
 byte-for-byte the harness config. C1+C2+C3 *are* what `env.sh` does. Therefore **there is no

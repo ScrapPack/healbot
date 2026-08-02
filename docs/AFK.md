@@ -89,7 +89,7 @@ Per-run directory `<repo>/.gnhf/runs/<runId>/` (VERIFIED, `setupRun`/`resumeRun`
 
 **gnhf appends `.gnhf/runs/` to `.git/info/exclude`, not to `.gitignore`** — VERIFIED
 (`ensureRunMetadataIgnored` shells `git rev-parse --git-path info/exclude`). This matters for
-healbot specifically: `gate/gate.py:77-90` builds its untracked-file list with
+healbot specifically: `gate/gate.py:78-91` builds its untracked-file list with
 `git ls-files --others --exclude-standard`, which honours `info/exclude`, so **gnhf run metadata
 will not pollute the gate's changed-file set.** VERIFIED at both ends.
 
@@ -344,7 +344,7 @@ Two live traps this creates for gnhf specifically:
 
 - **The gnhf package ships `skills/gnhf/SKILL.md`** (§1.9). An agent told to "install the gnhf
   skill" will copy a banned filename into the tree. Every prompt must forbid it explicitly.
-- **A committing loop hides the violation from the gate.** `gate/gate.py:77-90` with no `--base`
+- **A committing loop hides the violation from the gate.** `gate/gate.py:78-91` with no `--base`
   reports the *working tree*, and gnhf commits after every successful iteration — so the tree is
   clean and `changed_files` is empty, `lint()` skips, and `banned_names([])` returns PASS having
   checked nothing. VERIFIED at both ends. **Inside a gnhf loop the gate must always be run as

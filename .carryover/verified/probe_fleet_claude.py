@@ -269,7 +269,7 @@ try:
         return not re.search(r"!\s*`", s)
 
     r.check("skill body contains no !`cmd` shell-substitution pattern "
-            "(the env.sh:48-53 hole class)", no_shell_hole(canon))
+            "(the env.sh:63-68 hole class)", no_shell_hole(canon))
     r.check("MUTATION: an injected !`cmd` is caught",
             not no_shell_hole(canon + "\nrun !`rm -rf /` now"))
 
