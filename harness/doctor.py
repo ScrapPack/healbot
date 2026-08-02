@@ -240,11 +240,14 @@ def check_opencode_cli():
     is true without measuring the bytes. `strings <bin> | grep healbot` is what would settle
     the rest, and reading 138 MB is not this file's job.
 
-    The negative branch is worded that carefully for a reason (SECOND push-review finding,
-    also right): resolving OUTSIDE `opencode/` rules out this checkout's build and nothing
-    else. A fork compiled out of tree — `bun build --compile`, or the binary
-    `HEALBOT_OPENCODE` points at — lands there too, so "not this checkout's build" is the
-    whole measurement and "non-fork" would have been the same overclaim one branch over.
+    The negative branch is worded that carefully for a reason, and it took THREE push-review
+    findings to get there because each rewrite kept smuggling a conclusion back in: first
+    "RELEASED build", then "runs a non-fork build", then "is NOT this checkout's build". All
+    three are claims about a FILE; the only claim the path supports is about a PATH. A fork
+    compiled out of tree — `bun build --compile` from this very checkout, dropped somewhere
+    else — resolves outside `opencode/` and is a fork build and is this checkout's build.
+    So the branch now says what `realpath` did and stops: it does not resolve into
+    `opencode/`. The grid half stays conditional. Do not tighten this back into a verdict.
     """
     oc = which("opencode")
     fork = os.path.exists(os.path.join(ROOT, "opencode", "packages", "opencode", "src", "index.ts"))
@@ -254,9 +257,9 @@ def check_opencode_cli():
         row(PASS, "opencode CLI", f"{oc} — resolves INTO {os.path.join(ROOT, 'opencode')}, so it is a "
                                   "fork build and has /healbot")
     elif fork and oc:
-        row(PASS, "opencode CLI", f"{oc} — what `. harness/env.sh && opencode` runs, and it is NOT "
-                                  "this checkout's build (that is all the path settles). /healbot is a "
-                                  "fork builtin, so it is there only if this binary was built from one. "
+        row(PASS, "opencode CLI", f"{oc} — what `. harness/env.sh && opencode` runs. It does not "
+                                  "RESOLVE into opencode/, which is all the path settles. /healbot is a "
+                                  "fork builtin, so it is there only if this binary was built from a fork. "
                                   "harness/fleet.sh runs the checkout from source, grid included")
     elif fork:
         row(PASS, "opencode CLI", "not on PATH — fine: harness/fleet.sh runs the fork from "
