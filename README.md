@@ -44,13 +44,15 @@ the guards it produced are executable:
 | `docs/` | Phase docs (the evidence record), plus `OPERATIONS.md` (command cheat sheet) and `WINDOWS.md` (PC bring-up) |
 
 **Live surface vs. record**, because `docs/` holds both and the filenames do not say which:
-this README, `docs/OPERATIONS.md`, `docs/WINDOWS.md`, `docs/CLONE.md` and `harness/doctor.py`
-are what you read to *use* the repo. Everything else under `docs/` is a **dated phase record**
-— the evidence behind a number or a decision, written at the time and corrected in place by
-appending, never rewritten. You do not need any of it to run the harness; you need all of it
-before you argue with a figure. `HARNESS.md` indexes the records newest-first and says what
-each one settles.
-
+this README, `docs/OPERATIONS.md` and `docs/WINDOWS.md` are what you read to *use* the repo,
+together with `harness/doctor.py` — the only one that answers for **your** machine rather
+than for this one. Everything else under `docs/` is a **dated phase record**: the evidence
+behind a number or a decision, written at the time and corrected in place by appending,
+never rewritten. `docs/CLONE.md` is both — a Phase 9 record, and the page to read before
+trusting any suite run from a fresh environment. You do not need the records to run the
+harness; you need them before you argue with a figure. `HARNESS.md` indexes **most** of them
+newest-first and says what each settles; `docs/SHIP.md` is reached from its Phase 13 section
+instead, and `docs/AFK.md` and `docs/REFUSAL-RESCORE.md` are not indexed there at all.
 
 ## Quickstart — macOS / Linux
 

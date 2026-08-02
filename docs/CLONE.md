@@ -476,6 +476,22 @@ first request for a directory; one `curl` at the server and the arming line appe
 released binary at the shipped 180,000 gate. Without the positive control this walk would
 have reported that the harness does not retire on a released opencode, which is false.
 
+**A fourth, and it left something open.** The front-door paragraph added to `README.md`
+claimed "`HARNESS.md` indexes the records newest-first". MEASURED against `docs/`: of the
+seventeen dated records, **three are not in that table** — `docs/SHIP.md` (Phase 13, the
+newest, reachable only from HARNESS.md's own Phase 13 section) and `docs/AFK.md` and
+`docs/REFUSAL-RESCORE.md`, which appear in HARNESS.md **zero** times. HARNESS.md's stated
+exit test is *"from this file alone you should be able to name the file that owns any given
+behavior"*, and for those two it does not hold. The README now says "most of them" and names
+the exceptions, which is honest but is not the repair. **The repair is left undone
+deliberately**: adding rows to that table shifts every line under it, and seventeen
+`HARNESS.md:NNN` citations from `docs/AFK.md` and `docs/REVIEW.md` land below the insertion
+point — repairing those means editing two dated records during a presentation pass, with a
+parallel session already writing to HARNESS.md. Named here so it is a task and not a
+silence. The same review also caught `docs/CLONE.md` — this file — being listed as live
+surface *and* excluded from "everything else is a dated phase record"; it is both, and the
+paragraph now says so.
+
 **And a third, from the push review of this very section.** Two findings, both real. The
 correction added to `fork/README.md` said "all five code paths in the overlay" while naming
 three — a fresh wrong count inside the paragraph that exists to fix a wrong count; the
