@@ -64,8 +64,11 @@ CONFIG_MATERIALIZED = Env(
 # re-runnable-`start` pane marker. 44. The 2026-08-02 skill-twin generalization (healbot-traps
 # drifted for two days while only firstmate was guarded) replaces the four firstmate rows
 # with eight population rows — census, frontmatter, shell-hole, identity, each with its
-# mutation leg — plus two doctor-wiring rows. 50.
-r = Results(expect=50, skip_max=2)
+# mutation leg — plus two doctor-wiring rows. 50. The 2026-08-02 migration containment in
+# hb_auth_state (the fleet's detector call fired the CLI's one-time settings migration in
+# every unstamped root) adds its guard row and mutation leg. 52. NOTE: the unmerged a79f809
+# holds 51 for the settings-VALUE row; the merged floor is 53.
+r = Results(expect=52, skip_max=2)
 
 
 def sh_n(path):
@@ -303,9 +306,32 @@ try:
             not asks_the_binary(src.replace('"$HB_CLAUDE" auth status', "true #", 1)))
     r.check("MUTATION: a profile read added alongside it is caught",
             not asks_the_binary(src.replace(
-                '"$HB_CLAUDE" auth status >/dev/null 2>&1 || return 1',
-                '"$HB_CLAUDE" auth status >/dev/null 2>&1 || return 1\n'
+                'if "$HB_CLAUDE" auth status >/dev/null 2>&1; then arc=0; else arc=1; fi',
+                'if "$HB_CLAUDE" auth status >/dev/null 2>&1; then arc=0; else arc=1; fi\n'
                 '  grep -q oauthAccount "$CLAUDE_CONFIG_DIR/.claude.json"', 1)))
+
+    def contains_the_migration(s):
+        # The containment guard for the CLI's one-time settings migration (HARNESS.md
+        # Traps): the detector call fires the migration in an unstamped root, so
+        # hb_auth_state must snapshot the settings bytes BEFORE the CLI call and
+        # byte-restore AFTER it, keeping the stamp. ORDERING is the claim, and the two cp
+        # directions are distinct literals, so a snapshot that never restores (or a guard
+        # moved off the detector's path entirely) reads as missing. Body-anchored for the
+        # same reason as asks_the_binary: the comment block above the function narrates
+        # the whole mechanism.
+        body = fn_body(s, "hb_auth_state")
+        take = body.find('cp "$stf" "$snap"')   # snapshot: settings -> temp
+        give = body.find('cp "$snap" "$stf"')   # byte-restore: temp -> settings
+        call = body.find("auth status")
+        return 0 <= take < call < give and "cmp -s" in body
+
+    r.check("the detector contains the CLI settings migration: snapshot before the call, "
+            "byte-restore after, stamp kept",
+            contains_the_migration(src),
+            "without this, the fleet's first CLI call in any fresh worktree, pool slot, or "
+            "clone rewrites the tracked settings.json mid-session (measured 2026-08-02)")
+    r.check("MUTATION: a guard whose byte-restore is gutted is caught",
+            not contains_the_migration(src.replace('cp "$snap" "$stf"', ": ", 1)))
 
     def spawn_block(s):
         m = re.search(r"\nspawn\)\n.*?\n  ;;\n", s, re.S)

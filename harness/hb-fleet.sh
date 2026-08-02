@@ -66,8 +66,11 @@
 # credential lands and why the harness login does not touch the owner's). A signed-out root
 # used to surface as `spawn`'s ready-wait timing out after HB_SPAWN_TIMEOUT seconds, naming
 # the symptom and hiding the cause; since 2026-08-02 `preflight` reports it and `spawn`
-# refuses on it in milliseconds. Resume hints below only work from a shell that sourced
-# env.claude.sh — a bare `claude --resume` looks in the wrong config root.
+# refuses on it in milliseconds. The same detector call also contains the CLI's one-time
+# settings migration in a fresh root and leaves the root STAMPED (hb_auth_state), so the
+# crew panes — and the login the refusal prescribes — start clean. Resume hints below only
+# work from a shell that sourced env.claude.sh — a bare `claude --resume` looks in the
+# wrong config root.
 
 set -eu
 
@@ -120,7 +123,7 @@ tmux_has_popup() {
   esac
 }
 
-# AUTH DETECTION. `claude auth status` is the detector, and it is the detector because three
+# AUTH DETECTION. `claude auth status` is the detector, and it is the detector because four
 # properties were MEASURED on 2.1.220 (2026-08-02), not assumed:
 #   1. It EXITS 1 with no credential and 0 with one, so sh needs no JSON parsing. The JSON it
 #      prints on stdout is a convenience for doctor.py, not the interface here.
@@ -130,9 +133,27 @@ tmux_has_popup() {
 #   3. It does NOT read .claude.json. A config dir holding a copied profile with a complete
 #      oauthAccount block still exits 1. That killed the cheaper "grep the profile" check,
 #      which would have gone GREEN on exactly the state this guard exists to catch.
+#   4. In an UNSTAMPED root it FIRES the CLI's one-time settings migration (HARNESS.md
+#      Traps): the ladder, gated on `migrationVersion` in the untracked .claude.json,
+#      rewrites the TRACKED settings.json — 2.1.220's step 13 flips exactly the pin "opus"
+#      to "opus[1m]" inside a key-reordering round-trip, then stamps 13. Fresh worktrees,
+#      pool slots, and clones carry only the tracked half, so the fleet's first CLI call
+#      there dirtied a tracked file. MEASURED in this worktree on this exact no---json
+#      call, while signed out: the rewrite fires regardless of the exit code.
 # It is LOCAL — unchanged behind a black-hole proxy, same ~0.2s — so it proves a credential is
 # PRESENT, not that the token is live. An expired token passes here and dies at the crewmate's
 # first turn; the refusal text says so rather than promising more than the check measured.
+#
+# Property 4 is why the call is wrapped: snapshot the settings bytes, byte-restore iff THIS
+# invocation changed them, KEEP the stamp (doctor's check_claude_auth posture). The kept
+# stamp is the actual crew protection — this guard runs before every spawn, and in
+# preflight before anything is built, so by the time a crew pane (or the first login the
+# refusal prescribes) starts a session in this root, the ladder finds the stamp and fires
+# nothing. Letting the CLI stamp itself was chosen over pre-stamping .claude.json by hand:
+# the stamp VALUE belongs to the binary, not to this script, so a future ladder step is
+# contained here with no edit. Pre-existing dirt is deliberately left alone — that finding
+# belongs to the settings probe, not to a detector that would otherwise mutate state it did
+# not disturb.
 #
 # Exit codes are the interface, same posture as the gate: 0 authed, 1 signed out, 2 no binary.
 # A missing binary is a DIFFERENT fact from a signed-out root and must not be reported as one:
@@ -143,8 +164,25 @@ hb_auth_state() {
     */*) [ -x "$HB_CLAUDE" ] || return 2 ;;
     *) command -v "$HB_CLAUDE" >/dev/null 2>&1 || return 2 ;;
   esac
-  "$HB_CLAUDE" auth status >/dev/null 2>&1 || return 1
-  return 0
+  stf="$CLAUDE_CONFIG_DIR/settings.json"
+  snap="$(mktemp "${TMPDIR:-/tmp}/hb-settings.XXXXXX" 2>/dev/null)" || snap=""
+  if [ -n "$snap" ] && ! cp "$stf" "$snap" 2>/dev/null; then
+    rm -f "$snap"; snap=""
+  fi
+  [ -n "$snap" ] || echo "hb-fleet: could not snapshot settings.json — running the detector unguarded" >&2
+  if "$HB_CLAUDE" auth status >/dev/null 2>&1; then arc=0; else arc=1; fi
+  if [ -n "$snap" ]; then
+    if ! cmp -s "$snap" "$stf"; then
+      if cp "$snap" "$stf" 2>/dev/null && cmp -s "$snap" "$stf"; then
+        echo "hb-fleet: contained the CLI settings migration — unstamped root; settings.json restored, stamp kept (HARNESS.md Traps)" >&2
+      else
+        echo "hb-fleet: the CLI settings migration fired and the byte-restore FAILED — a tracked file is modified." >&2
+        echo "hb-fleet: repair: git checkout -- '$stf'   (keep the untracked stamp file: it stops the re-fire)" >&2
+      fi
+    fi
+    rm -f "$snap"
+  fi
+  return $arc
 }
 
 hb_auth_guard() {  # loud, actionable refusal; called before anything that launches claude
@@ -448,8 +486,14 @@ spawn)
   done
   set -- --session-id "$SID" -n "$NAME"
   [ -n "$MODEL" ] && set -- "$@" --model "$MODEL"
-  spawn_split() {  # guardrail 6: the pane gets THIS run's HB_FLEET_DIR explicitly
+  spawn_split() {  # guardrail 6: the pane gets THIS run's HB_FLEET_DIR — and its config
+    # root — explicitly. Panes inherit the tmux SERVER's start environment, so a server
+    # brought up from another checkout would hand every pane THAT checkout's root: one this
+    # run's auth guard never measured or STAMPED (migration containment, hb_auth_state),
+    # and a different root from the one the manifest's transcript path below is computed
+    # against. Injecting it pins the pane to the root the guard just cleared.
     t split-window -t "$HB_RUN:crew" -c "$DIR" -e "HB_FLEET_DIR=$HB_FLEET_DIR" \
+      -e "CLAUDE_CONFIG_DIR=$CLAUDE_CONFIG_DIR" \
       -P -F '#{pane_id}' -- "$HB_CLAUDE" "$@"
   }
   if ! PANE="$(spawn_split "$@" 2>/dev/null)"; then
