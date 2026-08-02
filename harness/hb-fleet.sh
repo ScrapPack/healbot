@@ -107,8 +107,13 @@ py() { if command -v python3 >/dev/null 2>&1; then python3 "$@"; else python "$@
 # install) and `preflight` (which behavior to promise): split in two, the promise and the
 # binding drift independently (the 5db6d96 push's review caught them already split). An
 # unparsable version returns 1, so both callers take the pane fallback together.
+#
+# The parse takes the FIRST major.minor token and drops everything after it, so a
+# pre-release like "3.1-rc3" is 3.1, not the 3.13 a digits-only strip produced (the
+# 8ee08a8 push's review). TV_PROBE is left set for preflight's report lines: one parse,
+# one displayed truth.
 tmux_has_popup() {
-  TV_PROBE="$(tmux -V 2>/dev/null | tr -dc '0-9.' | cut -d. -f1,2)"
+  TV_PROBE="$(tmux -V 2>/dev/null | sed -n 's/^tmux[^0-9]*\([0-9][0-9]*\.[0-9][0-9]*\).*$/\1/p')"
   case "$TV_PROBE" in
     [0-9]*.[0-9]*) [ "${TV_PROBE%%.*}" -gt 3 ] || { [ "${TV_PROBE%%.*}" = 3 ] && [ "${TV_PROBE#*.}" -ge 2 ]; };;
     *) return 1;;
@@ -669,17 +674,15 @@ preflight)
   fi
 
   if command -v tmux >/dev/null 2>&1; then
-    TV="$(tmux -V 2>/dev/null | tr -dc '0-9.' | cut -d. -f1,2)"
-    case "$TV" in
-      [0-9]*.[0-9]*)
-        # display-popup landed in tmux 3.2; below that the help overlay is the only casualty.
-        if tmux_has_popup; then
-          say OK "tmux $TV (display-popup available, so the help overlay works)"
-        else
-          say WARN "tmux $TV is below 3.2 — no display-popup, so '?' prints to the pane instead"
-        fi;;
-      *) say WARN "tmux present but its version did not parse ('$(tmux -V 2>&1)') — assuming no popup, so '?' prints to the pane instead";;
-    esac
+    # display-popup landed in tmux 3.2; below that the help overlay is the only casualty.
+    # tmux_has_popup owns the parse; TV_PROBE is its major.minor readback.
+    if tmux_has_popup; then
+      say OK "tmux $TV_PROBE (display-popup available, so the help overlay works)"
+    elif [ -n "$TV_PROBE" ]; then
+      say WARN "tmux $TV_PROBE is below 3.2 — no display-popup, so '?' prints to the pane instead"
+    else
+      say WARN "tmux present but its version did not parse ('$(tmux -V 2>&1)') — assuming no popup, so '?' prints to the pane instead"
+    fi
   else
     say BLOCK "tmux missing — the fleet IS tmux (on a PC that means WSL2, docs/WINDOWS.md)"
     BLOCKED=1
