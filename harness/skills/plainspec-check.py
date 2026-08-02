@@ -129,7 +129,6 @@ def blocks(masked):
     out = []  # (start_line, end_line, kind, text) kind: prose | item | step | heading | table
     cur, start, kind = [], None, None
     lines = masked.splitlines()
-    last = 0
 
     def flush(end):
         nonlocal cur, start, kind
@@ -147,7 +146,6 @@ def blocks(masked):
             continue
         if kind in ("item", "step") and ln.startswith((" ", "\t")):
             cur.append(ln.strip())
-            last = i
             continue
         if ln.lstrip().startswith("|"):
             flush(i - 1)
@@ -164,7 +162,6 @@ def blocks(masked):
             cur, start, kind = [ln], i, "prose"
         else:
             cur.append(ln)
-        last = i
     flush(len(lines))
     return out
 
@@ -473,7 +470,7 @@ FIXTURES = [
     # engine: file:line citations never count toward any test
     ("R3", "clean", "",
      "The gate runs the sweep before every close so the records stay part of the "
-     "boundary and nothing ships unverified at gate/gate.py:204 and harness/doctor.py:297."),
+     "boundary and nothing ships unverified at gate/gate.py:220 and harness/doctor.py:297."),
     ("R8", "fire", "", "The cache warms at boot; requests then hit memory."),
     ("R8", "fire", "", "The cache — the warm one — hits first."),
     ("R8", "fire", "", "The parser (fast) accepts input (mostly) from stdin."),
@@ -481,7 +478,7 @@ FIXTURES = [
     ("R8", "clean", "", "Loop with `for(i=0;i<n;i++)` and read https://x.test/a;b now."),
     ("R8", "clean", "", 'The old draft said "a; b; c" and we quote it here.'),
     ("R8", "clean", "",
-     "The ban list (gate/gate.py:204) and the doctor rows (harness/doctor.py:297) hold."),
+     "The ban list (gate/gate.py:220) and the doctor rows (harness/doctor.py:297) hold."),
     ("R8", "clean", "", "| a; b | c |\n| d | e; f |"),
     ("R8", "clean", "",
      "The doc shows an example.\n\n  ```\n  a robust; seamless demo\n  ```\n\nThe doc ends."),
