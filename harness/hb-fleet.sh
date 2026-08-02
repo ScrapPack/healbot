@@ -103,6 +103,18 @@ t() { tmux -L "$HB_SOCKET" "$@"; }
 
 py() { if command -v python3 >/dev/null 2>&1; then python3 "$@"; else python "$@"; fi; }
 
+# display-popup landed in tmux 3.2. One predicate, shared by `up` (which `?` binding to
+# install) and `preflight` (which behavior to promise): split in two, the promise and the
+# binding drift independently (the 5db6d96 push's review caught them already split). An
+# unparsable version returns 1, so both callers take the pane fallback together.
+tmux_has_popup() {
+  TV_PROBE="$(tmux -V 2>/dev/null | tr -dc '0-9.' | cut -d. -f1,2)"
+  case "$TV_PROBE" in
+    [0-9]*.[0-9]*) [ "${TV_PROBE%%.*}" -gt 3 ] || { [ "${TV_PROBE%%.*}" = 3 ] && [ "${TV_PROBE#*.}" -ge 2 ]; };;
+    *) return 1;;
+  esac
+}
+
 # AUTH DETECTION. `claude auth status` is the detector, and it is the detector because three
 # properties were MEASURED on 2.1.220 (2026-08-02), not assumed:
 #   1. It EXITS 1 with no credential and 0 with one, so sh needs no JSON parsing. The JSON it
@@ -345,7 +357,13 @@ up)
   # `?` shadows tmux's default list-keys binding, so the card names `:` to keep the full
   # binding list one prompt away.
   t unbind -T prefix '?' 2>/dev/null || true
-  t bind -T prefix '?' display-popup -w 84 -h 28 "'$SELF' help"
+  if tmux_has_popup; then
+    t bind -T prefix '?' display-popup -w 84 -h 28 "'$SELF' help"
+  else
+    # No display-popup below 3.2: `run-shell` renders the card in the pane's view mode
+    # (q dismisses), which is the fallback preflight promises.
+    t bind -T prefix '?' run-shell "'$SELF' help"
+  fi
 
   t list-windows -t "$HB_RUN" -F '#{window_name}' | grep -qx crew || \
     t new-window -d -t "$HB_RUN" -n crew -c "$REPO"
@@ -655,12 +673,12 @@ preflight)
     case "$TV" in
       [0-9]*.[0-9]*)
         # display-popup landed in tmux 3.2; below that the help overlay is the only casualty.
-        if [ "${TV%%.*}" -gt 3 ] || { [ "${TV%%.*}" = 3 ] && [ "${TV#*.}" -ge 2 ]; }; then
+        if tmux_has_popup; then
           say OK "tmux $TV (display-popup available, so the help overlay works)"
         else
           say WARN "tmux $TV is below 3.2 — no display-popup, so '?' prints to the pane instead"
         fi;;
-      *) say WARN "tmux present but its version did not parse ('$(tmux -V 2>&1)') — assuming no popup";;
+      *) say WARN "tmux present but its version did not parse ('$(tmux -V 2>&1)') — assuming no popup, so '?' prints to the pane instead";;
     esac
   else
     say BLOCK "tmux missing — the fleet IS tmux (on a PC that means WSL2, docs/WINDOWS.md)"
