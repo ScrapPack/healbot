@@ -197,9 +197,11 @@ probe_twin pattern — and asserts the body carries no `!`cmd`` shell-substituti
    and is deliberately unused: it owns its own session naming and worktrees, and the
    fleet must own its topology and its pool. Recorded so nobody "simplifies" into it
    without noticing the manifest join breaks.
-6. **A live-looking bearer token sits in `~/.claude/settings.local.json`** (inside a
-   permissions rule for api.pixellab.ai), found during the parity inventory. Outside the
-   repo, owner's to rotate or move.
+6. **(Redacted 2026-08-02.)** This item pointed at a live credential on the owner's
+   machine, naming its file path and service; it was written when the repo was private and
+   the 2026-08-02 sync published it. Redaction removes it from the tree, not from git
+   history — rotating the credential is the actual fix, and that action is the owner's,
+   outside the repo.
 
 ## Results
 
