@@ -22,9 +22,11 @@ never by line).
 ## The prompt
 
 ```
-Continue the healbot build at ~/Desktop/healbot. Phase 13 (the ship: claude fleet,
-firstmate, config parity — docs/SHIP.md) is complete; the fork overlay is pinned at
-509f4c0b1 (probe_twin.py verifies the pin and all 17 overlay files).
+Continue the healbot build at ~/Desktop/healbot. Phase 14 (windows parity for the
+daily-driver halves, doctor preflight, public-repo hardening: LICENSE, the path scrub, the
+gate's home-paths invariant — docs/WINDOWS.md, README.md) is complete; the fork overlay is
+pinned at 509f4c0b1 (the pin is recorded in fork/README.md and healbot-fork.patch;
+probe_twin.py verifies fork/ and the checkout agree byte-for-byte, floor 17 overlay files).
 
 READ FIRST: HARNESS.md, the root index. Stop when you can name the file that owns any given
 behaviour; follow its pointers into the phase docs on demand instead of reading the tree.
@@ -73,13 +75,13 @@ DECIDED — do not reopen any of these as a defect, and do not "fix" them:
     threshold is verified for any Claude model. Hand off early; do not copy the opencode
     numbers across.
 
-YOUR TASK — Phase 14. Everything in the build order is built and every known correctness
+YOUR TASK — Phase 15. Everything in the build order is built and every known correctness
 hole is closed. Nothing is blocking you. Do not invent something to build.
-  0. FLEET BRING-UP, cheapest paid item and it unblocks the whole cockpit: after the owner
-     logs in once under harness/env.claude.sh (free, owner action), spawn ONE live crewmate
-     via harness/hb-fleet.sh, pin the SUSPECTED ready/busy/trust screen markers, and verify
-     the fleet-state hooks fire with the expected stdin shape. Record the pinned strings in
-     docs/SHIP.md §5 and the environment. One short session's spend.
+  0. FLEET BRING-UP RESIDUE, cheapest paid item: the one-time login, a live crewmate
+     (181 turns) and HB_READY_MARKER are done and recorded (docs/SHIP.md §5). Still open
+     there: HB_BUSY_MARKER and HB_TRUST_MARKER are SUSPECTED, not pinned, and the
+     fleet-state hooks firing with the expected stdin shape is unverified. Pin and record
+     both in docs/SHIP.md §5 and the environment. One short session's spend.
   1. FREE, start here: run the suite. In each of the last five phases the finding came from
      reading a surface nobody had read AS AN ARTIFACT (a derivation, the suite from a fresh
      clone, the paid rigs as source, the prose as pointers, the shared library). If you find
@@ -106,6 +108,9 @@ hole is closed. Nothing is blocking you. Do not invent something to build.
      threshold-independent). Use verify_retire_350k.py's growth loop retargeted.
   6. PAID, optional: an EXTERNAL plugin's route has never been RENDERED under real
      workload; everything TESTED so far was on the builtin path.
+  7. FREE, on the PC: clone, run `python harness/doctor.py`, and work docs/WINDOWS.md's
+     conversion checklist — every native-Windows claim is INFERRED until that run happens
+     on that machine.
 
 Ask me before spending real API credits on anything beyond a few turns.
 Never set XDG_DATA_HOME: auth.json lives there and OpenAI is on oauth.
