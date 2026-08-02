@@ -87,6 +87,26 @@ try:
             bool(sid) and os.path.exists(backend.transcript_path(sid, HEALBOT)),
             f"{len(transcripts)} recorded sessions for this repo")
 
+    # Every row below reads that transcript, so with `sid` None the next call builds a path
+    # ending `None.jsonl` and dies with a bare FileNotFoundError from inside backend.py.
+    # MEASURED 2026-08-02 by cloning the repo and running the suite in it: a fresh clone is a
+    # directory Claude Code has never run in, so this is the ordinary first-run state, not an
+    # exotic one. Exit was already 1 and the rows above already say what is missing, so this
+    # is Phase 9's legibility fix (probe_twin's `read()`) applied to the second probe that
+    # needed it — the cause instead of a traceback. Deliberately NOT a declared skip: the
+    # rows below are the whole probe, and a skip that large would be a green run measuring
+    # almost nothing.
+    if not sid:
+        print(
+            f"\n!! no Claude Code transcript for {HEALBOT}.\n"
+            f"   Looked in {backend.CC_PROJECTS}/{ours}/ (CLAUDE_CONFIG_DIR selects the corpus).\n"
+            "   This probe checks the normalizer against RECORDED output, so it needs at least\n"
+            "   one session Claude Code has already written for this checkout. Run `claude` here\n"
+            "   once — `. harness/env.claude.sh && claude` for the harness corpus — and re-run.\n",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
     records = backend.read_transcript(sid, HEALBOT)
     msgs = backend.normalize(records, sid)
     assistants = ab.assistant_msgs(msgs)

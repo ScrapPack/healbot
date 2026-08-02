@@ -310,3 +310,168 @@ evidence and passing the test are the same event. **When a predicate's inputs co
 the corpus needs a fixture check as much as the predicate needs a mutation check.** The real corpus
 had one, since Phase 8, and it is why the missing-real-DB case fails loudly. The rig corpus did not,
 and it is why the missing-rig-DB case reported 48.2%.
+
+---
+
+## 8. The second fresh-clone walk (added 2026-08-02)
+
+A staging-polish pass re-ran §1's experiment against the **public** repo, following
+`README.md`'s quickstart exactly as a stranger would: `git clone
+github.com/ScrapPack/healbot`, doctor, `core.hooksPath`, checkout reconstitution, venv, env
+scripts. Clone at `d36ee31` (local `main` was one unpushed commit ahead at walk time).
+
+Phase 9's picture has **inverted**, and the reason is that the paid corpus is tracked now —
+22 `hb/*.db` un-ignored by name. Where Phase 9 measured one probe of ten surviving a fresh
+clone, a clone reconstituted per the README runs **19 of 21 green on a settled pass**. §5's
+"`probe_error_state` and `probe_focus` are free only if you inherited a paid database" no
+longer holds: both run green from a clone that has paid for nothing. §1's portability
+sentence is now the outlier rather than the rule.
+
+The two reds are the phase's findings, and only one of them is a repo defect.
+
+| | |
+|---|---|
+| **The documented reconstitution does not reproduce the overlay, and it BLOCKS THE GATE** | `git apply` reproduces **15 of 17** overlay files byte-for-byte and leaves two behind. Doctor **1 FAIL**, `probe_twin.py` **24/25 exit 1**, `gate/gate.py` **exit 2 BLOCKED**. §8.1 |
+| **`probe_backend.py` dies with a raw traceback on any clone with no Claude Code history** | Honest exit 1 and a SHORT RUN, so never a false green — but a `FileNotFoundError` instead of a cause, which is the defect §5 fixed for `probe_twin` and nobody generalized. §8.2 |
+| **`. harness/env.sh && opencode` cannot produce the grid, and two documents said it could** | TESTED on the 1.18.5 release: `diff-viewer` and `which-key` present, **zero** `healbot` strings. The harness config still reaches it — the retirement plugin armed at 180,000 on that binary — so everything works except the headline screen. §8.3 |
+| **Doctor's claude tier read READY over a red row** | The crew-constraints check names its row for the state it found; the tier guarded one spelling of three. NEGATIVE CONTROL RUN: the old guard prints `[FAIL] crew constraints materialized` and `[READY] claude code workflow` in the same output. §8.4 |
+| **One knob still needed manual path config** | `HB_CLAUDE` defaulted to a literal `$HOME/.local/bin/claude` while the doctor's `claude` row resolves through `PATH` — the preflight could pass on a machine where the fleet cannot find the binary. §8.5 |
+
+### 8.1 The patch is a third copy of the overlay, and nothing compared it to `fork/`
+
+`probe_twin.py` asserts `fork/` against `opencode/` across all 17 files with a mutation
+control. It has never had anything to say about `fork/healbot-fork.patch`, which is a third
+copy of the same 17 files — and the checkout is kept in sync **by hand**. So the guarded
+pair stayed green on the machine doing the work while the unguarded pair silently came
+apart.
+
+TESTED, by `cmp` over all 17 in the reconstituted clone: 15 identical, and
+`packages/core/src/session/SESSION.MAP.md` plus
+`packages/tui/src/feature-plugins/FEATURE-PLUGINS.MAP.md` differ. The patch was last cut at
+`045e416` (Phase 7). Phase 11 (`16ec8e7`) corrected `file:line` citations inside those two
+maps and copied each into the checkout by hand — the exact operation `fork/README.md`'s
+Drift section describes itself doing, in a paragraph that names the risk of forgetting one
+and does not notice that the patch is a copy too. Only `.MAP.md` prose diverged; every code
+path in the overlay is byte-identical, `healbot.tsx`, `builtins.ts` and
+`.opencode/opencode.jsonc` included.
+
+What makes it worth a section rather than a line: **a stranger cannot pass the gate on a
+clean clone**, for a reason that is not their change and that no message on the way names.
+`fork/README.md`'s claim that "every one of the 17 overlay files is byte-identical to
+`fork/` afterwards" was TRUE when Phase 11 measured it and is the casualty; it now carries a
+dated correction.
+
+**The repair is a step, not a regenerated patch.** `fork/` is the authority — it is what
+`probe_twin` and the doctor read — and the patch is the base-relative bootstrap, pinned to a
+fork branch that no longer exists as a repository. Regenerating it would trade the only
+provenance the artifact has for two lines of prose. Both reconstitution blocks (`README.md`,
+`docs/WINDOWS.md`) and `fork/README.md`'s own now end with
+
+```sh
+cp -R fork/packages/. opencode/packages/ && cp -R fork/.opencode/. opencode/.opencode/
+```
+
+TESTED after adding it, in the same clone: doctor **0 FAIL**, `probe_twin.py` **exit 0**,
+`gate/gate.py` **`== PASS ==`**.
+
+Note what is still unguarded and is now written down rather than assumed: the checks read
+the **end state**, so the patch may drift again and nothing will say so until someone
+reconstitutes without the copy step. That is acceptable only because the copy step is now in
+every path that reconstitutes.
+
+### 8.2 `probe_backend.py`'s raw traceback
+
+With no recorded Claude Code session for the checkout — the ordinary state of a fresh clone
+— `transcript_path resolves a recorded session` fails with `sid` None, and the next line
+builds a path ending `None.jsonl` and raises `FileNotFoundError` from inside `backend.py`.
+Reproduced both under the harness `CLAUDE_CONFIG_DIR` and with it unset, so it is what a
+stranger sees either way.
+
+Exit was already 1 with a SHORT RUN summary, so this was never in the false-green class —
+the same classification §5 gave `probe_twin`'s identical crash. It gets the same repair: a
+named diagnostic saying which corpus was searched and what would populate it. Deliberately
+**not** converted to a declared skip: the rows below it are the whole probe, and a skip that
+large is a green run measuring almost nothing.
+
+**And it is not a fresh-clone condition — it is red in the MAIN checkout too**, which the
+walk only noticed because the diagnostic finally said what was missing. TESTED both ways:
+the pre-change file prints `FAIL UNEXPECTED EXCEPTION`, 5 rows, exit 1; the changed one
+prints the same two real reds plus the cause, exit 1. The cause is that
+`harness/claude/projects/` holds transcripts for the two **pool slots** and nothing for the
+repo root — every crewmate so far has run in a leased worktree, so the config root the
+harness pins has never recorded a session at the path this probe derives. That is a fact
+about how the fleet has been used, not a defect, and the repair is one interactive `claude`
+run in the main checkout under `env.claude.sh`. Recorded here rather than fixed, because
+fixing it means spending a session, and the probe now says so itself.
+
+### 8.3 Which `opencode` the README's own command runs
+
+`harness/env.sh` exports config isolation and the two prompt switches and touches `PATH` not
+at all, so `. harness/env.sh && opencode` runs whatever release is installed. `fleet.sh` has
+modelled this correctly since it was written — it prefers the checkout, falls back with a
+three-line warning, and refuses when there is neither — but `README.md` advertised the grid
+in its opening paragraph and never said the grid needs the fork, and `docs/WINDOWS.md` was
+worse: step 6 said "the grid is `/healbot`" directly after that command, and its
+INFERRED→TESTED conversion checklist asked the PC to verify `/healbot` exists **via a
+command that cannot produce it** — on a PC that the prerequisites table never told anyone to
+install opencode on.
+
+Both are corrected, and the doctor gained an `opencode CLI` row that names both halves:
+which binary a session would get, and that a released one carries the pin, compaction-off
+and retirement but no grid. It is never a FAIL and is deliberately **not** wired into the
+opencode tier — the fork path runs from source under bun, so a released binary is optional.
+
+### 8.4 The tier summary that outranked its own rows
+
+`tier_summary()`'s claude tier read `st.get("crew constraints STALE") != FAIL`. The
+crew-constraints check names its row for the state it found — `materialized`, `STALE`, `not
+materialized` — so a symlink pointing at the wrong target FAILs under the *first* name and
+the guard never saw it. Now matched on the family, not a spelling.
+
+Both controls run, in the fresh clone with the symlink repointed at `settings.json`:
+
+- **negative** — the pre-fix guard from git prints `[FAIL] crew constraints materialized`
+  and `[READY  ] claude code workflow` in the same run;
+- **positive** — the fixed guard prints `[NOT YET]` for the same mutation, and `[READY  ]`
+  again once the symlink is restored.
+
+Worth naming as a rule, because it is the same shape as §1 one level up: **a row name that
+varies with the state it reports cannot be a key.** The green survived a red row, which is
+this project's characteristic failure with a summary line instead of an assertion.
+
+### 8.5 The minimal-config inventory
+
+Every knob a fresh user can reach was enumerated and checked for two properties: optional
+with a derived default, and documented where it is read.
+
+| Knob | Verdict |
+|---|---|
+| `HARNESS_ROOT` | derived from `$BASH_SOURCE`, `:-` so an explicit value wins, and the failure is loud. Documented in both env scripts' headers |
+| `XDG_CONFIG_HOME` / `CLAUDE_CONFIG_DIR` | set BY the env scripts from `HARNESS_ROOT`, never by the user, `hb_nativepath` at the boundary |
+| `HEALBOT_RETIRE_AT` / `HEALBOT_AUTO_RETIRE` / `HARNESS_TRIM_TOOLS` | shipped commented-out in `env.sh` with the derivation beside them |
+| `HEALBOT_REVIEW` / `HEALBOT_PUBLISH` / `HEALBOT_GATE*` / `HEALBOT_REVIEW_*` / `HEALBOT_PUBLISH_*` | all `os.environ.get(name, default)` or `${VAR:-default}`; `OPERATIONS.md` carries the two an operator uses |
+| `HB_SOCKET` / `HB_RUN` / `HB_FLEET_DIR` / `HB_SPAWN_TIMEOUT` / `HB_*_MARKER` | derived; markers carry their evidence tier inline |
+| `HEALBOT_RIG_WORK` / `HEALBOT_VERIFY_SCRATCH` / `HEALBOT_POOL` / `HEALBOT_AB_RUNS` / `HEALBOT_CLAUDE_BIN` | derived; rig-side, documented at the read |
+| the LaunchAgent plist | `install-db-backup.sh` substitutes the real `$HOME` for `__HOME__` at install time — no tracked absolute path, no manual edit |
+| `core.hooksPath` | one documented command, and the doctor WARNs until it is set |
+| **`HEALBOT_OPENCODE`** | optional with a derived default and **undocumented at its point of use** — `fleet.sh` explains at length which opencode it picks and never names the override. Fixed: a comment there and a row in `OPERATIONS.md` |
+| **`HB_CLAUDE`** | **the one real defect.** It defaulted to a literal `$HOME/.local/bin/claude` — this machine's installer layout, not a derivation — while `doctor.py`'s `claude` row resolves through `PATH`. So the preflight could report PASS on a machine where every crew spawn fails its ready-wait. Now `command -v claude` with the old path as fallback |
+
+### 8.6 Two controls that refuted the evidence before it was written down
+
+Both belong here because the finding in each case would have been wrong and confident.
+
+**A binary grep with no negative control.** The first attempt at §8.3 ran `grep -c healbot`
+over the installed binary, got 0, and was one sentence from being recorded as TESTED. The
+control — grep the same binary for `opencode` — also returned 0, which is impossible.
+`grep -c` was not reading a 138 MB Mach-O usefully at all. Redone with `strings`, the
+controls hold (`diff-viewer` 1, `which-key` 2) and the finding stands. **A negative control
+is not a formality when the tool is the thing that might be broken.**
+
+**A hypothesis that fit the evidence and was still wrong.** Booting the installed binary
+under `env.sh` produced no `[healbot] headless retirement armed` line, which fit the
+harness-plugin-does-not-load story exactly. Booting the **fork** the same way produced no
+line either — so the method was wrong, not the binary. The plugin initializes lazily on the
+first request for a directory; one `curl` at the server and the arming line appears on the
+released binary at the shipped 180,000 gate. Without the positive control this walk would
+have reported that the harness does not retire on a released opencode, which is false.

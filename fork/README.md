@@ -17,7 +17,30 @@ is why the wrong number looked plausible. The **17** is right, from three indepe
 | Base commit | `7534d23551f665e65080809975b4ca5c7d63807b` — *"chore: update nix node_modules hashes"* |
 | Version at base | **1.18.5** |
 | Overlay recorded at | fork branch `healbot` @ `509f4c0b1` — *"phase 7: per-turn gate, RETIRE_HARD deleted, threshold 180,000"* (the relay landed one commit earlier) |
-| Exact diff | [`healbot-fork.patch`](healbot-fork.patch) (`git diff 7534d23 509f4c0b1`) — TESTED, and in Phase 11 more strongly than "applies cleanly": in a throwaway worktree at the base, the tree is **6,330** files, the patch holds **17** `diff --git` headers, `git apply --check` and `git apply` both exit 0, **and every one of the 17 overlay files is byte-identical to `fork/` afterwards**. Applying cleanly would still be true of a patch producing something subtly different from the overlay this repo ships; it does not |
+| Exact diff | [`healbot-fork.patch`](healbot-fork.patch) (`git diff 7534d23 509f4c0b1`) — TESTED, and in Phase 11 more strongly than "applies cleanly": in a throwaway worktree at the base, the tree is **6,330** files, the patch holds **17** `diff --git` headers, and `git apply --check` and `git apply` both exit 0. **The byte-identity half of that claim expired — see the correction below.** Applying cleanly would still be true of a patch producing something subtly different from the overlay this repo ships |
+
+**Correction, 2026-08-02.** The row above used to end *"and every one of the 17 overlay files
+is byte-identical to `fork/` afterwards"*. That was true when Phase 11 measured it and is
+false now, and a fresh-clone walk is what found it: applying the patch to a base checkout
+reproduces **15** of the 17 byte-for-byte and leaves two behind — `packages/core/src/session/SESSION.MAP.md`
+and `packages/tui/src/feature-plugins/FEATURE-PLUGINS.MAP.md`. TESTED by `cmp` over all 17
+in a clone reconstituted exactly as this file prescribes.
+
+The mechanism is this file's own drift mode 2, one level up. The patch was last cut at
+`045e416` (Phase 7). Phase 11 (`16ec8e7`) corrected `file:line` citations inside those two
+maps and copied each into the local checkout **by hand** — which kept `fork/` and
+`opencode/` in agreement, so `probe_twin.py` stayed green on the machine that made the
+change, while the patch, a third copy that nothing compares against anything, silently
+stopped reproducing the overlay. Both differences are citation text in `.MAP.md` files; all
+five code paths in the overlay (`healbot.tsx`, `builtins.ts`, `.opencode/opencode.jsonc`
+included) are byte-identical.
+
+**`fork/` is the authority, the patch is the base-relative bootstrap**, so the repair is a
+step in the reconstitution below rather than a regenerated patch: regenerating would break
+the one provenance this artifact has (the fork branch it was cut from no longer exists as a
+repository) to fix two lines of prose. The end state is checked either way —
+`harness/doctor.py` compares all 17 and `probe_twin.py` asserts them with a mutation
+control, which is how this was found.
 
 ## What is here
 
@@ -47,7 +70,11 @@ cd opencode
 git checkout -b healbot 7534d23
 git apply ../fork/healbot-fork.patch
 bun install          # bun 1.3.14, matches the repo's packageManager pin
-bun dev              # runs the TUI from source
+cd ..
+cp -R fork/packages/. opencode/packages/     # bring the overlay to CURRENT — see the correction above
+cp -R fork/.opencode/. opencode/.opencode/
+python3 harness/doctor.py                    # its "fork overlay" row is the check on the two lines above
+cd opencode && bun dev                       # runs the TUI from source
 ```
 
 **Retirement does not work from this checkout alone**, as of `509f4c0b1`. The only implementation

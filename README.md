@@ -57,7 +57,14 @@ Reconstitute the opencode checkout (derived, gitignored — see `fork/README.md`
 git clone https://github.com/sst/opencode opencode
 cd opencode && git checkout -b healbot 7534d23 && git apply ../fork/healbot-fork.patch
 bun install && cd ..
+cp -R fork/packages/. opencode/packages/ && cp -R fork/.opencode/. opencode/.opencode/
 ```
+
+That last line is not belt-and-braces. The patch is pinned at the fork commit it was cut
+from, and two of the seventeen overlay files have had citation corrections since, so
+`git apply` alone leaves the checkout two files behind `fork/` — which `fork/` being
+authoritative makes a real difference, and which blocks the gate. Re-run
+`python3 harness/doctor.py` afterwards: it compares all seventeen and fails if any differ.
 
 Build the rig venv, then run the harness:
 
@@ -67,6 +74,12 @@ python3 -m venv .carryover/verified/venv && .carryover/verified/venv/bin/pip ins
 harness/fleet.sh                      # or: server + control terminal, sessions survive the client
 . harness/env.claude.sh && claude     # the Claude Code half (one-time login on first use)
 ```
+
+`opencode` on that second line is whatever is on your `PATH`. The harness config reaches a
+released binary — TESTED: the model pin, compaction off, and the retirement plugin all arm
+on one — but the `/healbot` grid is a builtin of the **fork**, so it exists only when
+opencode runs from the reconstituted checkout. `harness/fleet.sh` resolves that itself and
+says so when it has to fall back.
 
 `docs/OPERATIONS.md` is the full command surface, including the crew fleet
 (`harness/hb-fleet.sh`) and the gate.

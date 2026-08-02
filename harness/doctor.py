@@ -216,6 +216,37 @@ def check_checkout():
         row(PASS, "fork overlay", "all overlay files byte-identical to the checkout")
 
 
+def check_opencode_cli():
+    """WHICH opencode a session gets, which is not a question the tiers below can ask.
+
+    README's single-session form is `. harness/env.sh && opencode`, and that runs whatever
+    is on PATH. TESTED 2026-08-02 on the 1.18.5 release: it carries the `diff-viewer` and
+    `which-key` builtins and **zero** `healbot` strings, so `/healbot` does not exist on it
+    — while the harness config still reaches it (the retirement plugin armed at the shipped
+    180,000 gate on that same binary). A harness that works except for its headline screen
+    is the wrong-belief shape this file exists to remove, so the row names both halves.
+
+    Deliberately never a FAIL and deliberately not wired into the opencode tier: the fork
+    path runs from source under bun (`harness/fleet.sh`), so a released binary is optional
+    and its absence costs only the single-session convenience form.
+    """
+    oc = which("opencode")
+    fork = os.path.exists(os.path.join(ROOT, "opencode", "packages", "opencode", "src", "index.ts"))
+    if fork and oc:
+        row(PASS, "opencode CLI", f"{oc} — RELEASED build, so no /healbot on it; "
+                                  "harness/fleet.sh runs the fork from source, grid included")
+    elif fork:
+        row(PASS, "opencode CLI", "not on PATH — fine: harness/fleet.sh runs the fork from "
+                                  "source under bun. `. harness/env.sh && opencode` needs one")
+    elif oc:
+        row(WARN, "opencode CLI is the released build", f"{oc} — the harness config reaches it "
+                                                        "(pin, compaction off, retirement), but /healbot is a fork "
+                                                        "builtin; reconstitute per fork/README.md to get the grid")
+    else:
+        row(WARN, "no opencode at all", "no checkout and nothing on PATH — neither form of the "
+                                        "opencode half can start (fork/README.md)")
+
+
 def check_configs():
     oc = os.path.join(HARNESS, "config", "opencode", "opencode.jsonc")
     if os.path.isfile(oc) and os.path.getsize(oc) > 0:
@@ -284,7 +315,12 @@ def tier_summary():
         return all(st.get(n) == PASS for n in names)
 
     tiers = []
-    claude_ok = ok("git", "claude", "claude harness settings") and st.get("crew constraints STALE") != FAIL
+    # The crew-constraints check names its row for the state it found, so keying the guard on
+    # one spelling only covered one of the two ways it can fail: a symlink pointing somewhere
+    # other than crew-constraints.md FAILs under the "materialized" name and left this tier
+    # reading READY over a red row. Match the family, not a spelling.
+    crew_fail = any(s == FAIL and n.startswith("crew constraints") for s, n, _ in ROWS)
+    claude_ok = ok("git", "claude", "claude harness settings") and not crew_fail
     tiers.append(("claude code workflow (env.claude.sh + settings pin)",
                   claude_ok, "needs git, claude CLI, settings.json, constraints in sync"))
     tiers.append(("opencode workflow (env.sh + fork TUI/grid)",
@@ -319,6 +355,7 @@ def main():
         check_python()
         check_tools()
         check_checkout()
+        check_opencode_cli()
         check_configs()
         check_claude_md()
         check_fleet_and_rig()

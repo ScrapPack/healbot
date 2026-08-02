@@ -23,7 +23,8 @@ on native Windows; `gate/gate.py` and the pre-push hook resolve this themselves.
 | Command | What |
 |---|---|
 | `. harness/env.sh && opencode` | One TUI session under the harness: model pin, compaction off, skill/claude-code switches. env.sh's own comments are the rationale record |
-| `harness/fleet.sh [project-dir] [port]` | The fleet shape: one detached `opencode serve` + the control terminal as a client; sessions survive the terminal. Default port 4096; reattach with the same command |
+| `harness/fleet.sh [project-dir] [port]` | The fleet shape: one detached `opencode serve` + the control terminal as a client; sessions survive the terminal. Default port 4096; reattach with the same command. Resolves the fork checkout itself and warns when it falls back to a released binary — which has no `/healbot` |
+| `HEALBOT_OPENCODE='<launch cmd>'` / `HEALBOT_PORT` | Override what `fleet.sh` launches / its default port. Both optional; the derived branches are the supported paths (`harness/fleet.sh`, "WHICH opencode") |
 | `pkill -f "serve --port 4096"` | Stop that server (fleet.sh prints this and the log path on exit) |
 | `/healbot` (inside the TUI) | The control grid — fork-only; the installed opencode binary does not have it, and fleet.sh warns when it falls back |
 | `HEALBOT_RETIRE_AT=20000 harness/fleet.sh …` | Exercise retirement cheaply. The default 180,000 and its derivation live in `harness/env.sh`; the threshold is read by the **server** process |

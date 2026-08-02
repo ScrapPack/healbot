@@ -36,8 +36,20 @@ you recognize the red when it fires. HARNESS.md's "Traps" section is the canonic
 
 ## Fork and plugin traps
 
+- **`fork/healbot-fork.patch` is a THIRD copy of the overlay and nothing compares it to
+  `fork/`.** probe_twin.py guards `fork/` ↔ `opencode/`, and the checkout is kept in sync by
+  hand — so the guarded pair stayed green while the unguarded one came apart. TESTED
+  2026-08-02 from a fresh clone: `git apply` reproduces 15 of 17 overlay files and leaves two
+  `.MAP.md` behind (Phase 11 corrected citations in them after the patch was cut), taking
+  doctor.py to 1 FAIL, probe_twin.py to 24/25, and the gate to exit 2. `fork/` is the
+  authority; the reconstitution ends by copying `fork/` over the checkout. Guard: the doctor's
+  `fork overlay` row and probe_twin.py — both read the END STATE, which is why the patch
+  itself can still drift.
 - **The installed `opencode` binary has NO grid.** Run from source: rig.py's OC constant, or
-  harness/fleet.sh.
+  harness/fleet.sh. TESTED 2026-08-02 on the 1.18.5 release: it carries the `diff-viewer` and
+  `which-key` builtins and zero `healbot` strings — while the harness config still reaches it,
+  so the pin, compaction-off and the retirement plugin all arm on it. The failure is
+  narrow and therefore easy to misread: everything works except the headline screen.
 - **Every field that looks like "the turn is over" is set per STEP** (`finish`,
   `time.completed`), usually mid-turn. `turnFinished()` in the harness server plugin is the
   only correct reader. Guard: probe_turn_predicate.py, including the mutation leg.

@@ -92,9 +92,14 @@ Everything below runs in **Git Bash inside Windows Terminal**, from the clone ro
    git clone https://github.com/sst/opencode opencode
    cd opencode && git checkout -b healbot 7534d23 && git apply ../fork/healbot-fork.patch
    bun install && cd ..
+   cp -R fork/packages/. opencode/packages/ && cp -R fork/.opencode/. opencode/.opencode/
    ```
 
-   `*.patch` is marked `-text` in `.gitattributes`, so the patch bytes are exact.
+   `*.patch` is marked `-text` in `.gitattributes`, so the patch bytes are exact. The two
+   `cp` lines are load-bearing, not tidying: the patch is pinned at the fork commit it was
+   cut from and two overlay files have had citation corrections since (`fork/README.md`,
+   "Correction, 2026-08-02"). Re-run the doctor after this step — its `fork overlay` row is
+   what tells you the checkout matches `fork/`.
 
 5. **Build the venv** (gate Tier 1 runs on native Windows; the pty probes do not):
 
@@ -105,8 +110,13 @@ Everything below runs in **Git Bash inside Windows Terminal**, from the clone ro
 
    `gate/gate.py` and the pre-push hook auto-detect the `Scripts/` layout.
 
-6. **opencode half:** `. harness/env.sh && opencode` — or `harness/fleet.sh` for the
-   server+attach shape. First boot compiles under bun and is slow; the grid is `/healbot`.
+6. **opencode half:** `harness/fleet.sh` for the server+attach shape — first boot compiles
+   under bun and is slow, and the grid is `/healbot`. `. harness/env.sh && opencode` is the
+   single-session form, but note what it runs: `opencode` off your `PATH`, which on a fresh
+   PC is nothing at all (the prerequisites above install **bun**, not a released opencode)
+   and if you do install one is a **released binary with no grid** — the harness config
+   still reaches it (pin, compaction off, retirement plugin), but `/healbot` is a builtin of
+   the fork. `fleet.sh` prefers the checkout and warns when it falls back.
 
 7. **Claude half:** `. harness/env.claude.sh && claude` — the redirected config root needs
    its **one-time interactive login** (env.claude.sh's header explains; the Mac's
@@ -144,9 +154,12 @@ Run these on the PC and the platform claims above stop being inferences:
 1. `python harness/doctor.py` → expect FAIL 0; SKIPs only for tmux/pty.
 2. `.carryover/verified/venv/Scripts/python.exe gate/gate.py` → `== PASS ==` (Tier 1 + the
    citation sweep run natively).
-3. `. harness/env.sh && opencode` → in the TUI, the model line shows `gpt-5.6-sol` (the pin
-   reached the process — the single most load-bearing check on this page) and `/healbot`
-   exists (the fork, not an installed binary).
+3. `harness/fleet.sh` → in the TUI, the model line shows `gpt-5.6-sol` (the pin reached the
+   process — the single most load-bearing check on this page) and `/healbot` exists. Both
+   clauses need the **fork**, which is why the command is `fleet.sh` and not
+   `. harness/env.sh && opencode`: the latter runs whatever released binary is on `PATH`,
+   where the pin arrives and the grid does not. If `fleet.sh` prints its
+   `no fork checkout … falling back` warning, step 4 did not finish.
 4. `. harness/env.claude.sh && claude` → sign in once; `claude` again → still signed in,
    `/status` shows the redirected config root, model `opus`.
 5. Optional, WSL2: the macOS/Linux quickstart end-to-end, then `hb-fleet.sh up` + one spawn.

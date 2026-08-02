@@ -60,6 +60,9 @@ hb_nativepath() {
   esac
 }
 
+# HEALBOT_OPENCODE overrides the resolution below with a launch command of your own (a
+# second checkout, a wrapper, a pinned build). Optional and unset by default; the two
+# derived branches under it are the supported paths and neither needs configuring.
 FORK="$(hb_nativepath "$(cd "$FLEET_ROOT/.." 2>/dev/null && pwd)/opencode")"
 if [ -n "${HEALBOT_OPENCODE:-}" ]; then
   OC="$HEALBOT_OPENCODE"
