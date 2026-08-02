@@ -64,8 +64,11 @@ CONFIG_MATERIALIZED = Env(
 # re-runnable-`start` pane marker. 44. The 2026-08-02 skill-twin generalization (healbot-traps
 # drifted for two days while only firstmate was guarded) replaces the four firstmate rows
 # with eight population rows — census, frontmatter, shell-hole, identity, each with its
-# mutation leg — plus two doctor-wiring rows. 50.
-r = Results(expect=50, skip_max=2)
+# mutation leg — plus two doctor-wiring rows. 50. The 2026-08-02 settings-migration finding
+# (claude 2.1.220's one-time ladder rewrote the pin opus -> opus[1m] in a fresh worktree
+# root, and the flipped value passed bool()) hardens the settings row to the pin VALUE and
+# adds its mutation leg. 51.
+r = Results(expect=51, skip_max=2)
 
 
 def sh_n(path):
@@ -73,7 +76,17 @@ def sh_n(path):
 
 
 def settings_ok(d):
-    return d.get("autoCompactEnabled") is False and bool(d.get("model"))
+    # The pin VALUE, not presence. bool(d.get("model")) survived the one rewrite that has
+    # actually happened: claude 2.1.220's one-time settings migration (any config root whose
+    # untracked .claude.json lacks migrationVersion >= 13) rewrites exactly the alias "opus"
+    # to "opus[1m]" — the 1M-context variant, premium-priced above 200K input — on the first
+    # config-loading invocation in that root, which is every fresh worktree, pool slot, and
+    # clone. TESTED 2026-08-02: `auth status` and `config list` both fire it and stamp the
+    # marker; `--version` does not; sonnet/haiku/opus[1m]/claude-opus-5 pins pass through
+    # byte-identical, so the mapping is the alias "opus" alone — exactly what the 2026-08-01
+    # model policy pins here. A deliberate pin change updates this literal and settings.json
+    # in one commit (probe_turn_growth's pin assertion is the precedent, opencode side).
+    return d.get("autoCompactEnabled") is False and d.get("model") == "opus"
 
 
 def hook_events_ok(d):
@@ -116,10 +129,16 @@ try:
     # -- settings.json -------------------------------------------------------------
     with open(os.path.join(CFG, "settings.json")) as f:
         settings = json.load(f)
-    r.check("settings pin a model and turn autoCompact off", settings_ok(settings))
+    r.check("settings pin the model VALUE (opus) and turn autoCompact off",
+            settings_ok(settings))
     mut = dict(settings)
     mut["autoCompactEnabled"] = True
     r.check("MUTATION: autoCompact flipped on is caught", not settings_ok(mut))
+    mut = dict(settings)
+    mut["model"] = "opus[1m]"
+    r.check("MUTATION: the CLI migration's rewrite (opus -> opus[1m]) is caught",
+            not settings_ok(mut),
+            "this exact flip happened 2026-08-02 in a fresh worktree root and passed bool()")
     r.check("all three fleet hook events run fleet-state.sh", hook_events_ok(settings))
     mut = json.loads(json.dumps(settings))
     del mut["hooks"]["Stop"]
