@@ -56,7 +56,7 @@ venv/bin/python probe_rig_contract.py# 29/29 does every rig in this suite still 
                                      #       decides a turn COMPLETED by counting fire()'s box.
                                      #       Six paid rigs failed the fourth and always exited 0;
                                      #       four rows failed the sixth and could not fail at all
-venv/bin/python probe_gate_scope.py  # 16/16 does the pre-push gate gate the PUSHED range, not the
+venv/bin/python probe_gate_scope.py  # 17/17 does the pre-push gate gate the PUSHED range, not the
                                      #       checkout's HEAD? Builds a scratch bare remote plus a
                                      #       work repo, drives a real merge push through the REAL
                                      #       hook and gate.py from a checkout parked on an ancestor

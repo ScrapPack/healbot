@@ -249,9 +249,15 @@ try:
     git(dwork, "remote", "add", "origin", f"{dtmp}/remote.git")
     git(dwork, "push", "-q", "origin", "main", "main:todelete")   # both ungated, pre-wire
     git(dwork, "config", "core.hooksPath", HOOKS)                 # the REAL pre-push
+    # HEALBOT_* stripped, not inherited: an ambient stub set (HEALBOT_GATE +
+    # HEALBOT_REVIEW_CMD + HEALBOT_PUBLISH=off) would leave the hook's needs_venv empty,
+    # and a regressed ZERO-sha skip would then reach the stub and exit 0 — green for a
+    # reason unrelated to the claim. With them stripped, every stage-reaching path in
+    # this venv-less scratch repo refuses, so exit 0 can only mean the skip held.
+    denv = {k: v for k, v in os.environ.items() if not k.startswith("HEALBOT_")}
     dpush = subprocess.run(["git", "push", "origin", ":todelete"], cwd=dwork,
                            capture_output=True, text=True, timeout=120,
-                           env={**os.environ, **GIT_ENV})
+                           env={**denv, **GIT_ENV})
     r.check(
         "a deletion-only push passes the REAL hook with no venv and no gate installed",
         dpush.returncode == 0,
