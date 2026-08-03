@@ -42,12 +42,12 @@ venv/bin/python probe_arm_factory.py # 19/19 does a synthesized arm hold EXACTLY
                                      #       delta? (arms.py: freeze/materialize/tamper-refuse,
                                      #       then boots BOTH arms and diffs GET /skill)
 venv/bin/python probe_citations.py   # 20/20 do this repo's file:line citations still point at
-                                     #       code? Resolves ~930 citations across 25 documents and
+                                     #       code? Resolves ~1,024 citations across 45 documents and
                                      #       asserts the file exists, the line exists, and it is not
                                      #       blank. fork/README.md's "drift mode 2", which was named
                                      #       as a risk for eleven phases with no check behind it
 venv/bin/python probe_rig_contract.py# 40/40 does every rig in this suite still report FAILURE as
-                                     #       failure — and can it SEE one? Reads all 24 entrypoints
+                                     #       failure — and can it SEE one? Reads every entrypoint (36 today)
                                      #       (itself included) as SOURCE and asserts six contracts:
                                      #       a declared assertion FLOOR, a satisfiable one, no
                                      #       `finally` that exits without a crash guard, an exit
