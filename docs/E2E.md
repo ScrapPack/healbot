@@ -13,7 +13,7 @@ written down as a finding rather than smoothed over, and the direction of the re
 Nothing paid was run: the opencode half stops at the last free keystroke, and that boundary is
 stated where it falls (§4).
 
-Fourteen findings. Six were repaired in this change, five carry probe rows, three are open
+Fifteen findings. Seven were repaired in this change, seven carry probe rows, four are open
 items that need an owner's decision rather than a patch.
 
 ---
@@ -201,14 +201,23 @@ and the manual repair worked exactly as the pool's refusals promise — `release
 and printed the uncommitted file rather than destroying it, and `release --discard-work` exited
 0, reset the slot and dropped the lease.
 
-One smaller thing, found while cleaning up rather than while testing: `kill` on a crewmate
-whose pane is already gone exits 1 with tmux's own `can't find pane: %5`, not a framed
-`hb-fleet:` line like every other refusal in the script. VERIFIED at the `kill` branch — under
-`set -eu` the failing `kill-pane` ends the script before the report line — and TESTED by
-killing a crewmate that `down` had already taken with it. The exit code is honest and nothing
-is lost; only the message speaks tmux's language instead of the fleet's. Recorded, not
-repaired, because framing it means deciding whether an already-dead crewmate is an error at
-all.
+**Finding 15 — `kill` on a crewmate that is already gone spoke tmux, not fleet.** Found while
+cleaning up rather than while testing. TESTED by killing a crewmate `down` had already taken:
+exit 1 with tmux's own `can't find pane: %5`, no `hb-fleet:` prefix — under `set -eu` the
+failing `kill-pane` ends the script before its report line. Repaired: the branch now frames the
+missing case by name and exits **2**, matching `send` and `brief`, and TESTED at exit 2 with
+the crewmate's resume line. Deliberately *not* by reaching for the dead-pane helper those two
+use, which the push review's own note might suggest: that helper is true for dead-**or**-
+missing, and a dead-but-present pane is exactly what `kill` exists to reclaim, since
+`remain-on-exit` leaves corpses holding crew slots. Guarded with two mutation legs, one for an
+unguarded `kill-pane` and one for reaching at that helper.
+
+The first version of that guard is worth its own sentence, because it is this project's
+characteristic bug in miniature. It went red against the correct fix — the predicate asserted
+the helper's name was absent from the branch, and the fix's own comment explains which helper
+it avoids, so the check was reading prose that mentions the helper rather than code that calls
+it. Comments are stripped before the predicate runs now. An assertion that its own explanation
+can flip is decoration wearing a load-bearing name.
 
 **Finding 10 — an unexplained line in a crewmate's composer, explained.** `peek` showed
 `❯ fourth probe line` on `alpha` — text nobody had sent. It is not in the transcript, not in

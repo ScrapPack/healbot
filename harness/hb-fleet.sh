@@ -806,7 +806,17 @@ kill)
   NAME="${1:-}"; [ -n "$NAME" ] || usage
   P="$(resolve_pane "$NAME")"
   SID="$(manifest_get "$NAME" sid 2>/dev/null || echo '?')"
-  t kill-pane -t "$P"
+  # Deliberately NOT pane_dead, which send and brief both use: that helper answers "dead OR
+  # missing", and a DEAD pane is exactly the thing kill exists to reclaim (remain-on-exit is on,
+  # so a crewmate whose process ended leaves a corpse holding a slot). Only the MISSING case
+  # needs framing — `down` takes the crew window with it, and tmux's own "can't find pane: %N"
+  # then ends the script under set -eu, naming a pane id instead of the crewmate, which is the
+  # one refusal in this file that spoke tmux rather than fleet. MEASURED 2026-08-03, docs/E2E.md.
+  if ! t kill-pane -t "$P" 2>/dev/null; then
+    echo "hb-fleet: $NAME's pane $P is already gone — nothing to kill (the fleet went down, or it was killed already)." >&2
+    echo "hb-fleet: its transcript survives: claude --resume $SID (from a shell that sourced env.claude.sh)" >&2
+    exit 2
+  fi
   echo "hb-fleet: killed $NAME ($P). Its transcript survives; resume from an env.claude.sh shell: claude --resume $SID"
   ;;
 

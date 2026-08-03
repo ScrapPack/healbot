@@ -77,7 +77,11 @@ CONFIG_MATERIALIZED = Env(
 # walk (docs/E2E.md) adds five: the C-b ? popup geometry against the rendered card with two
 # mutation legs, and the card naming its own exit key with one — the first `hb-fleet.sh
 # start` run end to end showed the overlay opening on `kill`, its top 18 rows dropped. 65.
-r = Results(expect=65, skip_max=2)
+# The same walk's cleanup adds three: `kill` on a pane the fleet had already taken leaked
+# tmux's own "can't find pane" under set -eu, so the branch is guarded now — with a mutation
+# leg for an unguarded kill-pane and one for reaching at pane_dead, which would refuse to
+# reap the dead pane kill exists to reclaim. 68.
+r = Results(expect=68, skip_max=2)
 
 
 def sh_n(path):
@@ -541,6 +545,35 @@ try:
     r.check("the card's `?` row names the key that closes it", card_names_its_exit(src))
     r.check("MUTATION: dropping the exit hint is caught",
             not card_names_its_exit(src.replace("this card (esc closes)", "this card", 1)))
+
+    def kill_frames_a_missing_pane(s):
+        """`kill` must survive its own kill-pane failing. Under `set -eu` a bare
+        `t kill-pane` ends the script on tmux's "can't find pane: %N", which names a pane id
+        rather than the crewmate — MEASURED 2026-08-03 killing a crewmate that `down` had
+        already taken. It must NOT reach for the pane-dead helper the way send and brief do:
+        that helper is true for dead-or-missing, and a dead pane is precisely what kill
+        reclaims.
+
+        COMMENTS ARE STRIPPED FIRST, and that is not tidiness. The first version of this
+        predicate read the raw branch and went red against the correct fix, because the fix's
+        own comment explains which helper it avoids — the check was measuring prose that
+        mentions the helper, not code that calls it. A predicate that its own explanation can
+        flip is the decoration this file exists to keep out.
+        """
+        branch = s.split("\nkill)", 1)[-1].split("\ndown)", 1)[0]
+        code = "\n".join(ln for ln in branch.split("\n") if not ln.lstrip().startswith("#"))
+        return ("if ! t kill-pane" in code and "exit 2" in code
+                and "pane_dead" not in code)
+
+    r.check("kill frames a pane that is already gone instead of leaking tmux's error",
+            kill_frames_a_missing_pane(src))
+    r.check("MUTATION: an unguarded kill-pane is caught",
+            not kill_frames_a_missing_pane(src.replace("if ! t kill-pane -t \"$P\" 2>/dev/null; then",
+                                                       "t kill-pane -t \"$P\"; if false; then", 1)))
+    r.check("MUTATION: reaching for pane_dead here — which would refuse to reap a corpse — is caught",
+            not kill_frames_a_missing_pane(src.replace(
+                '  if ! t kill-pane -t "$P" 2>/dev/null; then',
+                '  pane_dead "$P" && exit 2\n  if ! t kill-pane -t "$P" 2>/dev/null; then', 1)))
 
     def panes_are_idempotent(s):
         # `start` runs `up` on every invocation, including against a live fleet, so an

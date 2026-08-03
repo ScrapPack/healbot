@@ -270,7 +270,7 @@ detector gained the CLI settings-migration containment and its mutation leg, →
   ever run on. Only "the link is on disk right now" is guarded, by
   `claude-config-materialized`. Still do NOT "fix" a slot by creating the file: `gate.py:220`
   bans that name anywhere in the tracked tree, which is the whole reason for the convention.
-- **`probe_fleet_claude.py:501`, the skill twins**, guarded by `main-checkout`. Firstmate-only
+- **`probe_fleet_claude.py:607`, the skill twins**, guarded by `main-checkout`. Firstmate-only
   until later on 2026-08-02, when `healbot-traps.md` was found to have drifted for two days
   while the one guarded specimen held (HARNESS.md Traps has the row); now one aggregate row
   compares every `harness/skills/<name>.md` against `~/.agents/skills/<name>/SKILL.md`, which
