@@ -57,11 +57,14 @@ CHECKOUT = f"{HB}/opencode"
 # `opencode/` is DERIVED and gitignored, so a fresh clone or worktree does not have it. The
 # first thing to touch it here is `git -C` inside owned_set(), whose CalledProcessError
 # (exit 128, not a repository) reaches the gate's citations row as a raw traceback instead
-# of a cause. TESTED 2026-08-02 in a fresh worktree; the exit was already 1 (crash-guard
-# row plus a short run against the floor), so, like probe_twin.py's refusal, this is a
-# legibility fix rather than a correctness one. The check is for `.git`, the thing ls-files
-# actually needs: a half-rebuilt checkout directory without a repository would die the same
-# way a missing one does.
+# of a cause. TESTED 2026-08-02 in a fresh worktree. The check is for `.git`, the thing
+# ls-files actually needs: a half-rebuilt checkout directory without a repository would die
+# the same way a missing one does. Exit 3 since 2026-08-03, the gate's own word for
+# cannot-measure (docs/E2E.md item D): a probe that found its NAMED input absent has left
+# its claim unmeasured, which is a different fact from sweeping and finding rot. The gate
+# maps a tier-1 exit 3 to ERROR; every other nonzero — crashes included — stays BLOCKED.
+# This guard must stay ABOVE the try/finally: a sys.exit inside the try is replaced by the
+# finally's own verdict exit, which would silently rewrite 3 back into a red 1.
 if not os.path.exists(f"{CHECKOUT}/.git"):
     print(
         f"\n!! {CHECKOUT}/.git not found.\n"
@@ -69,7 +72,7 @@ if not os.path.exists(f"{CHECKOUT}/.git"):
         "   have it. Rebuild it from fork/README.md, then re-run.\n",
         file=sys.stderr,
     )
-    sys.exit(1)
+    sys.exit(3)
 
 SKIP = {".git", "node_modules", "venv", "__pycache__", "dist", "build", ".next", "hb"}
 

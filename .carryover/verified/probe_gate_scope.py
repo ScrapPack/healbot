@@ -41,8 +41,8 @@ mutants. That record predates the deletion leg, which reads only the hook and is
 to the range machinery that test reverted.
 
 Commit identities and dates are pinned, so the scratch shas are stable and this probe's
-output is byte-identical across runs: MEASURED 2026-08-03 at 17 rows, 4 runs, one sha256
-over the full output. Tier 2 hashes nothing, so nothing depends on that; it is measured because
+output is byte-identical across runs: MEASURED 2026-08-03 at 19 rows (the sentinel legs
+included), 4 runs, one sha256 over the full output. Tier 2 hashes nothing, so nothing depends on that; it is measured because
 the gate's determinism note says to measure rather than hope, and it is what Tier 1
 membership would require. Needs `ruff` on PATH, the same requirement the gate's own lint
 stage carries.
@@ -115,10 +115,12 @@ def write(path, text, mode=0o644):
     os.chmod(path, mode)
 
 
-def build_scenario(tmp):
+def build_scenario(tmp, plant=PLANT):
     """The 20260802-184854 shape: a bare remote holding only the base commit, a work repo
     whose main carries a --no-ff merge bringing MERGED, and the checkout parked on an
-    ancestor branch. Returns (work, remote, base, tip), the shas full-length."""
+    ancestor branch. Returns (work, remote, base, tip), the shas full-length. `plant` is
+    the merged file's content: the F841 by default; the sentinel legs pass clean source,
+    because a BLOCKED ruff row would win the verdict over the ERROR they exist to see."""
     os.makedirs(tmp)
     remote = f"{tmp}/remote.git"
     work = f"{tmp}/work"
@@ -136,7 +138,7 @@ def build_scenario(tmp):
     git(work, "push", "-q", "origin", "main")          # before the hook wires in: ungated
     git(work, "config", "core.hooksPath", HOOKS)       # the REAL pre-push, from this repo
     git(work, "checkout", "-q", "-b", "feature")
-    write(f"{work}/{MERGED}", PLANT)
+    write(f"{work}/{MERGED}", plant)
     git(work, "add", MERGED)
     git(work, "commit", "-q", "-m", "feature")
     git(work, "checkout", "-q", "main")
@@ -157,11 +159,13 @@ def tier1_stub_names():
     return [cmd[1] for _, cmd, _, _ in mod.TIER1]
 
 
-def install_gate(work, source=None):
+def install_gate(work, source=None, first_stub_exit=0):
     """gate.py INSIDE the scratch repo, because gate.py derives ROOT from its own path and
     its git commands must address the scratch repo, not this one. source=None symlinks the
     repo's real file; a string installs a mutated copy. Tier 1 is made inert so the only
-    row that can block is the range machinery under test."""
+    row that can block is the range machinery under test — except when `first_stub_exit`
+    makes the first tier-1 stub the subject: the sentinel legs set it to 3 (a declared
+    cannot-measure refusal) and 1 (a plain red) to drive the row-state mapping itself."""
     os.makedirs(f"{work}/gate")
     if source is None:
         os.symlink(GATE_PY, f"{work}/gate/gate.py")
@@ -169,8 +173,9 @@ def install_gate(work, source=None):
         write(f"{work}/gate/gate.py", source)
     os.makedirs(f"{work}/.carryover/verified/venv/bin")
     os.symlink(sys.executable, f"{work}/.carryover/verified/venv/bin/python")
-    for name in tier1_stub_names():
-        write(f"{work}/.carryover/verified/{name}", "import sys\nsys.exit(0)\n")
+    for i, name in enumerate(tier1_stub_names()):
+        code = first_stub_exit if i == 0 else 0
+        write(f"{work}/.carryover/verified/{name}", f"import sys\nsys.exit({code})\n")
     write(f"{work}/review-stub.sh", "#!/bin/sh\nexit 0\n", mode=0o755)
 
 
@@ -220,7 +225,7 @@ def record_scope_ok(rec, work, tip):
             and rec.get("tree") == short(work, "HEAD"))
 
 
-r = Results(expect=17)
+r = Results(expect=19)
 TMP = tempfile.mkdtemp(prefix="probe_gate_scope.")
 try:
     r.check(
@@ -369,6 +374,40 @@ try:
         "MUTATION 2: a record whose head silently means tree again IS detected",
         h_rec is not None and not record_scope_ok(h_rec, h_work, h_tip),
         "the same record predicate the live leg passed, red on the reverted record shape",
+    )
+
+    # --- sentinel legs: a tier-1 probe's exit 3 is ERROR, and only 3 is (E2E item D) -----
+    # gate.py's tier-1 mapping used to fold every nonzero probe exit into BLOCKED, so a
+    # probe that started and then found its own named input absent (probe_twin and
+    # probe_citations on a clone without opencode/) reported identically to one that ran
+    # and measured a finding. Exit 3 is the declared cannot-measure refusal now — the same
+    # code the gate itself exits with on ERROR. These legs plant CLEAN source, because the
+    # default scenario's F841 would take ruff to BLOCKED and the verdict lattice would
+    # bury the ERROR under it.
+    CLEAN = "def unplanted():\n    return 2\n"
+    s_work, s_remote, s_base, _st = build_scenario(f"{TMP}/sentinel", plant=CLEAN)
+    install_gate(s_work, first_stub_exit=3)
+    spush = push(s_work)
+    s_rows = (run_record(s_work) or {}).get("checks") or [{}]
+    r.check(
+        "SENTINEL: a tier-1 probe exiting 3 records ERROR and refuses at gate exit 3",
+        spush.returncode != 0 and "REFUSING the push (gate exit 3" in spush.stderr
+        and s_rows[0].get("state") == "error"
+        and rev(s_remote, "refs/heads/main") == s_base,
+        "cannot-measure is neither a pass nor a finding: the claim is unmeasured, the "
+        "hook still refuses, and the record says which",
+    )
+    c_work, c_remote, c_base, _ct = build_scenario(f"{TMP}/sentinel-control", plant=CLEAN)
+    install_gate(c_work, first_stub_exit=1)
+    cpush = push(c_work)
+    c_rows = (run_record(c_work) or {}).get("checks") or [{}]
+    r.check(
+        "SENTINEL CONTROL: a probe exiting 1 still records BLOCKED at gate exit 2",
+        cpush.returncode != 0 and "REFUSING the push (gate exit 2" in cpush.stderr
+        and c_rows[0].get("state") == "blocked"
+        and rev(c_remote, "refs/heads/main") == c_base,
+        "the boundary that keeps the sentinel narrow: only the DECLARED refusal "
+        "reclassifies — a crash or a red stays a finding, fail-closed",
     )
 
 except SystemExit:

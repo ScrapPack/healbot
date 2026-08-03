@@ -161,7 +161,7 @@ def main():
             "cwd": os.path.relpath(VERIFIED, ROOT),
             "code": r["code"], "secs": round(r["secs"], 2),
             "tail": tail[-1:] or [""],
-            "state": PASS if r["code"] == 0 else (ERROR if r["code"] is None else BLOCKED),
+            "state": PASS if r["code"] == 0 else (ERROR if r["code"] in (None, 3) else BLOCKED),  # 3 = declared cannot-measure, the same sentinel tier 1 honors (gate.py tier1())
             "declared_skips": skips, "skip_parse_errors": bad,
             "out": r["out"],
         }

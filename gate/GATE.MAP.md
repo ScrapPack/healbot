@@ -18,6 +18,14 @@ filename and a lint error each produced 2, a clean tree produced 0. `tier2.py` a
 verdict on the same scale: **`declared-skip` also exits 0** — it is a pass whose record names
 the checks this machine could not measure (see Tier 2 below).
 
+The probes speak the same lattice from below since 2026-08-03 (docs/E2E.md item D): a probe
+that exits **3** has DECLARED cannot-measure — it started, found the input it names absent
+(the missing `opencode/` checkout is the live case), and refused to claim a measurement — and
+its row is ERROR, so the gate exits 3, matching the gloss above. Every other nonzero probe
+exit stays BLOCKED, crashes included: a broken probe must not downgrade a finding to
+retry-shaped. Both directions TESTED through the real hook (`probe_gate_scope.py`'s sentinel
+legs). The hook refuses either way; the difference is what the record and the refusal say.
+
 ## Behaviour → file
 
 | Behaviour | Where |

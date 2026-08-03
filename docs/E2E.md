@@ -294,7 +294,7 @@ walk had to keep working, and are recorded as such rather than assumed true.
 | Crewmate spawns signed out | TESTED at the mechanism, in a scratch config root: `claude auth status` exits **1** with `"loggedIn": false` there and **0** in the owner's root. Signing the harness root out to see the refusal itself was declined — it would have blocked §3 |
 | Crew constraints stale on a PC | NOT TRIGGERABLE here — the copy-instead-of-symlink branch is Windows-only; the symlink is materialized on this machine |
 | Fleet `state` says "no hook events" forever | TESTED — with `HB_FLEET_DIR` unset the hook exits 0, prints nothing and writes nothing; with it set the same payload writes the state file. Fail-open, as documented, and `state` printed `no hook events` for a live crewmate whose file did not exist yet |
-| A probe prints green on a fresh clone | TESTED — with the checkout hidden, `probe_twin.py` exits **1** naming the missing checkout and the rebuild page. The floor did its job |
+| A probe prints green on a fresh clone | TESTED — with the checkout hidden, `probe_twin.py` exits **1** naming the missing checkout and the rebuild page. The floor did its job. (Exit **3** since the item-D close later the same day) |
 | tier2 from a worktree slot shows reds | NOT RUN — tier 2 is a phase-boundary tool and the row concerns a slot, not this checkout |
 | Gate exit 3 vs 2 | TESTED and the row is WRONG for the commonest case — see finding 13 |
 | Grid's `x` / retirement thresholds | covered by the §4 boundary note |
@@ -323,7 +323,7 @@ doc-level gloss disagree; `docs/CLONE.md` §8 already records the exit-2 observa
 reconciling it with the gloss. Repaired at the doc end — `docs/OPERATIONS.md` now says what the
 mapping actually is. Teaching Tier 1 to distinguish "ran and failed" from "ran and could not
 measure" needs a sentinel exit code across every probe, which is a design change, not a doc
-fix: open item D.
+fix: open item D. Closed the same day; item D records the sentinel.
 
 ---
 
@@ -415,11 +415,28 @@ before this change keeps its half-width grid until `down` and a fresh `start`.
 
 **D. Tier 1 cannot distinguish "could not run" from "ran and said no."** `gate/gate.py:124`
 maps every nonzero probe exit to BLOCKED, so for tier-1 probes the interface is coarser than
-`gate/GATE.MAP.md:167-168` describes (finding 13). Note the rest of the gate does make the
+`gate/GATE.MAP.md`'s "error is not blocked" paragraph describes (finding 13; the paragraph
+was cited here by line and GATE.MAP moved under it, so the pointer is by name now). Note the
+rest of the gate does make the
 distinction — a broken truth table, a failed enumeration and an unmatched fork twin all reach
 ERROR on their own (`gate/gate.py:332`, `:351`, `:175`) — which is what makes the tier-1 hole
 narrow enough to be missed. A sentinel exit code for cannot-measure, agreed across the probes,
 would close it.
+
+CLOSED 2026-08-03: the sentinel is exit 3, the code the gate itself exits with on ERROR, so
+the probes now speak the lattice the gate already speaks (harness/pool.py's docstring
+declared the same one). Exactly the two declared refusals adopted it — `probe_citations` and
+`probe_twin` on the absent checkout — and nothing else: crashes and red verdicts stay
+BLOCKED, deliberately, so a broken probe cannot downgrade a real finding to retry-shaped.
+The tier-1 mapping and tier2's row mapping each changed in place by one line, which is why
+every `gate/gate.py` citation above still resolves. TESTED end to end through the real hook
+by `probe_gate_scope.py`'s two new legs: a tier-1 stub exiting 3 records ERROR and refuses
+at gate exit 3, and the control stub exiting 1 still records BLOCKED at gate exit 2, four
+runs byte-identical at the new 19-row floor. The scope limit, stated plainly: tier 1 now
+distinguishes could-not-measure where a probe declares it, and an undiagnosed crash still
+reads BLOCKED, the fail-closed direction. The rewritten mapping lives in
+`docs/OPERATIONS.md`'s troubleshooting row and `gate/GATE.MAP.md`'s exit-codes section, and
+`docs/CLONE.md`'s fresh-clone table carries a dated note.
 
 **E. Also unchanged and still open, from the crew side.** `kill` leaving the slot leased
 (finding 9) is a known gap and now measured from the operator's chair; the manual repair is

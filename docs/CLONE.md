@@ -110,6 +110,10 @@ losing one must. `rig.py`'s docstring carries the measurement that motivated it.
 | `probe_turn_growth` | 13/15, exit 1 | 13/16, exit 1, **new fixture check red** |
 | `probe_turn_predicate` | 18/18, exit 0 | **18/18, exit 0** |
 
+The table records the Phase 9 measurements. Since 2026-08-03 the `probe_twin` refusal exits
+**3**, not 1 — the declared cannot-measure sentinel the gate maps to ERROR (docs/E2E.md
+item D) — and `probe_citations` refuses an absent checkout the same way.
+
 `probe_turn_predicate` is the one probe that genuinely survives a fresh clone, and it is worth
 saying why: it depends only on **tracked** repo files — `harness/config/opencode/plugin/healbot.ts`
 — plus `node`. It needs no server, no checkout and no inherited database. That is the portability
@@ -256,7 +260,8 @@ the first time**. `README.md` now says so.
 
 **`probe_twin` died with a raw `FileNotFoundError`** from a module-level call, because it reads the
 gitignored checkout. Exit code was already 1, so this was never in the false-green class; it now
-prints the cause and points at `fork/README.md`.
+prints the cause and points at `fork/README.md`. Since 2026-08-03 that refusal exits 3, the
+cannot-measure sentinel (docs/E2E.md item D).
 
 ---
 

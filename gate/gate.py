@@ -121,7 +121,7 @@ def tier1():
             # this is the line that starts lying.
             "sha256": hashlib.sha256(r["out"].encode()).hexdigest(),
             "tail": r["out"].strip().splitlines()[-1:] or [""],
-            "state": PASS if r["code"] == 0 else (ERROR if r["code"] is None else BLOCKED),
+            "state": PASS if r["code"] == 0 else (ERROR if r["code"] in (None, 3) else BLOCKED),  # 3 = a probe's DECLARED cannot-measure refusal, ERROR not BLOCKED (GATE.MAP.md, exit codes)
             "out": r["out"],
         })
     return rows
