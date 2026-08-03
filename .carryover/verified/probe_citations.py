@@ -208,8 +208,8 @@ def classify(cited, lo, hi, index):
 # A citation that QUOTES its target is a stronger claim than one that merely points at it, and it
 # is the one kind of SEMANTIC rot that is mechanically checkable: the document says what the line
 # says, so the line can be read back. The header above rules semantic rot out of scope in
-# general and names this leg as its one narrow exception; docs/CITE.md's "is not claimed"
-# stays true for everything short of a quotation.
+# general and names this leg as its one narrow exception, and docs/CITE.md carries the same
+# dated narrowing; everything short of a quotation stays unclaimed.
 #
 # The form carries the claim, exactly as it does for specimen-vs-pointer. Only the ITALIC form
 # `*"…"*` counts as a verbatim quote. MEASURED 2026-08-02 over the whole sweep: treating ANY

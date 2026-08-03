@@ -51,30 +51,30 @@ GATE=${HEALBOT_GATE:-"$VENVPY $ROOT/gate/gate.py"}
 REVIEW=${HEALBOT_REVIEW_CMD:-"$VENVPY $ROOT/gate/review.py"}
 PUBLISH=${HEALBOT_PUBLISH_CMD:-"$VENVPY $ROOT/gate/publish.py"}
 
-# stdin is the pushed refs. Read them before the venv gate: a deletion-only push (every
-# local sha ZERO) gates nothing and must pass venv-free, exactly as it did before the
-# refusal below existed — a fresh clone deleting a remote branch has nothing to measure.
-refs="$(cat)"
-gated=""
-while read -r _ probe_sha _ _; do
-  [ -n "$probe_sha" ] && [ "$probe_sha" != "$ZERO" ] && gated=1
-done <<EOF
-$refs
-EOF
-[ -n "$gated" ] || exit 0
-
-# A missing venv is a named precondition, not an unknown failure: refuse up front with the
-# remedy, the way doctor.py ("rig venv not built") and hb-fleet preflight ("rig venv
-# absent") name it. Refuse only when a stage below would actually run $VENVPY: a fully
-# stubbed plumbing run (HEALBOT_GATE and HEALBOT_REVIEW_CMD set, publish off or stubbed)
-# never touches the venv and proceeds as before — the stubs already had that power.
-# HEALBOT_REVIEW=off does NOT excuse the venv: the off-switch lives inside review.py, which
-# still needs an interpreter to reach it.
+# A missing venv is a named precondition, not an unknown failure: refuse with the remedy,
+# the way doctor.py ("rig venv not built") and hb-fleet preflight ("rig venv absent") name
+# it. Refuse only when a stage below would actually run $VENVPY: a fully stubbed plumbing
+# run (HEALBOT_GATE and HEALBOT_REVIEW_CMD set, publish off or stubbed) never touches the
+# venv and proceeds as before — the stubs already had that power. HEALBOT_REVIEW=off does
+# NOT excuse the venv: the off-switch lives inside review.py, which still needs an
+# interpreter to reach it. The refusal itself fires INSIDE the ref loop, after the
+# deletion skip: a deletion-only push (every local sha ZERO) gates nothing and passes
+# venv-free, exactly as it did before the refusal existed — a fresh clone deleting a
+# remote branch has nothing to measure. No buffering of stdin: ref names may contain `$`
+# and backquotes, and a here-doc re-expansion of them is an execution hazard, so the loop
+# stays the direct reader.
+needs_venv=""
 if [ -z "$VENVPY" ]; then
-  needs_venv=""
   [ -z "${HEALBOT_GATE:-}" ] && needs_venv=1
   [ -z "${HEALBOT_REVIEW_CMD:-}" ] && needs_venv=1
   [ "${HEALBOT_PUBLISH:-on}" != "off" ] && [ -z "${HEALBOT_PUBLISH_CMD:-}" ] && needs_venv=1
+fi
+T0=$(date +%s)
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # Deleting a remote ref pushes no commits; there is nothing to gate.
+  [ "$local_sha" = "$ZERO" ] && continue
+
   if [ -n "$needs_venv" ]; then
     echo "pre-push gate: REFUSING the push (rig venv not built: no interpreter under" >&2
     echo "pre-push gate: .carryover/verified/venv — neither bin/python nor Scripts/python.exe)." >&2
@@ -83,12 +83,6 @@ if [ -z "$VENVPY" ]; then
     echo "pre-push gate: or 'git push --no-verify' deliberately and say so." >&2
     exit 1
   fi
-fi
-T0=$(date +%s)
-
-while read -r local_ref local_sha remote_ref remote_sha; do
-  # Deleting a remote ref pushes no commits; there is nothing to gate.
-  [ "$local_sha" = "$ZERO" ] && continue
 
   if [ "$remote_sha" != "$ZERO" ] && git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
     base="$remote_sha"                    # normal push: gate exactly what the remote gains
@@ -138,8 +132,6 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       >> "$ROOT/gate/runs/publish.log" 2>&1 < /dev/null &
     echo "pre-push gate: evidence publisher spawned (gate/runs/publish.log)" >&2
   fi
-done <<EOF
-$refs
-EOF
+done
 
 exit 0

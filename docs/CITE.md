@@ -55,6 +55,12 @@ a real, non-blank line that says something else entirely. Nothing mechanical can
 probe claiming otherwise would be the exact species this suite keeps finding: green for a reason
 unrelated to the claim. That limitation is in its docstring, not buried here.
 
+> **Narrowed 2026-08-02 — docs/CLONE.md §9.2.** One deliberate exception now exists: a citation
+> that QUOTES its target in the italic `*"…"*` form is read back against the cited line by the
+> probe's verbatim-quote leg, so the quoting case is claimed and checked (it found three rots on
+> its first run). Everything short of a quotation stays exactly as the paragraph above says, and
+> the docstring carries the same narrowing.
+
 ### The probe's first draft manufactured 155 findings
 
 Worth recording before any of the results below, because it is the reason they can be quoted.

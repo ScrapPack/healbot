@@ -215,7 +215,7 @@ def record_scope_ok(rec, work, tip):
             and rec.get("tree") == short(work, "HEAD"))
 
 
-r = Results(expect=16)
+r = Results(expect=17)
 TMP = tempfile.mkdtemp(prefix="probe_gate_scope.")
 try:
     r.check(
@@ -226,6 +226,36 @@ try:
     )
     with open(GATE_PY, encoding="utf-8") as fh:
         gate_src = fh.read()
+
+    # --- deletion-only leg: a push whose every local sha is ZERO gates nothing -----------
+    # The scratch repo deliberately gets NO gate/ and NO venv symlink: the early exemption
+    # is the only thing that can let this push through, so a regression carrying a deletion
+    # past the ZERO skip hits the hook's venv refusal and the push goes red here. The
+    # planted-F841 legs below are the converse guard: they push real commits through the
+    # same hook and refuse, so an exemption that swallowed real pushes turns them red.
+    dtmp = f"{TMP}/delete"
+    os.makedirs(dtmp)
+    dwork = f"{dtmp}/work"
+    git(dtmp, "init", "-q", "--bare", "remote.git")
+    git(dtmp, "init", "-q", "-b", "main", "work")
+    write(f"{dwork}/README.md", "deletion-leg scratch repo for probe_gate_scope.py\n")
+    git(dwork, "add", ".")
+    git(dwork, "commit", "-q", "-m", "base")
+    git(dwork, "remote", "add", "origin", f"{dtmp}/remote.git")
+    git(dwork, "push", "-q", "origin", "main", "main:todelete")   # both ungated, pre-wire
+    git(dwork, "config", "core.hooksPath", HOOKS)                 # the REAL pre-push
+    dpush = subprocess.run(["git", "push", "origin", ":todelete"], cwd=dwork,
+                           capture_output=True, text=True, timeout=120,
+                           env={**os.environ, **GIT_ENV})
+    r.check(
+        "a deletion-only push passes the REAL hook with no venv and no gate installed",
+        dpush.returncode == 0 and not os.path.exists(f"{dwork}/gate"),
+        "review finding from the b6e97b4 push: the exemption shipped tested only by a "
+        "throwaway worktree run — the same disposable-repro shape this probe exists to "
+        "replace. Nothing here can gate, so exit 0 proves the ZERO-sha path never reaches "
+        "a stage, and any regression re-refusing deletions (or running stages on them) "
+        "fails this row",
+    )
 
     # --- live leg: the repo's real hook and real gate.py, on the incident's shape --------
     work, remote, base, tip = build_scenario(f"{TMP}/live")
