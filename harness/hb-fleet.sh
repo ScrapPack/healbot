@@ -431,7 +431,11 @@ up)
   # `state` and `send` were all off-screen, and the card's own headline verb with them. The box
   # is sized to the card here (94x34 of content against 32 lines, longest 91), and
   # probe_fleet_claude.py asserts the fit from source, so a command line added to the header
-  # goes red instead of pushing the top out of view again.
+  # goes red instead of pushing the top out of view again. PRECONDITION, because the guarantee
+  # is only as good as its scope: tmux CLAMPS a popup to the client's terminal, so the fit
+  # holds on a terminal at least 96x36 and a smaller one truncates the same way again. The
+  # cockpit builds its own session at 220x50 and a detached client re-clamps to whatever
+  # attaches. Nothing here can widen someone's terminal; naming the bound is what it can do.
   t unbind -T prefix '?' 2>/dev/null || true
   if tmux_has_popup; then
     t bind -T prefix '?' display-popup -w 96 -h 36 "'$SELF' help"

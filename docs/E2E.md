@@ -101,7 +101,11 @@ so the help overlay works*, and it does work, in the sense that it appears.
 
 Repaired: the popup is sized to the card (`harness/hb-fleet.sh`, the `?` binding). Re-driven
 afterwards, TESTED: the first card line, a middle line, the key map and the last line are all
-on screen simultaneously. Guarded: `probe_fleet_claude.py` now derives the card from source —
+on screen simultaneously. The guarantee has a stated bound, added after the push review asked
+for its scope: tmux clamps a popup to the client's terminal, so the fit holds at 96x36 or
+larger and a smaller terminal truncates the card the same way. The cockpit builds its own
+session larger than that; an operator attaching from a 24-row window does not get the promise,
+and now the binding says so. Guarded: `probe_fleet_claude.py` now derives the card from source —
 the header line range plus the key-map heredoc — computes its rendered height against the
 popup's declared geometry, and requires the fit, with a mutation leg for the pre-fix numbers
 and another for a card grown one line past the box. That pairs with the range check already
@@ -301,13 +305,23 @@ tmux, and nothing had noticed because nothing had tried.** TESTED: driving
 `hb-fleet.sh start` through `term.py` raised `TypeError:
 Screen.report_device_status() got an unexpected keyword argument 'private'` on the *first*
 pump, before any assertion ran. tmux probes its terminal with private device queries at
-startup; pyte 0.8 dispatches those with `private=True` and neither handler accepts it. Every
-rig in the suite drives the opencode TUI, which sends no such query, so the gap was real and
-invisible. Repaired narrowly in `term.py`: a `Screen` subclass that swallows those two private
-queries and changes nothing else, because that class is what the whole rig renders through.
-The queries are deliberately left unanswered rather than replied to — an earlier draft wired
-pyte's reply channel and a stray `6c` was typed into the captain's shell. TESTED after the
-repair: stock `term.py` drives the cockpit and reads its status line.
+startup and `pyte.Screen.report_device_status` takes `(self, mode)`. Every rig in the suite
+drives the opencode TUI, which sends no such query, so the gap was real and invisible.
+Repaired narrowly in `term.py`: a `Screen` subclass that swallows that one private query and
+changes nothing else, because that class is what the whole rig renders through. The query is
+deliberately left unanswered rather than replied to — an earlier draft wired pyte's reply
+channel and a stray `6c` was typed into the captain's shell. TESTED after the repair: stock
+`term.py` drives the cockpit and reads its status line.
+
+That repair had to be corrected before this page was true. The first version overrode **two**
+handlers and this paragraph said neither accepted the keyword; the push review checked the
+dependency and the claim was wrong. VERIFIED by reading the installed pyte in the rig venv
+(`Screen.report_device_attributes`, whose own changelog note records the behaviour): it takes
+`**kwargs` and has done nothing when `private` is set since pyte 0.7.0, so only the other
+handler could raise — which is exactly what the captured traceback named. No live `file:line`
+here on purpose: the venv is derived and gitignored, so a citation into it resolves for nobody,
+and the citation sweep said so before this page was pushed. The second override was redundant and the prose was a wrong belief about a dependency,
+held in the file every rig renders through. Both removed.
 
 Suite and gate, this change (each exit code captured directly, never through a pipe):
 
@@ -338,9 +352,12 @@ gate of 120, so the session route shows no session id in the default layout (fin
 Layout change, gate change, or documented as expected — an owner call.
 
 **D. Tier 1 cannot distinguish "could not run" from "ran and said no."** `gate/gate.py:124`
-maps every nonzero probe exit to BLOCKED, so the 0/2/3 interface is coarser than
-`gate/GATE.MAP.md`'s prose describes (finding 13). A sentinel exit code for
-cannot-measure would restore the distinction across the whole suite.
+maps every nonzero probe exit to BLOCKED, so for tier-1 probes the interface is coarser than
+`gate/GATE.MAP.md:167-168` describes (finding 13). Note the rest of the gate does make the
+distinction — a broken truth table, a failed enumeration and an unmatched fork twin all reach
+ERROR on their own (`gate/gate.py:332`, `:351`, `:175`) — which is what makes the tier-1 hole
+narrow enough to be missed. A sentinel exit code for cannot-measure, agreed across the probes,
+would close it.
 
 **E. Also unchanged and still open, from the crew side.** `kill` leaving the slot leased
 (finding 9) is a known gap and now measured from the operator's chair; the manual repair is

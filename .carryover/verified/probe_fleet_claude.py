@@ -503,6 +503,11 @@ try:
         MEASURED 2026-08-03 at the shipped -w 84 -h 28: 45 rendered rows into 26, and the
         overlay opened on `kill`. Wrapping is computed as a terminal wraps (hard, at the
         column), not as textwrap does.
+
+        SCOPE, stated so the row is not read as more than it is: this checks the DECLARED
+        geometry. tmux clamps a popup to the client's terminal, so a terminal smaller than
+        the declared box truncates the card again and no source check can see that. The
+        binding's own comment carries the minimum.
         """
         card = card_lines(s)
         g = re.search(r"display-popup -w (\d+) -h (\d+)", s)
