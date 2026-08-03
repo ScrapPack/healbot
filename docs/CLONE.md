@@ -400,7 +400,9 @@ Exit was already 1 with a SHORT RUN summary, so this was never in the false-gree
 the same classification §5 gave `probe_twin`'s identical crash. It gets the same repair: a
 named diagnostic saying which corpus was searched and what would populate it. Deliberately
 **not** converted to a declared skip: the rows below it are the whole probe, and a skip that
-large is a green run measuring almost nothing.
+large is a green run measuring almost nothing. Since 2026-08-03 the refusal exits **3**,
+the declared cannot-measure sentinel (docs/E2E.md item D); the exit-1 measurements below
+are the record of the walk that predates it.
 
 **And it is not a fresh-clone condition — it is red in the MAIN checkout too**, which the
 walk only noticed because the diagnostic finally said what was missing. TESTED both ways:
