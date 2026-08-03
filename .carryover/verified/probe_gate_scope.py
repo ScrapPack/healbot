@@ -10,7 +10,10 @@ tip and feeds ruff the pushed BLOBS via --stdin-filename, and the run record spl
 with a throwaway scripted repro; this probe is the repro made permanent.
 
 THE HARNESS, built fresh per leg in a temp dir: a scratch bare remote plus a scratch work
-repo whose main carries a --no-ff merge bringing one new .py with a planted F841. The base
+repo whose main carries a --no-ff merge bringing one new .py with a planted F841. (One leg
+stands apart: the deletion-only leg pushes a pure ref deletion through the real hook from
+a scratch repo with no gate and no venv, pinning the ZERO-sha exemption added after the
+venv refusal briefly refused deletions from fresh clones.) The base
 commit is pushed BEFORE the hook wires in, then the checkout is parked on an ancestor branch
 and main is pushed from there, which is the exact 20260802-184854 shape. The push runs THE
 REPO'S REAL gate/hooks/pre-push (core.hooksPath at the scratch repo points here), and
@@ -32,12 +35,14 @@ The claims, each with the leg that could turn it red:
 Mutant records are judged by THE SAME functions the live leg passes, per this suite's rule
 that a mutation check which re-implements its predicate proves only the reimplementation.
 TESTED 2026-08-02 against the whole pre-fix layer (gate.py and hook from the commit before
-bb1b048, this probe unchanged): 8/16, exit 1, every live-leg claim red plus both mutation
-anchors. The probe detects the regression end to end, not only its installed mutants.
+bb1b048, the then-16-row probe unchanged): 8/16, exit 1, every live-leg claim red plus both
+mutation anchors. The probe detects the regression end to end, not only its installed
+mutants. That record predates the deletion leg, which reads only the hook and is orthogonal
+to the range machinery that test reverted.
 
 Commit identities and dates are pinned, so the scratch shas are stable and this probe's
-output is byte-identical across runs: MEASURED 2026-08-02, 4 runs, one sha256 over the
-full output. Tier 2 hashes nothing, so nothing depends on that; it is measured because
+output is byte-identical across runs: MEASURED 2026-08-03 at 17 rows, 4 runs, one sha256
+over the full output. Tier 2 hashes nothing, so nothing depends on that; it is measured because
 the gate's determinism note says to measure rather than hope, and it is what Tier 1
 membership would require. Needs `ruff` on PATH, the same requirement the gate's own lint
 stage carries.
@@ -249,12 +254,12 @@ try:
                            env={**os.environ, **GIT_ENV})
     r.check(
         "a deletion-only push passes the REAL hook with no venv and no gate installed",
-        dpush.returncode == 0 and not os.path.exists(f"{dwork}/gate"),
+        dpush.returncode == 0,
         "review finding from the b6e97b4 push: the exemption shipped tested only by a "
         "throwaway worktree run — the same disposable-repro shape this probe exists to "
-        "replace. Nothing here can gate, so exit 0 proves the ZERO-sha path never reaches "
-        "a stage, and any regression re-refusing deletions (or running stages on them) "
-        "fails this row",
+        "replace. Nothing here can gate: any path that reaches a stage hits the venv "
+        "refusal (exit 1) or a missing gate.py, so exit 0 alone carries the claim that "
+        "the ZERO-sha path reached no stage",
     )
 
     # --- live leg: the repo's real hook and real gate.py, on the incident's shape --------
