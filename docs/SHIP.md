@@ -232,12 +232,13 @@ now carry a declared environment requirement (`rig.Env`, `gate/GATE.MAP.md` "Tie
 slot"): in a slot they record a counted, named SKIP and the tier's verdict is `declared-skip`;
 in the main checkout the requirements hold, the rows run, and the verdict is a plain `pass`.
 
-The probe is 50 rows now (floor 20 → 33 on 2026-08-01, → 44 on 2026-08-02 with the cockpit build
+The probe is 52 rows now (floor 20 → 33 on 2026-08-01, → 44 on 2026-08-02 with the cockpit build
 (auth preflight + the re-runnable-`start` pane marker), → 50 the same day when the twin check
-generalized from firstmate to the whole skills population; `skip_max=2` throughout), because
-the first of the two was also split:
+generalized from firstmate to the whole skills population, → 52 later that day when the auth
+detector gained the CLI settings-migration containment and its mutation leg; `skip_max=2`
+throughout), because the first of the two was also split:
 
-- **`probe_fleet_claude.py:173`, the CLAUDE.md symlink** — now four rows, of which only the
+- **`probe_fleet_claude.py:195`, the CLAUDE.md symlink** — now four rows, of which only the
   last is environment-bound. The symlink is untracked and ignored by the whitelist's catch-all
   `*` (`harness/claude/.gitignore:15`), so `git worktree add` never populates it; it is
   materialized by `env.claude.sh:34-36`'s `ln -s` at source time. What a slot CAN check, and
@@ -248,7 +249,7 @@ the first of the two was also split:
   ever run on. Only "the link is on disk right now" is guarded, by
   `claude-config-materialized`. Still do NOT "fix" a slot by creating the file: `gate.py:204`
   bans that name anywhere in the tracked tree, which is the whole reason for the convention.
-- **`probe_fleet_claude.py:402`, the skill twins**, guarded by `main-checkout`. Firstmate-only
+- **`probe_fleet_claude.py:427`, the skill twins**, guarded by `main-checkout`. Firstmate-only
   until later on 2026-08-02, when `healbot-traps.md` was found to have drifted for two days
   while the one guarded specimen held (HARNESS.md Traps has the row); now one aggregate row
   compares every `harness/skills/<name>.md` against `~/.agents/skills/<name>/SKILL.md`, which
