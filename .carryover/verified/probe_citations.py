@@ -13,8 +13,11 @@ numbers have slid is not a smaller map, it is a wrong one, and it is wrong silen
 
 WHAT THIS CATCHES: positional rot. A cited line that does not exist, or exists and is blank.
 WHAT IT DOES NOT CATCH: semantic rot — a citation that lands on a real, non-blank line that says
-something else entirely. Nothing mechanical can check that, and pretending otherwise would make
-this probe the kind of guard this suite keeps finding: green for a reason unrelated to the claim.
+something else entirely. Nothing mechanical can check that IN GENERAL, and pretending otherwise
+would make this probe the kind of guard this suite keeps finding: green for a reason unrelated to
+the claim. One narrow exception since 2026-08-02: a citation whose document QUOTES its target in
+the italic `*"…"*` form is read back verbatim by the quote leg; everything short of a quotation
+stays unclaimed.
 
 RESOLUTION IS THE WHOLE PROBLEM, and getting it wrong manufactures findings rather than hiding
 them. The checkout holds SEVEN files named `prompt.ts` (57 / 1631 / 293 / 37 / 203 / 1 / 131
@@ -204,8 +207,9 @@ def classify(cited, lo, hi, index):
 
 # A citation that QUOTES its target is a stronger claim than one that merely points at it, and it
 # is the one kind of SEMANTIC rot that is mechanically checkable: the document says what the line
-# says, so the line can be read back. The header above says semantic rot "is not claimed" — that
-# stays true in general and is narrowed here to the quoting case only.
+# says, so the line can be read back. The header above rules semantic rot out of scope in
+# general and names this leg as its one narrow exception; docs/CITE.md's "is not claimed"
+# stays true for everything short of a quotation.
 #
 # The form carries the claim, exactly as it does for specimen-vs-pointer. Only the ITALIC form
 # `*"…"*` counts as a verbatim quote. MEASURED 2026-08-02 over the whole sweep: treating ANY
@@ -316,7 +320,7 @@ def scan(index, srcs):
     return rows
 
 
-r = rig.Results(expect=19)
+r = rig.Results(expect=20)
 
 try:
     index, idx_dropped = build_index()
@@ -392,7 +396,14 @@ try:
 
     # --- the verbatim-quote leg -------------------------------------------------------------
     qrows = scan_quotes(index, srcs)
+    qok = [x for x in qrows if x[4] == "QUOTE_OK"]
     qbad = [x for x in qrows if x[4] == "QUOTE_MISMATCH"]
+    qunres = [x for x in qrows if x[4] == "QUOTE_UNRESOLVED"]
+    if qunres:
+        print("\n  -- QUOTE CANDIDATES THE RESOLVER COULD NOT CHECK --", flush=True)
+        for src, cited, lo, hi, _, detail in qunres[:25]:
+            span = f"{lo}-{hi}" if hi != lo else f"{lo}"
+            print(f"     {src:<52} {cited}:{span}   {detail}", flush=True)
     if qbad:
         print("\n  -- QUOTE DOES NOT MATCH THE CITED LINE --", flush=True)
         for src, cited, lo, hi, _, detail in qbad[:25]:
@@ -400,11 +411,15 @@ try:
             print(f"     {src:<52} {cited}:{span}   {detail}", flush=True)
 
     r.check(
-        f"the sweep found verbatim-quote citations to check — {len(qrows)}",
-        len(qrows) >= 5,
-        "a floor, so the leg below cannot pass by finding nothing. MEASURED 2026-08-02: 6 in the "
-        "repo, all in the italic `*\"…\"*` form. Low by design — the form is the claim, and most "
-        "quoted spans beside a citation are paraphrase rather than a quotation of that line",
+        f"the sweep found verbatim-quote citations AND VERIFIED THEM AT THEIR LINES — "
+        f"{len(qok)} of {len(qrows)} candidates",
+        len(qok) >= 5,
+        "a floor on VERIFIED quotes, not on candidates scanned: candidates satisfied it while "
+        "QUOTE_UNRESOLVED rows silently drained the leg below, so a resolver regression walking "
+        "every quote to UNRESOLVED left both legs green over zero verified quotes (review "
+        "finding from the 05ba18f push). MEASURED 2026-08-02: 6 in the repo, all in the italic "
+        "`*\"…\"*` form. Low by design — the form is the claim, and most quoted spans beside a "
+        "citation are paraphrase rather than a quotation of that line",
     )
     r.check(
         f"EVERY VERBATIM QUOTE IS ACTUALLY AT THE LINE IT CITES — {len(qbad)} mismatched",
@@ -418,6 +433,13 @@ try:
         "quoted an ab.py arm label that had been rewritten the same day it was written, whose "
         "replacement comment calls the old wording a false claim. A pointer that is merely stale "
         "misleads; a QUOTE that is stale puts words in the source's mouth",
+    )
+    r.check(
+        "MUTATION: an unresolvable quote candidate counts against the floor, not toward it",
+        quote_verdict("no/such/file.py", 1, 1,
+                      "a fragment long enough to be checkable", index)[0] == "QUOTE_UNRESOLVED",
+        "the regression class the floor above guards: a candidate the resolver cannot walk "
+        "must land in UNRESOLVED (draining the verified floor) rather than in OK",
     )
 
     # --- mutation checks ------------------------------------------------------------------

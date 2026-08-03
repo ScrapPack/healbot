@@ -5,11 +5,13 @@ Date 2026-07-26. Method: 7 domain probes over `PLAN.md`, `docs/PROBE.md`, `docs/
 independent skeptic that re-derived its findings from source rather than trusting them; one
 completeness critic over the merged result. 15 agents, 1,047 tool calls.
 
-**Line numbers into `HARNESS.md` below are 2026-07-26 coordinates and no longer resolve.** That
-file has been rewritten across eleven phases since, and every one of these was found landing on
-unrelated prose on 2026-08-02. They are deliberately written as ``HARNESS.md`` lines N-M rather
-than in live `file:line` form: the form is what lets `probe_citations.py` tell a **specimen** from
-a **pointer**, and this document records a state that is gone rather than mapping the current one.
+**Line numbers into `HARNESS.md` below are 2026-07-26 coordinates and do not track today's
+file.** That file has been rewritten across eleven phases since; seven of the eight were found
+landing on unrelated prose on 2026-08-02, and the eighth (line 12, the four-filenames row) still
+resolved only by luck of its position near the top. All eight are deliberately written as
+``HARNESS.md`` lines N-M rather than in live `file:line` form: the form is what lets
+`probe_citations.py` tell a **specimen** from a **pointer**, and this document records a state
+that is gone rather than mapping the current one.
 
 96 findings, 61 adversarial reviews. Verdicts after the skeptic pass:
 
@@ -392,8 +394,8 @@ holds" is decision-relevant.
   discriminator.
 - **The `.MAP.md` naming rule.** The manifest globs are literal `SKILL.md`
   (`skill/index.ts:23-25`) and the ingest list is exactly the three named filenames — the rule
-  is sound and all 14 map files are safe. (Minor: `HARNESS.md:12` cites `instruction.ts:64-68`;
-  the array spans `:65-70`.)
+  is sound and all 14 map files are safe. (Minor: ``HARNESS.md`` line 12 cites
+  `instruction.ts:64-68`; the array spans `:65-70`.)
 - **`opencode attach --session <id>` and `--mini` are real** (`cli/cmd/attach.ts:7-50`). The
   abandoned PTY fallback exists; do not delete it from the plan merely because it is labelled
   stale.

@@ -51,6 +51,18 @@ GATE=${HEALBOT_GATE:-"$VENVPY $ROOT/gate/gate.py"}
 REVIEW=${HEALBOT_REVIEW_CMD:-"$VENVPY $ROOT/gate/review.py"}
 PUBLISH=${HEALBOT_PUBLISH_CMD:-"$VENVPY $ROOT/gate/publish.py"}
 
+# stdin is the pushed refs. Read them before the venv gate: a deletion-only push (every
+# local sha ZERO) gates nothing and must pass venv-free, exactly as it did before the
+# refusal below existed — a fresh clone deleting a remote branch has nothing to measure.
+refs="$(cat)"
+gated=""
+while read -r _ probe_sha _ _; do
+  [ -n "$probe_sha" ] && [ "$probe_sha" != "$ZERO" ] && gated=1
+done <<EOF
+$refs
+EOF
+[ -n "$gated" ] || exit 0
+
 # A missing venv is a named precondition, not an unknown failure: refuse up front with the
 # remedy, the way doctor.py ("rig venv not built") and hb-fleet preflight ("rig venv
 # absent") name it. Refuse only when a stage below would actually run $VENVPY: a fully
@@ -126,6 +138,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       >> "$ROOT/gate/runs/publish.log" 2>&1 < /dev/null &
     echo "pre-push gate: evidence publisher spawned (gate/runs/publish.log)" >&2
   fi
-done
+done <<EOF
+$refs
+EOF
 
 exit 0
