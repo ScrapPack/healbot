@@ -324,7 +324,7 @@ caps never fire" is **half right, and the half that is wrong is the more dangero
 - If you **restore** permissions via `agentArgsOverride.claude`, the ask becomes possible again —
   and `stdio[0]` is `"ignore"` (VERIFIED), so nothing can answer it, and there is no timeout
   anywhere (§1.5) to end it. The repo has the same hazard measured on its own harness:
-  HARNESS.md:377 — *"No timeout on a pending permission — a client that ignores `permission.asked`
+  HARNESS.md:382 — *"No timeout on a pending permission — a client that ignores `permission.asked`
   hangs that tool call forever. TESTED: it hangs indefinitely."*
 
 Both branches need the watchdog in §3.6, for opposite reasons. Choose deliberately, and write the
@@ -378,8 +378,19 @@ these*. It is the study's future output. `docs/REFUSAL-BASELINE.md` **does** exi
 untracked) and is the document the study is trying to falsify.
 
 **The stock arm is defined by the ambient environment, so ordinary tidying corrupts it.**
-`ab.py:78-80` defines it as *"stock opencode: gpt.txt (9,284 B), **18 skills**, `~/.claude/CLAUDE.md`
-loaded."* Therefore:
+`ab.py:93-94` defines it as *"stock opencode: gpt.txt (9,284 B), 18 skills,
+~/.config/opencode/AGENTS.md (8,091 B) loaded — displaces ~/.claude/CLAUDE.md"*. Therefore:
+
+> **Corrected 2026-08-02.** This paragraph originally cited `ab.py:78-80` and quoted the arm as
+> *"gpt.txt (9,284 B), **18 skills**, `~/.claude/CLAUDE.md` loaded."* That string was rewritten on
+> 2026-07-31 — the same day this document was written — and `ab.py`'s own comment beside it calls
+> the old wording *"a false claim being written into every run's meta.json"*: the three global
+> memory files were consolidated into one canonical file, and `~/.config/opencode/AGENTS.md` is
+> slot 0 of `instruction.ts`'s `globalFiles` whose resolution loop `break`s on the first match, so
+> it **displaces** `~/.claude/CLAUDE.md` rather than adding to it. C2 went 698 B → 8,091 B. The
+> bullet below about creating that file therefore describes a hazard that has **already fired**.
+> Found by the verbatim-quote leg of `probe_citations.py`, which did not exist when this was
+> written.
 
 - **Creating `~/.config/opencode/AGENTS.md` corrupts the stock arm.** TESTED: it does not exist
   today, and `~/.config/opencode/` currently holds only `opencode.jsonc`, `package.json`,
@@ -400,11 +411,11 @@ it a manual check meanwhile.
 
 ### 3.4 No package installs. Ever.
 
-HARNESS.md:346, quoted: *"It now holds **84 entries and 94 MB including `node_modules`** — a model
+HARNESS.md:351, quoted: *"It now holds **84 entries and 94 MB including `node_modules`** — a model
 in some earlier run shelled out to `npm install`."* That same directory produced a turn measuring
 **299,326 tokens**, 71% above the 175,148 on record, which took `probe_turn_growth.py` red.
 
-The repair is on record and so is the live residual risk (HARNESS.md:346): the directory was
+The repair is on record and so is the live residual risk (HARNESS.md:351): the directory was
 **restored at the end of Phase 12, 94 MB → 1.8 MB**, and the removed residue included a
 model-created `.gitignore` holding `node_modules/`. So the protection that was silently absorbing
 this is **gone**: *"a future run that shells out to `npm install` will have `git_baseline()`'s

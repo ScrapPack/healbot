@@ -92,6 +92,7 @@ Installed at `~/.agents/skills/<name>/` (canonical copies in `harness/skills/`);
 | `phase-close` | Before closing a phase, a session handoff, or a paid run — owns the tier2 trigger |
 | `firstmate` | Running the crew fleet as controller |
 | `tdd` | Red-green-refactor build work |
+| `plainspec` | Writing docs, PR text, or error messages to the controlled prose standard ("STE mode" means strict) |
 
 ## Troubleshooting, distilled from the traps
 

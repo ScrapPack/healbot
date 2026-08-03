@@ -42,7 +42,7 @@ in `probe_rig_contract.py` enforces this from source across every rig.
 - **A green run is not evidence that the run happened.** An assertion that never ran is True
   on exactly the runs that did not evaluate it. `Results(expect=N)` catches both known routes
   (an exception swallowed by `sys.exit` inside a `finally`, and `wait_for` timing out, which
-  raises nothing and simply runs fewer assertions). The floor is a MINIMUM, not an equality:
+  raises nothing and runs fewer assertions). The floor is a MINIMUM, not an equality:
   adding assertions is safe, removing them is not.
 - **Exit on `summary()`'s verdict, last in the `finally`.** Six paid rigs once printed the
   verdict and threw it away; a failing run exited 0.

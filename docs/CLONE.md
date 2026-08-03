@@ -80,7 +80,7 @@ and present in exactly **3 of 10** probes. The seven without it were the seven o
 
 **(b) A timeout raises nothing at all.** `wait_for()` (`rig.py:593-604`) prints
 `!! timed out waiting for …` and returns `None`. No exception, so guard (a) would not have caught
-it either — the probe simply runs fewer assertions. This is `probe_headless_arm` reporting
+it either — the probe runs fewer assertions. This is `probe_headless_arm` reporting
 `1/1 passed` and exit 0 after ninety seconds of waiting for a server that could never start.
 
 Two different mechanisms, one symptom, so the fix goes where the symptom is: **`Results` now takes
@@ -238,7 +238,7 @@ way, and a future phase seeing them drift must not read that as a signal about t
 | max, start ≥ 50K / 100K / 150K | 70,704 / 70,704 / 32,673 | **identical, same n** |
 
 This is the first evidence that the derivation is **stable under corpus growth**, and Phase 8 could
-not have had it — it had one corpus and no way to tell a robust maximum from an artifact of the
+not have had it — it had one corpus and no way to tell a stable maximum from an artifact of the
 particular sessions on disk. Twelve new turns moved three percentiles by a few hundred tokens and
 moved no maximum, no bound and no conditional. That is a genuinely better position than a re-run
 that merely reproduced the same digits, and it was free.
@@ -494,6 +494,11 @@ live pointers across 6 files**, of which **11 target a line below the table**. R
 those means editing two dated phase records during a presentation pass, with a parallel
 session already writing to HARNESS.md. Named here so it is a task and not a silence.
 
+> **Corrected 2026-08-02 — see §9.** The census above is exact and the conclusion drawn from
+> it is wrong. Every one of the thirteen endangered citations was **already rotted** when this
+> paragraph was written; the deferral was protecting nothing. The repair is done, and the
+> re-reading it forced found three more rotted citations and one new probe leg.
+
 The same review also caught `docs/CLONE.md` — this file — being listed as live surface *and*
 excluded from "everything else is a dated phase record"; it is both, and the paragraph now
 says so.
@@ -518,3 +523,119 @@ grid-less on the doctor's own authority — §8.3's defect, reintroduced by §8.
 row now resolves the symlink chain (the one case settleable for free) and states the
 CONDITIONAL for every other, with both branches mutation-controlled. **A pass that corrects
 counts and unmeasured claims is exactly where a new one gets written down.**
+
+## 9. §8.6's deferred repair, and the blocker that was protecting nothing (added 2026-08-02)
+
+§8.6 named a task and left it undone: `HARNESS.md`'s phase table omits three dated records, and
+its own exit test — *"from this file alone you should be able to name the file that owns any
+given behavior"* — therefore fails for `docs/AFK.md` and `docs/REFUSAL-RESCORE.md`, which appear
+in it **zero** times. The stated reason for deferring was blast radius: *"adding rows to that
+table shifts every line under it"*, **18 live pointers across 6 files**, of which **11 target a
+line below the table**.
+
+**That census was exact and the conclusion drawn from it was wrong.** Re-measured before editing
+anything: all 22 occurrences across 7 files, 4 of them frozen specimens inside
+`fork/healbot-fork.patch`, leaving the same 18 live — and then each of the 13 endangered ones was
+opened and read against the line it cites. **Every one was already rotted.** There was no intact
+pointer for the deferral to protect.
+
+| Source | Cites | Actually resolved to | Class |
+|---|---|---|---|
+| `docs/AFK.md` ×2 | `HARNESS.md` line 346 | the text is at **347** | off-by-one, **verbatim quote** |
+| `docs/AFK.md` | `HARNESS.md` line 377 | the text is at **378** | off-by-one, **verbatim quote** |
+| `FEATURE-PLUGINS.MAP.md` ×2 | `HARNESS.md` lines 130-132 | blank / `## Load-bearing facts` / blank | **live map pointer**, ~8 off |
+| `docs/REVIEW.md` ×7 | six spans | table separators, architecture prose | 2026-07-26 audit, written in **live pointer form** |
+| `PLAN.md` | `HARNESS.md` line 28 | a `docs/HARDEN.md` table row | dated, superseded doc |
+
+And `probe_citations.py` was **green over all of it** — 14/14, 1032 citations, `0 blank`,
+`0 past EOF`. Its own header says why, and says it as a limitation rather than a defect:
+*"WHAT IT DOES NOT CATCH: semantic rot"*. Every one of the thirteen lands on a real, non-blank
+line in a file that exists. **The rule worth keeping: a check that is green over a document
+nobody has re-read is measuring the document's syntax, not its claims** — and `HARNESS.md`, the
+most-edited file in the repo, is where that gap costs the most.
+
+### 9.1 What was repaired
+
+The three rows are in (`docs/SHIP.md` at 13, `docs/REFUSAL-RESCORE.md` at 0R, `docs/AFK.md` at
+`—`, the last flagged as not a phase record). MEASURED after: **17 dated records in `docs/`, 17
+indexed, 0 gaps**; the only two `docs/` files absent are `OPERATIONS.md` and `WINDOWS.md`, which
+the README already classes as live surface. `README.md`'s hedge — added by the same review that
+found the gap — goes back to a full claim, with the count and the date.
+
+Five live pointers were re-derived against the edited file (`docs/AFK.md` ×3 → 351 and 382,
+`FEATURE-PLUGINS.MAP.md` ×2 → 142-144). The eight dated ones were **de-pointered instead of
+renumbered**: `docs/REVIEW.md`'s seven and `PLAN.md`'s one now read ``HARNESS.md`` lines N-M,
+because `docs/CITE.md`'s own editorial rule says a citation that is a record must not wear live
+`file:line` form or the probe cannot tell a specimen from a pointer. Renumbering them would have
+been worse than leaving them: it would assert that a 2026-07-26 audit describes today's file.
+
+### 9.2 The check that did not exist, and the three more it found
+
+`docs/CITE.md` records that semantic rot *"is not mechanically checkable and is not claimed"*.
+**That is too pessimistic in exactly one case:** when a citation QUOTES its target, the document
+says what the line says, and the line can be read back. `probe_citations.py` grew that leg
+(14/14 → **19/19**), and it found **three rotted citations nothing else could see**:
+
+- `docs/HEADLESS.md` cited `PLAN.md` line 378 for text at **393**. Phase 6 moved PLAN.md's body +1 and
+  Phase 7 a further +14; **378 + 15 = 393**, exactly. PLAN.md's own errata header records that
+  pass and says outside citations *"moved with it: spot-checked at three, they were already
+  pinned to three different revisions of this file, none of them this one."* **It found the
+  class, wrote it down, and repaired none of them.**
+- `docs/VERIFY.md` cited `PLAN.md` lines 391-393 for the Phase-4 exit gate, which is at **406-408**.
+- `docs/AFK.md` quoted `ab.py` lines 78-80's stock-arm label. That string was rewritten on 2026-07-31 —
+  the day AFK.md was written — and the comment that replaced it calls the old wording *"a false
+  claim being written into every run's meta.json"*. The record was repeating the false claim the
+  code had already retracted, and its next bullet warns against a hazard that had **already
+  fired**. Corrected in place, dated, with the original quote preserved.
+
+**The form carries the claim, and that is what makes the leg precise.** Only the italic `*"…"*`
+form counts as a verbatim quote. MEASURED over the whole sweep: treating *any* quoted span beside
+a citation as verbatim gives **14 mismatches in 23**, nearly all paraphrase or label — "config
+loading mutates your disk" against the code it summarizes. The italic form gave **6 claims, 3
+verified, 3 genuinely rotted, no false positives.** A wider net here would have been noise, and
+noise is how a guard gets ignored.
+
+Two implementation notes, both found by running it rather than by reasoning about it. The match
+is a **prefix** (60 normalized chars): the first draft compared whole quotes and went red on
+`docs/AFK.md` ending a quote at *"it hangs indefinitely."* where `HARNESS.md` runs on *", but it
+does not stall other sessions"* — honest quoting that equality calls rot. And `"` is normalized
+away like the backticks, because quoting a Python implicit string concatenation otherwise picks
+up the `" "` seam between its two literals. Both are pinned by negative controls; the off-by-one
+mutation control is deliberately one line, the size of the Phase 6 shift that started this.
+
+**Controls run.** Negative: restoring `docs/HEADLESS.md`'s pre-fix `PLAN.md` line 378 takes the leg red
+(18/19) and restoring the fix takes it green (19/19). In-probe: a correct quote is not flagged, a
+truncated quote is not flagged, a quote moved one line IS flagged.
+
+### 9.3 What this cost the overlay, and what it did not
+
+`FEATURE-PLUGINS.MAP.md` is an overlay file, so repairing its two pointers meant editing `fork/`
+and copying to the checkout — §8.1's operation. TESTED after: `fork/` ↔ `opencode/` **17/17
+identical**, `probe_twin.py` **25/25**, gate **`== PASS ==`**, tier2 **17/17 ok** against a floor
+of 16.
+
+The expectation going in was that this would widen §8.1's patch drift from two files to three. It
+did not: **the drift is unchanged at two**, because `FEATURE-PLUGINS.MAP.md` was already one of
+the two files §8.1 measured as behind. Re-derived here by reconstructing post-images from
+`fork/healbot-fork.patch` — 13 of the 15 new-file hunks reproduce `fork/` byte-for-byte, and the
+two that differ are `SESSION.MAP.md` and `FEATURE-PLUGINS.MAP.md`, the same pair §8.1 named by
+`cmp` in a reconstituted clone. (The other two of the 17 are modification hunks, which that method
+cannot reconstruct; §8.1's clone-side `cmp` covers them and agrees.)
+
+And regenerating the patch is now known to be **impossible**, not merely unwise as §8.1 argued:
+its pinned base `045e416` is `fatal: Not a valid object name` in the checkout, which sits on
+branch `healbot` at `509f4c0b1` with remotes `sst/opencode` and `ScrapPack/healbot-opencode`. The
+provenance §8.1 declined to trade away is already unreachable.
+
+### 9.4 Still open
+
+- **The eight de-pointered citations are now invisible to `probe_citations.py`.** That is the
+  intent — they are records, not pointers — but it means nothing checks that `docs/REVIEW.md`'s
+  prose still describes something real. Prose about a file's past has no mechanical referent, and
+  this is written down rather than solved.
+- **The verbatim-quote leg covers 6 citations.** It grows only as authors use the italic form.
+  A convention is not a guarantee, and this one is currently carried by four documents.
+- **`fork/healbot-fork.patch` still drifts silently** — §8.1's named residual, unchanged. Nothing
+  compares the patch to `fork/`, and the copy step in every reconstitution path is what makes that
+  tolerable. The reconstruction script written for §9.3 is the shape a guard would take, and is
+  recorded here rather than shipped, because it can only check the 15 new-file hunks.

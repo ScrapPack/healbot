@@ -50,9 +50,12 @@ than for this one. Everything else under `docs/` is a **dated phase record**: th
 behind a number or a decision, written at the time and corrected in place by appending,
 never rewritten. `docs/CLONE.md` is both — a Phase 9 record, and the page to read before
 trusting any suite run from a fresh environment. You do not need the records to run the
-harness; you need them before you argue with a figure. `HARNESS.md` indexes **most** of them
-newest-first and says what each settles; `docs/SHIP.md` is reached from its Phase 13 section
-instead, and `docs/AFK.md` and `docs/REFUSAL-RESCORE.md` are not indexed there at all.
+harness; you need them before you argue with a figure. `HARNESS.md` indexes **all seventeen**
+of them newest-first and says what each settles — MEASURED 2026-08-02, and the two `docs/`
+files it does not list are `OPERATIONS.md` and `WINDOWS.md`, which are live surface, not
+record. Its own exit test — *"from this file alone you should be able to name the file that
+owns any given behavior"* — held for fifteen of the seventeen until that date; `docs/AFK.md`
+and `docs/REFUSAL-RESCORE.md` appeared in it **zero** times.
 
 ## Quickstart — macOS / Linux
 

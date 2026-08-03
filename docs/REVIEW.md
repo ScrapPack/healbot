@@ -5,6 +5,12 @@ Date 2026-07-26. Method: 7 domain probes over `PLAN.md`, `docs/PROBE.md`, `docs/
 independent skeptic that re-derived its findings from source rather than trusting them; one
 completeness critic over the merged result. 15 agents, 1,047 tool calls.
 
+**Line numbers into `HARNESS.md` below are 2026-07-26 coordinates and no longer resolve.** That
+file has been rewritten across eleven phases since, and every one of these was found landing on
+unrelated prose on 2026-08-02. They are deliberately written as ``HARNESS.md`` lines N-M rather
+than in live `file:line` form: the form is what lets `probe_citations.py` tell a **specimen** from
+a **pointer**, and this document records a state that is gone rather than mapping the current one.
+
 96 findings, 61 adversarial reviews. Verdicts after the skeptic pass:
 
 | | count |
@@ -92,7 +98,7 @@ request, so the fiber is not interrupted when the response returns.
 
 ### R1 — The retirement trigger measures the wrong quantity (CRITICAL, own check)
 
-`HARNESS.md:82-83` prescribes thresholding `session.tokens` on `input + output + reasoning`,
+`HARNESS.md` lines 82-83 prescribe thresholding `session.tokens` on `input + output + reasoning`,
 excluding `cache.read`. opencode's own capacity check is a different metric on different
 fields, and nothing in the tree reconciles them.
 
@@ -129,7 +135,7 @@ model's `limit.input`.
 
 ### R2 — The v2 engine never writes `session.tokens` (CRITICAL, own check)
 
-`HARNESS.md:135` records this as the project's biggest open question, with two Phase-2 agents
+`HARNESS.md` line 135 records this as the project's biggest open question, with two Phase-2 agents
 contradicting each other. It is settled, and the answer is the dangerous one.
 
 `grep -rn applyUsage packages --include="*.ts"` → 5 hits, all in
@@ -143,7 +149,7 @@ The skeptic settled it at TESTED tier: a v2 prompt on a 1.18.5 source server bur
 
 Two corrections to `HARNESS.md` follow:
 
-- `HARNESS.md:143-153` records that `POST /api/session/{id}/prompt` "produces no assistant
+- `HARNESS.md` lines 143-153 record that `POST /api/session/{id}/prompt` "produces no assistant
   turn after 60s" and uses that to justify deferring the question. **Not reproducible** — the
   skeptic got a complete turn in ~1.2s. The earlier failures are still in the DB, each holding
   only `agent-switched` + `model-switched` rows pinning `gpt-5.6-sol`; the working run used a
@@ -266,7 +272,7 @@ Recomputed against a DB copy of the reference 101-turn session:
 | **`input + output + reasoning`** (the recommended rule) | **turn 77** |
 | `input + output + cache.read` | turn 17 |
 
-`SCAN.md`'s two rows are exact. But `HARNESS.md:82-83` carried the turn-90 figure forward and
+`SCAN.md`'s two rows are exact. But `HARNESS.md` lines 82-83 carried the turn-90 figure forward and
 attached it to the +reasoning rule, which fires at turn 77 — ~76% of the session's life, not
 ~89%. And turn 90 is fragile: turns 86–89 sit at 341K–347K and only clear on a 154K input spike,
 so any additive term moves the crossing into the 70s.
@@ -338,7 +344,7 @@ re-attaches after each compaction, since `extract()` skips compacted parts (`ins
 
 `.gitignore` excludes `/opencode/`. The 14 `*.MAP.md` files and the spike live only in the fork,
 whose only remote is `https://github.com/sst/opencode` — so branch `healbot` has no valid push
-destination. `HARNESS.md:26-54`'s 14 links all point into the ignored subtree.
+destination. The 14 links at `HARNESS.md` lines 26-54 all point into the ignored subtree.
 
 This has **already caused a false conclusion**: fork commit `ce4a844` asserts `docs/SCAN.md` and
 `docs/PROBE.md` "were never committed (no blob by either name in any reachable tree)" and
@@ -430,8 +436,8 @@ Phase 1" never edited `SCAN.md`. Four phases in, the result is:
 - `HARNESS.md`, the designated root index, contains **zero** references to `STRIP.md`,
   `harness/`, `env.sh` or Phase 3. `grep -n "STRIP\|harness/\|env.sh\|[Pp]hase 3" HARNESS.md`
   returns nothing. The deliverable is orphaned from its own index.
-- `HARNESS.md:136-137` still lists two questions Phase 3 answered 24 minutes later.
-- `HARNESS.md:91-93`'s cost model is the superseded `anthropic.txt` measurement.
+- `HARNESS.md` lines 136-137 still list two questions Phase 3 answered 24 minutes later.
+- The cost model at `HARNESS.md` lines 91-93 is the superseded `anthropic.txt` measurement.
 - `PLAN.md:300` omits `SCAN.md` from Phase 4's inputs — yet the border mapping, the reply
   shapes, the retirement field selection and the handoff mechanism exist **only** there.
 

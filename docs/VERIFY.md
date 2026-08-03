@@ -33,7 +33,7 @@ failure is a bug in the test, not the code (§6).
 The rig is at `.carryover/verified/`, with a README covering how to re-run it. The four
 `.carryover/verify*.py` at the level above are the void ones; they are kept only as a record.
 
-**Exit-gate status** (`PLAN.md:391-393`). **Both clauses are met, TESTED.** *"Four sessions
+**Exit-gate status** (`PLAN.md:406-408`). **Both clauses are met, TESTED.** *"Four sessions
 concurrent, one deliberately blocked on a permission prompt and answered from the grid without
 focusing"* — §2–§5, and the question equivalent with it. *"One driven past the retirement
 threshold and handed off with continuity intact"* — §10.

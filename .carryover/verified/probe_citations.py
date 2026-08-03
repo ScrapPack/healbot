@@ -183,6 +183,105 @@ def classify(cited, lo, hi, index):
     return "OK", os.path.relpath(pick, HB)
 
 
+# A citation that QUOTES its target is a stronger claim than one that merely points at it, and it
+# is the one kind of SEMANTIC rot that is mechanically checkable: the document says what the line
+# says, so the line can be read back. The header above says semantic rot "is not claimed" — that
+# stays true in general and is narrowed here to the quoting case only.
+#
+# The form carries the claim, exactly as it does for specimen-vs-pointer. Only the ITALIC form
+# `*"…"*` counts as a verbatim quote. MEASURED 2026-08-02 over the whole sweep: treating ANY
+# quoted span near a citation as verbatim gives 14 mismatches in 23, nearly all of them paraphrase
+# ("config loading mutates your disk" against the code it summarizes), scare-quotes, or labels —
+# a check that cannot tell those from rot is noise. The italic form gave 6 claims, 3 verified and
+# 3 genuinely rotted, no false positives.
+QUOTED = re.compile(r'\A[^\n"]{0,40}?\*"([^"]{20,400})"')
+
+# Normalized characters of the quote that must be found at the cited line. Long enough that a
+# match is not coincidence, short enough to survive truncation and re-wrapping.
+HEAD = 60
+
+
+def _norm(s):
+    """Markdown-insensitive, whitespace-insensitive, case-insensitive. A quote is re-typed prose:
+    it wraps at a different column and its emphasis is the quoting author's, not the source's.
+
+    `"` goes too, for the same reason the backticks do — it is delimiter, not content. Quoting a
+    Python implicit string concatenation otherwise picks up the `" "` seam between its two
+    literals and fails on source the reader sees as one uninterrupted sentence, which is exactly
+    what `ab.py:93-94` is.
+    """
+    s = re.sub(r'[`*_>"]', "", s).replace("—", "-").replace("–", "-").replace("’", "'")
+    return re.sub(r"\s+", " ", s).strip().lower()
+
+
+def quote_frags(q):
+    """-> ordered fragments. `…` marks an elision, so each side is matched separately and in
+    order rather than as one string that the source never contained."""
+    return [f for f in (_norm(p) for p in re.split(r"…|\.\.\.", q)) if len(f) >= 12]
+
+
+def quote_verdict(cited, lo, hi, quote, index):
+    """-> (verdict, detail). Verdicts: QUOTE_OK | QUOTE_MISMATCH | QUOTE_UNRESOLVED.
+
+    The HEAD of the quote locates it, and the head is the whole assertion. Equality does not
+    survive contact with honest quoting: `docs/AFK.md` ends one quote at "it hangs indefinitely."
+    where HARNESS.md continues ", but it does not stall other sessions", and quoting a Python
+    implicit string concatenation picks up the `" "` seam between its two literals. Sixty
+    normalized characters is enough signal to say a line is the one the words came from, and it
+    is indifferent to where the quoter chose to stop.
+
+    The match must BEGIN inside the cited span. Two lines of slack are searched so a quote that
+    wraps past `hi` still matches, but a match that starts beyond the span is the finding: the
+    `HARNESS.md:346` case sat five lines above its text and every character of the quote was
+    present in the file, just not where the citation said.
+    """
+    cands = index.get(os.path.basename(cited), [])
+    want = os.sep + cited.replace("/", os.sep)
+    suffix = [p for p in cands if p.endswith(want)] or cands
+    if cited.endswith(".md"):
+        own = [p for p in suffix if not p.startswith(CHECKOUT + os.sep)]
+        suffix = own or suffix
+    inrange = [p for p in suffix if (L := lines_of(p)) is not None and hi <= len(L)]
+    if not inrange:
+        return "QUOTE_UNRESOLVED", cited
+    exact = [p for p in inrange if p.endswith(want)]
+    pick = (exact or inrange)[0]
+    L = lines_of(pick)
+    frags = quote_frags(quote)
+    if not frags:
+        return "QUOTE_UNRESOLVED", "quote too short to check"
+    span = _norm("\n".join(L[lo - 1 : hi]))
+    window = _norm("\n".join(L[lo - 1 : hi + 2]))
+    pos = window.find(frags[0][:HEAD])
+    if pos == -1 or pos >= max(len(span), 1):
+        return "QUOTE_MISMATCH", f"{os.path.relpath(pick, HB)} — wanted {frags[0][:HEAD]!r}"
+    for f in frags[1:]:
+        nxt = window.find(f[:HEAD], pos)
+        if nxt == -1:
+            return "QUOTE_MISMATCH", f"{os.path.relpath(pick, HB)} — elided part {f[:40]!r} absent"
+        pos = nxt
+    return "QUOTE_OK", os.path.relpath(pick, HB)
+
+
+def scan_quotes(index, srcs):
+    """Citations that carry a verbatim quote, with the quote checked back against the line."""
+    out = []
+    for src in srcs:
+        try:
+            text = open(src, encoding="utf-8").read()
+        except Exception:
+            continue
+        for m in CITE.finditer(text):
+            q = QUOTED.match(text[m.end() :])
+            if not q:
+                continue
+            lo = int(m.group(2))
+            hi = int(m.group(3)) if m.group(3) else lo
+            verdict, detail = quote_verdict(m.group(1), lo, hi, q.group(1), index)
+            out.append((os.path.relpath(src, HB), m.group(1), lo, hi, verdict, detail))
+    return out
+
+
 def scan(index, srcs):
     rows = []
     for src in srcs:
@@ -198,7 +297,7 @@ def scan(index, srcs):
     return rows
 
 
-r = rig.Results(expect=14)
+r = rig.Results(expect=19)
 
 try:
     index, idx_dropped = build_index()
@@ -272,6 +371,36 @@ try:
         "docs/HEADLESS.md cites. Nothing noticed, because nothing was looking",
     )
 
+    # --- the verbatim-quote leg -------------------------------------------------------------
+    qrows = scan_quotes(index, srcs)
+    qbad = [x for x in qrows if x[4] == "QUOTE_MISMATCH"]
+    if qbad:
+        print("\n  -- QUOTE DOES NOT MATCH THE CITED LINE --", flush=True)
+        for src, cited, lo, hi, _, detail in qbad[:25]:
+            span = f"{lo}-{hi}" if hi != lo else f"{lo}"
+            print(f"     {src:<52} {cited}:{span}   {detail}", flush=True)
+
+    r.check(
+        f"the sweep found verbatim-quote citations to check — {len(qrows)}",
+        len(qrows) >= 5,
+        "a floor, so the leg below cannot pass by finding nothing. MEASURED 2026-08-02: 6 in the "
+        "repo, all in the italic `*\"…\"*` form. Low by design — the form is the claim, and most "
+        "quoted spans beside a citation are paraphrase rather than a quotation of that line",
+    )
+    r.check(
+        f"EVERY VERBATIM QUOTE IS ACTUALLY AT THE LINE IT CITES — {len(qbad)} mismatched",
+        not qbad,
+        "the one semantic-rot class that is checkable, and it was rotten in three of six when "
+        "first run (2026-08-02) — all three invisible to every leg above, because each landed on "
+        "a real, non-blank line in a file that exists. docs/HEADLESS.md cited PLAN.md:378 for text "
+        "at :393 (Phase 6 moved the body +1 and Phase 7 a further +14; PLAN.md's own errata "
+        "recorded that outside citations had moved with it, spot-checked three, and repaired "
+        "none); docs/VERIFY.md cited :391-393 for the exit gate at :406-408; and docs/AFK.md "
+        "quoted an ab.py arm label that had been rewritten the same day it was written, whose "
+        "replacement comment calls the old wording a false claim. A pointer that is merely stale "
+        "misleads; a QUOTE that is stale puts words in the source's mouth",
+    )
+
     # --- mutation checks ------------------------------------------------------------------
     # Each corrupts an input and pushes it through `classify` — the same function the sweep above
     # calls — rather than re-implementing the comparison inline.
@@ -303,6 +432,28 @@ try:
         classify(real, 1295, 1295, index)[0] == "OK",
         "opencode's own turn predicate, the line the whole Phase 7 finding rests on. If the checks "
         "above fired on everything they would be worthless in the other direction",
+    )
+    # The quote leg gets both controls too. Its assertion above is an ABSENCE, so on its own it
+    # would pass just as happily if the matcher were broken shut.
+    r.check(
+        "MUTATION: a verbatim quote moved off its line IS caught — prompt.ts:1295 quoted at :1296",
+        quote_verdict(real, 1296, 1296, src_lines[1294].strip()[:80], index)[0] == "QUOTE_MISMATCH",
+        "the real line 1295 quoted against line 1296 — one line off, the exact size of the Phase 6 "
+        "shift that rotted docs/HEADLESS.md. If the window slack ever widens to swallow an "
+        "off-by-one this goes red, which is the point",
+    )
+    r.check(
+        "NEGATIVE CONTROL: a correct verbatim quote is NOT flagged — prompt.ts:1295",
+        quote_verdict(real, 1295, 1295, src_lines[1294].strip()[:80], index)[0] == "QUOTE_OK",
+        "same line, quoted at its own number. Without this the leg above passes by matching "
+        "nothing at all",
+    )
+    r.check(
+        "NEGATIVE CONTROL: a TRUNCATED quote is still correct — quoting is not transcription",
+        quote_verdict(real, 1295, 1295, src_lines[1294].strip()[:28], index)[0] == "QUOTE_OK",
+        "docs/AFK.md ends a HARNESS.md quote at 'it hangs indefinitely.' where the source runs on "
+        "', but it does not stall other sessions'. That is honest quoting, and an equality check "
+        "would have called it rot — which is why the match is a PREFIX",
     )
     r.check(
         "RESOLUTION: prompt.ts:1295 resolves to the 1,631-line session file, not the 57-line schema one",

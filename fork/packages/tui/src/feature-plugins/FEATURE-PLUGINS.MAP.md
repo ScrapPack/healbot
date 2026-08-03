@@ -57,7 +57,7 @@ revised when `builtins.ts` was resynced at `f3c3785`. `HealbotSpike` appears now
 Sidebar `sidebar_content` render order is `context(100) → mcp(200) → lsp(300) → todo(400) → files(500)`.
 
 The grid's row is the one line in this table with no figure in **Lines**, deliberately.
-`HARNESS.md:130-132` records that byte and line counts for `healbot.tsx` were stated three times
+`HARNESS.md:142-144` records that byte and line counts for `healbot.tsx` were stated three times
 across this repo and all three were stale within a day; it instructs readers to `wc` the file.
 This map obeys that. The row it replaced read `| Healbot spike | system/healbot-spike.tsx | 133 |
 healbot-spike | route "healbot-spike" + command healbot.spike … **delete when the real grid
@@ -224,7 +224,7 @@ Healbot *retirement confirmation* dialog (`api.ui.DialogConfirm` + toast on resu
 nothing, and `HARNESS.md`'s **Traps** table records the same resolution. Everything below is the shipped grid.
 
 Shape B, built from `diff-viewer`'s skeleton. **No line or byte count is quoted here** — see the
-inventory note above and `HARNESS.md:130-132`. `wc` it.
+inventory note above and `HARNESS.md:142-144`. `wc` it.
 
 | Element | Line | Detail |
 |---|---|---|
