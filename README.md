@@ -62,7 +62,7 @@ the eighteenth, added the next day.
 
 ```sh
 git clone https://github.com/ScrapPack/healbot && cd healbot
-python3 harness/doctor.py            # what can THIS machine run? fix what it names
+python3 harness/doctor.py            # fix what it names — exit 0 only when every tier is READY (1 FAIL / 2 partial)
 git config core.hooksPath gate/hooks # wire the push gate, once per clone
 ```
 

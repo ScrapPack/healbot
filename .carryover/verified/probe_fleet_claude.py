@@ -86,8 +86,10 @@ CONFIG_MATERIALIZED = Env(
 # with one (finding 11), and the two defects the close's own live test measured — spawn
 # re-ensuring the crew window kill can destroy, and spawn's post-lease failure paths
 # releasing the lease they just took — each with a mutation leg. 79. The item-B close
-# (finding 8) adds two: spawn adopting the pane pid onto the lease, with its leg. 81.
-r = Results(expect=81, skip_max=2)
+# (finding 8) adds two: spawn adopting the pane pid onto the lease, with its leg. 81. The
+# item-A close (finding 1) adds two: doctor's exit reading the tier verdicts, with its
+# leg. 83.
+r = Results(expect=83, skip_max=2)
 
 
 def sh_n(path):
@@ -800,6 +802,23 @@ try:
             twin_family_gates_both_tiers(doc))
     r.check("MUTATION: dropping the twin gate from one tier is caught",
             not twin_family_gates_both_tiers(doc.replace(" and not twin_fail", "", 1)))
+
+    def exit_reads_the_tiers(s):
+        # docs/E2E.md finding 1: doctor exited 0 whenever no row was FAIL, so on a fresh
+        # clone `doctor && next` read green while four of five tiers printed NOT YET. The
+        # exit is three-state now and the middle state must come from the TIER verdicts:
+        # tier_summary returns them, main branches on False (NOT YET) — None, the
+        # platform-impossible N/A, deliberately does not count.
+        return ("return [state for _, state, _ in tiers]" in s
+                and "any(state is False for state in tier_states)" in s
+                and "sys.exit(2)" in s)
+
+    r.check("doctor's exit reads the tier verdicts: 0 ready, 1 FAIL, 2 NOT YET",
+            exit_reads_the_tiers(doc),
+            "the tier block was always the honest surface; the exit code now reads it")
+    r.check("MUTATION: an exit that bypasses the tier verdicts is caught",
+            not exit_reads_the_tiers(doc.replace(
+                "any(state is False for state in tier_states)", "False", 1)))
 except SystemExit:
     raise
 except Exception:

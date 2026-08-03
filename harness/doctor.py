@@ -14,6 +14,14 @@ Honesty rules, inherited from the rig: a check that cannot run is not a pass (SK
 why, and platform-impossible is different from missing); a FAIL is a fact about this
 machine, not necessarily a defect in the repo. Stdlib only, no venv required — this is the
 tool that tells you whether the venv exists.
+
+Exit codes, three states since 2026-08-03 (docs/E2E.md item A): 0 = no FAIL and every tier
+READY (or N/A, where the platform cannot hold the tier by design), 1 = at least one FAIL,
+2 = no FAIL but at least one tier NOT YET. The tier block was always the honest surface and
+the exit code was not: on a fresh clone every deficiency is a WARN, so `doctor && next`
+read green on a machine where four of five tiers could not run. The middle state keys on
+the TIER verdicts, not on raw WARN rows, so cosmetic WARNs that gate no tier stay out of
+the exit, and Windows' platform-impossible tiers (N/A) count as carried.
 """
 
 import json
@@ -510,6 +518,9 @@ def tier_summary():
         print(f"  [{mark:7}] {name}\n            {need}")
     print("\n  local models: none configured in this repo — the Mac's local-model pin is "
           "machine state, deliberately absent on a PC (owner decision, docs/WINDOWS.md).")
+    # The verdicts, for main()'s exit: the tier block is the honest surface and the exit
+    # code must read it rather than bypass it (docs/E2E.md finding 1).
+    return [state for _, state, _ in tiers]
 
 
 def main():
@@ -531,10 +542,17 @@ def main():
     for status, name, detail in ROWS:
         print(f"  [{status}] {name:<{width}}  {detail}")
     fails = [n for s, n, _ in ROWS if s == FAIL]
-    tier_summary()
+    tier_states = tier_summary()
     if fails:
         print(f"\n{len(fails)} FAIL: {', '.join(fails)}")
-    sys.exit(1 if fails else 0)
+        sys.exit(1)
+    # False is NOT YET (fixable on this machine); None is N/A (platform-impossible by
+    # design) and deliberately does not count. WARNs that gate no tier never reach here.
+    if any(state is False for state in tier_states):
+        print("\nexit 2: no FAIL, but a tier above reads NOT YET — this machine cannot "
+              "carry the whole workflow yet. The rows name what is missing.")
+        sys.exit(2)
+    sys.exit(0)
 
 
 if __name__ == "__main__":

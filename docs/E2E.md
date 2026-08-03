@@ -14,7 +14,9 @@ Nothing paid was run: the opencode half stops at the last free keystroke, and th
 stated where it falls (§4).
 
 Fifteen findings. Seven were repaired in this change, seven carry probe rows, four are open
-items that need an owner's decision rather than a patch.
+items that need an owner's decision rather than a patch. Later the same day, after the
+push: every §7 item was decided and closed in place — each carries its dated CLOSED
+paragraph — and closing item E measured two further defects, repaired under it.
 
 ---
 
@@ -50,7 +52,7 @@ says *"fix what it names"*, and it does name all of them, but a reader who chain
 NOT YET. The tier block is the honest surface and it is printed; the exit code is the one a
 script reads. Not repaired here: WARN-vs-FAIL is the doctor's whole state lattice and
 promoting these rows would fail a machine that is deliberately partial (a PC with no tmux, by
-design). Named as open item A.
+design). Named as open item A. Closed the same day; item A records the third exit state.
 
 **Finding 2 — `HEALBOT_RETIRE_AT` reads like an environment variable a newcomer can inspect,
 and sourcing `env.sh` does not export one.** TESTED: after `. harness/env.sh` the environment
@@ -377,6 +379,20 @@ Suite and gate, this change (each exit code captured directly, never through a p
 deliberately partial machine must not fail — but it makes `doctor && next-command` a green
 light on a clone that can run one tier of five (finding 1). Either the exit code grows a third
 state or the docs stop implying it is a gate.
+
+CLOSED 2026-08-03: the exit code grew the third state, keyed on the tier verdicts rather
+than raw WARN rows: 0 = no FAIL and every tier READY or N/A, 1 = any FAIL, 2 = no FAIL but
+a tier NOT YET. Platform-impossible partiality already reads N/A (Windows' tmux and pty
+tiers) and still exits 0, so the deliberately-partial-PC story survives; what exits 2 is
+fixable-on-this-machine partiality, exactly what a chained green light must not paper over.
+The change was safe to make because nothing programmatic reads doctor's exit code —
+VERIFIED by exhaustive grep, every consumer is a human following a doc — and that window
+closes the day someone wires it into CI. TESTED both directions: this checkout exits 0 with
+five READY tiers, and a fresh local clone exits 2 with four NOT YET tiers and seven WARN
+rows, the exact shape finding 1 measured at exit 0. One residual named rather than hidden:
+a Mac deliberately without tmux exits 2 forever, since unlike Windows it has no N/A escape.
+tmux is installable there, so the reading stands. Guarded by a probe row on the exit's
+tier-verdict wiring, with its mutation leg.
 
 **B. What pid a pool lease should record.** Line 252 of `harness/pool.py`, as the walk found
 it, recorded the acquiring

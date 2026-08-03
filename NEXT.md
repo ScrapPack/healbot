@@ -81,8 +81,8 @@ hole is closed. Nothing is blocking you. Do not invent something to build.
      markers and all three hook events are MEASURED against a live crewmate on 2.1.220,
      and the pinning session found two things it was not looking for: every healthy
      crewmate read `ambiguous` (pane_current_command is the CLI VERSION), and `kill`
-     leaves the pool lease held. Both recorded in docs/SHIP.md §5; the first is fixed and
-     guarded, the second is operator surface. What is still UNMEASURED on the claude side
+     leaves the pool lease held. Both recorded in docs/SHIP.md §5; both are fixed and
+     guarded (the kill lease closed 2026-08-03 with E2E.md's other open items, §7). What is still UNMEASURED on the claude side
      is the retirement marker (~300K, INFERRED) — that needs occupancy near the marker,
      not another bring-up run.
   1. FREE, start here: run the suite. In each of the last five phases the finding came from

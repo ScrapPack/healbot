@@ -153,7 +153,10 @@ Everything below runs in **Git Bash inside Windows Terminal**, from the clone ro
 
 Run these on the PC and the platform claims above stop being inferences:
 
-1. `python harness/doctor.py` → expect FAIL 0; SKIPs only for tmux/pty.
+1. `python harness/doctor.py` → expect FAIL 0; SKIPs only for tmux/pty. Exit 0 once the
+   checklist is complete (the tmux/pty tiers are N/A on native Windows, and N/A counts as
+   carried); exit 2 mid-checklist means a tier is still NOT YET, which is the checklist
+   working, not a defect.
 2. `.carryover/verified/venv/Scripts/python.exe gate/gate.py` → `== PASS ==` (Tier 1 + the
    citation sweep run natively).
 3. `harness/fleet.sh` → in the TUI, the model line shows `gpt-5.6-sol` (the pin reached the

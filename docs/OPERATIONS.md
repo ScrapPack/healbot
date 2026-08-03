@@ -15,7 +15,7 @@ on native Windows; `gate/gate.py` and the pre-push hook resolve this themselves.
 
 | Command | What |
 |---|---|
-| `python3 harness/doctor.py` (`python` on Windows) | What can this machine run? PASS/FAIL/WARN/SKIP rows + a tier summary. Run it first on any new machine, and after changing the toolchain |
+| `python3 harness/doctor.py` (`python` on Windows) | What can this machine run? PASS/FAIL/WARN/SKIP rows + a tier summary. Run it first on any new machine, and after changing the toolchain. Exit: 0 every tier READY (or N/A) · 1 any FAIL · 2 no FAIL but a tier NOT YET (since 2026-08-03) |
 | `git config core.hooksPath gate/hooks` | Wire the push gate, once per clone (`gate/GATE.MAP.md`) |
 
 ## opencode half
