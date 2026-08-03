@@ -64,10 +64,10 @@ SKIPPED = "skipped"    # deliberately not run (out of scope for the changed file
 DECLARED = "declared-skip"
 
 
-def sh(cmd, cwd=ROOT, timeout=900):
+def sh(cmd, cwd=ROOT, timeout=900, input=None):
     t0 = time.time()
     try:
-        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, input=input)
         return {"cmd": cmd, "code": p.returncode, "out": p.stdout + p.stderr, "secs": time.time() - t0}
     except FileNotFoundError as exc:
         return {"cmd": cmd, "code": None, "out": f"executable not found: {exc}", "secs": time.time() - t0}
@@ -75,15 +75,15 @@ def sh(cmd, cwd=ROOT, timeout=900):
         return {"cmd": cmd, "code": None, "out": f"TIMEOUT after {timeout}s", "secs": time.time() - t0}
 
 
-def changed_files(base):
+def changed_files(base, head=None):
     """Files this change touches. `base` of None means the working tree (staged + unstaged +
-    untracked); otherwise a diff against that ref.
-
-    Untracked files are included deliberately. The project's own history is the argument: the
-    A/B harness, the refusal corpus and this gate were all untracked while being written, and a
-    gate that cannot see a new file cannot guard the change that adds one."""
+    untracked); otherwise a diff of base...head, where `head` names the pushed tip (default
+    HEAD). A push gated from a checkout parked on another branch MUST pass head, or the
+    range collapses to whatever that checkout has: run 20260802-184854 gated a merge push
+    as ZERO files because its HEAD was an ancestor of the base. Untracked files stay
+    included: a gate that cannot see a new file cannot guard the change that adds one."""
     if base:
-        out = sh(["git", "diff", "--name-only", f"{base}...HEAD"])["out"]
+        out = sh(["git", "diff", "--name-only", f"{base}...{head or 'HEAD'}"])["out"]
     else:
         tracked = sh(["git", "diff", "--name-only", "HEAD"])["out"]
         untracked = sh(["git", "ls-files", "--others", "--exclude-standard"])["out"]
@@ -130,16 +130,21 @@ def tier1():
 # ==========================================================================================
 # LINT — scoped to what changed
 # ==========================================================================================
-def lint(files):
+def lint(files, head=None):
     """Lint only the changed files. A repo-wide lint on a mixed Python/TypeScript/Markdown tree
     reports pre-existing findings the change did not cause, and a gate that blames you for other
-    people's lint is a gate you learn to ignore."""
+    people's lint is a gate you learn to ignore.
+
+    With `head` (a pushed-range run), existence and CONTENT both come from the pushed tip,
+    never the working tree: the checkout the hook runs in can sit on another branch and hold
+    none of the pushed files (the 20260802-184854 mis-scope), and linting whatever the tree
+    happens to have would attest bytes nobody is pushing."""
     rows = []
-    py = [f for f in files if f.endswith(".py") and os.path.exists(f"{ROOT}/{f}")]
-    ts = [f for f in files if f.endswith((".ts", ".tsx")) and os.path.exists(f"{ROOT}/{f}")]
+    py = [f for f in files if f.endswith(".py") and _in_change(f, head)]
+    ts = [f for f in files if f.endswith((".ts", ".tsx")) and _in_change(f, head)]
 
     if py:
-        r = sh(["ruff", "check", "--no-cache", *py])
+        r = _ruff(py, head)
         rows.append({"check": "ruff", "why": f"{len(py)} changed Python file(s)", "cmd": "ruff check",
                      "code": r["code"], "secs": round(r["secs"], 2),
                      "sha256": hashlib.sha256(r["out"].encode()).hexdigest(),
@@ -157,7 +162,18 @@ def lint(files):
     # their only owner, so removing either from here removes it from the project.
     if any(f.startswith("fork/") for f in ts):
         oc = f"{ROOT}/opencode"
-        if os.path.isdir(f"{oc}/node_modules"):
+        # tsgo and oxlint can only read the CHECKOUT, so on a pushed-range run their verdict
+        # speaks for the push only when every pushed fork/ blob byte-matches its checkout
+        # twin. A mismatch (or a missing twin) leaves the claim unmeasured: ERROR, never a
+        # quiet lint of the wrong bytes.
+        stale = _stale_twins([f for f in ts if f.startswith("fork/")], head) if head else []
+        if stale:
+            for name in ("tsgo", "oxlint"):
+                rows.append({"check": name,
+                             "why": "pushed fork/ TS does not byte-match the checkout twin "
+                                    f"({', '.join(stale)}); sync per fork/README.md and re-push",
+                             "state": ERROR, "code": None, "secs": 0.0, "sha256": "", "tail": [""], "out": ""})
+        elif os.path.isdir(f"{oc}/node_modules"):
             r = sh([f"{oc}/node_modules/.bin/tsgo", "--noEmit", "-p", "packages/tui/tsconfig.json"], cwd=oc)
             rows.append({"check": "tsgo", "why": "changed fork/ TypeScript", "cmd": "tsgo --noEmit",
                          "code": r["code"], "secs": round(r["secs"], 2),
@@ -359,26 +375,86 @@ def home_paths():
 
 
 # ==========================================================================================
+# PUSHED-RANGE CONTENT — a range run reads blobs at the pushed tip, not the working tree
+# ==========================================================================================
+def _in_change(path, head):
+    """Existence for lint scoping: at the pushed tip when gating a range, else in the tree.
+    Filters deletions either way; with `head` it also KEEPS files the checkout does not
+    hold, which is the point (see changed_files)."""
+    if head:
+        return sh(["git", "cat-file", "-e", f"{head}:{path}"])["code"] == 0
+    return os.path.exists(f"{ROOT}/{path}")
+
+
+def _ruff(py, head):
+    """One sh()-shaped result for the ruff row. Working-tree mode is the one command it has
+    always been. Range mode feeds each pushed blob through stdin, with --stdin-filename
+    keeping both the reported path and ruff's config discovery identical to a tree run;
+    concatenation is deterministic because `py` arrives sorted."""
+    if not head:
+        return sh(["ruff", "check", "--no-cache", *py])
+    outs, codes, secs = [], [], 0.0
+    for f in py:
+        r = sh(["ruff", "check", "--no-cache", "--stdin-filename", f, "-"],
+               input=sh(["git", "show", f"{head}:{f}"])["out"])
+        outs.append(r["out"])
+        codes.append(r["code"])
+        secs += r["secs"]
+    code = None if any(c is None for c in codes) else max(codes)
+    return {"cmd": "ruff check --stdin-filename", "code": code, "out": "".join(outs), "secs": secs}
+
+
+def _stale_twins(fork_ts, head):
+    """The pushed fork/ blobs whose checkout twin does not byte-match (a missing twin
+    counts). Agreement is what lets a checkout lint's verdict speak for the push."""
+    stale = []
+    for f in fork_ts:
+        try:
+            with open(f"{ROOT}/opencode/{f[len('fork/'):]}", encoding="utf-8") as fh:
+                same = fh.read() == sh(["git", "show", f"{head}:{f}"])["out"]
+        except OSError:
+            same = False
+        if not same:
+            stale.append(f)
+    return stale
+
+
+# ==========================================================================================
 def main():
     args = sys.argv[1:]
     base = None
     if "--base" in args:
         base = args[args.index("--base") + 1]
+    head = None
+    if "--head" in args:
+        head = args[args.index("--head") + 1]
+    if head and not base:
+        print("gate.py: --head names a pushed tip and only scopes a --base range", file=sys.stderr)
+        return 3
     quiet = "--quiet" in args
 
-    files = changed_files(base)
-    print(f"== healbot gate ==  {len(files)} changed file(s)"
-          + (f" vs {base}" if base else " in the working tree"), flush=True)
+    files = changed_files(base, head)
+    scope = f" vs {base}...{head}" if head else (f" vs {base}" if base else " in the working tree")
+    print(f"== healbot gate ==  {len(files)} changed file(s)" + scope, flush=True)
     for f in files[:12]:
         print(f"   {f}", flush=True)
     if len(files) > 12:
         print(f"   … and {len(files) - 12} more", flush=True)
 
+    # What each half of the run attests. Tier 1 and the invariants read the CHECKOUT tree;
+    # lint reads the pushed blobs. When the two commits differ the split is worth a line in
+    # the terminal, not just a pair of fields in the record.
+    tree = sh(["git", "rev-parse", "--short", "HEAD"])["out"].strip()
+    gated = sh(["git", "rev-parse", "--short", head])["out"].strip() if head else tree
+    if head and gated != tree:
+        print(f"   NOTE: gating {gated} from a checkout at {tree}: tier-1 probes and the "
+              "invariant scans read the checkout tree; lint reads the pushed blobs.", flush=True)
+
     rows = []
     print("\n-- tier 1: static, free, always on --", flush=True)
     rows += tier1()
     print("\n-- lint: scoped to the change --", flush=True)
-    rows += lint(files)
+    rows += lint(files, head)
     print("\n-- invariants --", flush=True)
     rows.append(banned_names(files))
     rows.append(home_paths())
@@ -401,8 +477,12 @@ def main():
     os.makedirs(RUNS, exist_ok=True)
     tag = time.strftime("%Y%m%d-%H%M%S")
     rec = {
+        # `head` is the tip of the GATED range (the pushed sha on a hook run); `tree` is the
+        # checkout the tier-1 probes read. The 20260802-184854 record is why they are two
+        # fields: head silently meant `tree`, and the one place they differed is the one
+        # place the scoping broke.
         "tag": tag, "verdict": verdict, "base": base, "files": files,
-        "head": sh(["git", "rev-parse", "--short", "HEAD"])["out"].strip(),
+        "head": gated, "tree": tree,
         "checks": rows,
     }
     path = f"{RUNS}/{tag}.json"
