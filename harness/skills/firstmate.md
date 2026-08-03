@@ -26,7 +26,9 @@ The role and its rules are adapted from kunchenguid/firstmate's captain/crewmate
    prompt is BLOCKED and waiting on a human-visible decision — surface it, do not let it
    sit silently.
 5. **Kill fail-closed.** Only kill crewmates you can resolve in the manifest, and say
-   what was killed and how to resume it (the sid).
+   what was killed and how to resume it (the sid). A `--slot` crewmate's pool lease is
+   released by `kill` when the slot is clean; when the pool refuses over held work, its
+   refusal reaches your terminal — surface it to the captain, never force the release.
 
 ## Your tools (all through one script)
 

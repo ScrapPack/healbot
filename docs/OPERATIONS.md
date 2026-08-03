@@ -53,7 +53,7 @@ script's own header and `docs/SHIP.md`.
 | `hb-fleet.sh ls` / `state [name]` | Census (manifest × live panes) / per-crew liveness + hook channel + screen read |
 | `hb-fleet.sh send <name> <text> [--force]` / `brief <name> <file>` | One line into a crewmate / a multi-line brief via bracketed paste |
 | `hb-fleet.sh peek <name> [lines]` / `occupancy <name>` | Screen tail / live context occupancy from the transcript |
-| `hb-fleet.sh attach` / `kill <name>` / `down` | Attach the control terminal / kill one pane / kill the session (transcripts survive) |
+| `hb-fleet.sh attach` / `kill <name>` / `down` | Attach the control terminal / kill one pane — a `--slot` crewmate's pool lease is released when the slot is clean, and a refusal over held work reaches the terminal / kill the session (transcripts survive; `down` does NOT release slot leases) |
 
 ## The gate
 

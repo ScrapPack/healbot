@@ -199,7 +199,8 @@ recorded is a design choice (the pane's process, the tmux server, or nothing at 
 `crew alpha`. The gap was a known one; this is its first measurement from the operator side,
 and the manual repair worked exactly as the pool's refusals promise — `release` exited **2**
 and printed the uncommitted file rather than destroying it, and `release --discard-work` exited
-0, reset the slot and dropped the lease.
+0, reset the slot and dropped the lease. Closed as item E the same day: `kill` now attempts
+that release itself.
 
 **Finding 15 — `kill` on a crewmate that is already gone spoke tmux, not fleet.** Found while
 cleaning up rather than while testing. TESTED by killing a crewmate `down` had already taken:
@@ -259,7 +260,7 @@ source-level trap that had only ever been discussed as a rig-geometry hazard; th
 consequence is new, and it is not incidental — the cockpit's bridge window splits three ways,
 so 110 is what the grid pane gets by construction on a 220-column terminal. Recorded, not
 repaired: the fix is either a layout decision or an upstream width gate, both owner calls.
-Open item C.
+Open item C. Closed the same day; item C records the layout choice.
 
 **Where the free path ends, and why it ends there.** The `x` retirement key was NOT pressed.
 VERIFIED at `harness/config/opencode/plugin/healbot.ts:581`: `retire()` seeds the successor
@@ -385,6 +386,17 @@ and one of them has to be chosen deliberately.
 gate of 120, so the session route shows no session id in the default layout (finding 11).
 Layout change, gate change, or documented as expected — an owner call.
 
+CLOSED 2026-08-03: layout change. The grid pane now splits full window width (`-vf` in
+`hb-fleet.sh`), TESTED on the fresh cockpit: bridge 110x24, nvim 109x24, grid 220x24. Full
+width is the robust form because attach re-clamps every pane to the client terminal, so the
+halved pane needed a ~242-column client while the full-width pane clears the gate on any
+terminal of 121 columns or more, the same bound as running fleet.sh bare. The fork's gate is
+untouched on purpose: it is upstream code in the derived checkout, not one of the seventeen
+overlay files, and growing the overlay by a 2,500-line upstream file to avoid a one-flag
+tmux change would buy patch drift forever. Guarded by a probe row and its mutation leg. One
+consequence worth knowing: the `@hb_role` marker makes panes idempotent, so a fleet built
+before this change keeps its half-width grid until `down` and a fresh `start`.
+
 **D. Tier 1 cannot distinguish "could not run" from "ran and said no."** `gate/gate.py:124`
 maps every nonzero probe exit to BLOCKED, so for tier-1 probes the interface is coarser than
 `gate/GATE.MAP.md:167-168` describes (finding 13). Note the rest of the gate does make the
@@ -396,3 +408,22 @@ would close it.
 **E. Also unchanged and still open, from the crew side.** `kill` leaving the slot leased
 (finding 9) is a known gap and now measured from the operator's chair; the manual repair is
 `pool.py release`, which refuses to destroy work and says so.
+
+CLOSED 2026-08-03: `kill` settles the lease itself. The manifest row records a `slot` flag
+at spawn, and kill's success path runs a plain `pool.py release --if-owner` with the pool's
+own lines reaching the terminal uncaptured. TESTED both ways: a clean slot released
+("restored, payload kept, lease dropped", slot free again), and a slot holding an
+uncommitted file refused, named the file, kept the lease, and kill still exited 0 with the
+repair command printed, because a refusal over held work is the pool's guard working rather
+than a kill failure. The already-gone branch does not auto-release: a stale row cannot prove
+the lease is still that crewmate's, so it names `pool.py status` instead.
+
+Testing this close measured two defects the walk had not reached, both repaired and probed
+the same day. Killing the last crewmate destroys the now-empty crew window, and the next
+spawn misread the missing window as a full one; spawn now re-ensures the window with the
+same line `up` uses. And a spawn that failed after taking its lease leaked it, measured as
+slot-1 leased to a crewmate that never existed; spawn's split-refusal and boot-death exits
+now release the just-taken lease, while the ready-wait timeout deliberately keeps it because
+that crewmate is alive in its pane and may still boot. Still open from the same family:
+`down` strands every slot crewmate's lease. Named here rather than silently widened into
+this close.

@@ -80,8 +80,13 @@ CONFIG_MATERIALIZED = Env(
 # The same walk's cleanup adds three: `kill` on a pane the fleet had already taken leaked
 # tmux's own "can't find pane" under set -eu, so the branch is guarded now — with a mutation
 # leg for an unguarded kill-pane and one for reaching at pane_dead, which would refuse to
-# reap the dead pane kill exists to reclaim. 68.
-r = Results(expect=68, skip_max=2)
+# reap the dead pane kill exists to reclaim. 68. The 2026-08-03 open-items close (docs/E2E.md
+# section 7) adds eleven: kill settling a slot crewmate's pool lease with two mutation legs
+# (finding 9), the manifest's slot discriminator with one, the grid pane's full-window split
+# with one (finding 11), and the two defects the close's own live test measured — spawn
+# re-ensuring the crew window kill can destroy, and spawn's post-lease failure paths
+# releasing the lease they just took — each with a mutation leg. 79.
+r = Results(expect=79, skip_max=2)
 
 
 def sh_n(path):
@@ -574,6 +579,103 @@ try:
             not kill_frames_a_missing_pane(src.replace(
                 '  if ! t kill-pane -t "$P" 2>/dev/null; then',
                 '  pane_dead "$P" && exit 2\n  if ! t kill-pane -t "$P" 2>/dev/null; then', 1)))
+
+    def kill_settles_the_lease(s):
+        """Finding 9's close (docs/E2E.md): kill's SUCCESS path must attempt a PLAIN pool
+        release for a --slot crewmate — plain because the pool refuses while the slot holds
+        work and keeps the lease on refusal, so the call is safe by the pool's own design —
+        conditionally scoped (--if-owner) to this run's lease, and only AFTER the pane is
+        dead. Comments are stripped for the same reason the finding-15 predicate strips
+        them: the comment above the call names both the verb and the flag."""
+        branch = s.split("\nkill)", 1)[-1].split("\ndown)", 1)[0]
+        code = "\n".join(ln for ln in branch.split("\n") if not ln.lstrip().startswith("#"))
+        kill_at = code.find("t kill-pane")
+        rel = code.find('pool.py" release')
+        return kill_at > 0 and rel > kill_at and '--if-owner "$HB_RUN"' in code
+
+    def _mutate_kill(s, old, new):
+        # Scope a replacement to the kill branch. spawn's release_slot_on_failure calls
+        # the same verb with the same flag EARLIER in the file, so a whole-file
+        # first-occurrence replace corrupted that copy and left kill's intact — both legs
+        # below FAILED against correct code until scoped (caught by the 79-row floor run,
+        # 2026-08-03, the same session that wrote them).
+        head, sep, tail = s.partition("\nkill)")
+        return head + sep + tail.replace(old, new, 1)
+
+    r.check("kill settles a slot crewmate's pool lease after the pane dies",
+            kill_settles_the_lease(src),
+            "MEASURED 2026-08-03 (docs/E2E.md finding 9): kill left slot-1 leased to a dead "
+            "crewmate; the manual repair is now the automatic attempt, refusal-safe")
+    r.check("MUTATION: a kill that never calls release is caught",
+            not kill_settles_the_lease(_mutate_kill(src, 'pool.py" release', 'pool.py" status')))
+    r.check("MUTATION: an unconditional release (no --if-owner) is caught",
+            not kill_settles_the_lease(_mutate_kill(src, ' --if-owner "$HB_RUN"', '')))
+
+    def manifest_records_the_slot(s):
+        # The release path above is gated on a persisted discriminator: a --slot spawn's
+        # dir IS a pool worktree, but the manifest row never said so before this field.
+        # Old rows lack it; manifest_get exits 3 on a missing field, read as not-a-slot.
+        block = spawn_block(s)
+        return '"slot"' in block and '"$USE_SLOT"' in block
+
+    r.check("spawn's manifest row records whether the dir is a leased pool slot",
+            manifest_records_the_slot(src),
+            "kill's release attempt is gated on this field")
+    r.check("MUTATION: dropping the slot field from the row is caught",
+            not manifest_records_the_slot(src.replace('"slot": int(use_slot)', "", 1)
+                                          .replace('"$USE_SLOT"', '"0"', 1)))
+
+    def spawn_reensures_crew_window(s):
+        # kill-pane on the LAST crewmate destroys the now-empty crew window, and spawn's
+        # split refusal then misread the missing window as a full one. MEASURED
+        # 2026-08-03: the first spawn after such a kill dead-ended on "crew window is
+        # full". spawn re-runs the same ensure line `up` uses.
+        block = spawn_block(s)
+        return "grep -qx crew" in block and "new-window -d" in block
+
+    def _mutate_spawn(s, old, new):
+        # Scope a replacement to the spawn block: the ensure line also exists in `up`,
+        # and a whole-file first-occurrence replace would mutate that copy instead.
+        head, sep, tail = s.partition("\nspawn)")
+        return head + sep + tail.replace(old, new, 1)
+
+    r.check("spawn re-ensures the crew window (kill on the last crewmate destroys it)",
+            spawn_reensures_crew_window(src))
+    r.check("MUTATION: dropping spawn's ensure line is caught",
+            not spawn_reensures_crew_window(_mutate_spawn(src, "grep -qx crew", "true #")))
+
+    def spawn_failures_settle_the_lease(s):
+        # A spawn that dies AFTER the pool lease must release it — MEASURED 2026-08-03:
+        # a refused split leaked slot-1 to a crewmate that never existed. The shape is one
+        # helper and exactly three call sites (both split refusals and the boot death),
+        # so the count is 4 with the definition. EQUALITY, not a floor: a fourth call
+        # site would mean someone wired the ready-wait timeout, where the crewmate is
+        # alive in its pane and a release would reset the tree under a live process.
+        block = spawn_block(s)
+        return block.count("release_slot_on_failure") == 4
+
+    r.check("spawn's post-lease failure paths settle the lease they just took",
+            spawn_failures_settle_the_lease(src),
+            "definition + both split refusals + the boot death; the timeout keeps it")
+    r.check("MUTATION: a failure path that keeps the lease is caught",
+            not spawn_failures_settle_the_lease(_mutate_spawn(
+                src, "      release_slot_on_failure\n      exit 1", "      exit 1")))
+
+    def grid_pane_full_width(s):
+        # The session route's sidebar is the only renderer of a session id and it is gated
+        # on width > 120 (upstream session route; the traps registry has the row). A half
+        # split gave the grid 110 of the session's 220 columns (docs/E2E.md finding 11),
+        # and attach re-clamps panes to the client, so only a full-window split (-f) tracks
+        # the client's own width and clears the gate on any 121+ column terminal.
+        return "hb_add_pane grid -vf " in s
+
+    r.check("the grid pane splits FULL WINDOW WIDTH, clearing the sidebar's >120 gate",
+            grid_pane_full_width(src),
+            "TESTED 2026-08-03 at 220x50: the half split rendered no session id at 110 "
+            "columns; the full-window split gives the grid the whole window's width")
+    r.check("MUTATION: reverting to the half split (-v) is caught",
+            not grid_pane_full_width(src.replace("hb_add_pane grid -vf ",
+                                                 "hb_add_pane grid -v ", 1)))
 
     def panes_are_idempotent(s):
         # `start` runs `up` on every invocation, including against a live fleet, so an

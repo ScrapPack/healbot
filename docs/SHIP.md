@@ -198,7 +198,11 @@ probe_twin pattern — and asserts the body carries no `!`cmd`` shell-substituti
      `LEASED … holder pid DEAD`, and `pool.py release --force` is the manual repair. The
      pool is fail-closed on purpose, so this is recorded as operator surface rather than
      patched blind: the next slot lease after an un-released kill is the failure, and the
-     status line already names it.
+     status line already names it. Corrected 2026-08-03, twice: the `--force` flag never
+     existed — the real repair is `release`, then `release --discard-work` when it refuses
+     (docs/E2E.md finding 9 measured exactly that sequence) — and the close of E2E open
+     item E made the attempt automatic: `kill` now runs a plain conditional release itself,
+     and the pool's refusal over held work reaches the operator instead of silence.
 3b. **Settle where the harness login lands. CLOSED 2026-08-02: it ISOLATES.** A login under
    the redirected root creates its OWN login-keychain item; it does not reuse the owner's and
    does not write the `.credentials.json` fallback. The service name is derived from the
@@ -256,10 +260,12 @@ The probe is 53 rows now (floor 20 → 33 on 2026-08-01, → 44 on 2026-08-02 wi
 (auth preflight + the re-runnable-`start` pane marker), → 50 the same day when the twin check
 generalized from firstmate to the whole skills population, → 52 later that day when the auth
 detector gained the CLI settings-migration containment and its mutation leg, → 53 at the
-2026-08-03 merge when the settings-VALUE hardening from the parallel worktree joined it;
+2026-08-03 merge when the settings-VALUE hardening from the parallel worktree joined it,
+→ 68 at the 2026-08-03 operator walk (docs/E2E.md §6), → 79 at the same day's open-items
+close (docs/E2E.md §7, items C and E plus the two defects the close's own test measured);
 `skip_max=2` throughout), because the first of the two was also split:
 
-- **`probe_fleet_claude.py:197`, the CLAUDE.md symlink** — now four rows, of which only the
+- **`probe_fleet_claude.py:210`, the CLAUDE.md symlink** — now four rows, of which only the
   last is environment-bound. The symlink is untracked and ignored by the whitelist's catch-all
   `*` (`harness/claude/.gitignore:15`), so `git worktree add` never populates it; it is
   materialized by `env.claude.sh:34-36`'s `ln -s` at source time. What a slot CAN check, and
@@ -270,7 +276,7 @@ detector gained the CLI settings-migration containment and its mutation leg, →
   ever run on. Only "the link is on disk right now" is guarded, by
   `claude-config-materialized`. Still do NOT "fix" a slot by creating the file: `gate.py:220`
   bans that name anywhere in the tracked tree, which is the whole reason for the convention.
-- **`probe_fleet_claude.py:607`, the skill twins**, guarded by `main-checkout`. Firstmate-only
+- **`probe_fleet_claude.py:709`, the skill twins**, guarded by `main-checkout`. Firstmate-only
   until later on 2026-08-02, when `healbot-traps.md` was found to have drifted for two days
   while the one guarded specimen held (HARNESS.md Traps has the row); now one aggregate row
   compares every `harness/skills/<name>.md` against `~/.agents/skills/<name>/SKILL.md`, which

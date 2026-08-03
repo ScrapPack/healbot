@@ -466,7 +466,18 @@ up)
   if [ "$WANT_GRID" = 1 ]; then
     # The opencode fleet grid as a viewport pane. fleet.sh's server is nohup'd/disowned by
     # its own design, so this pane is disposable — killing it never kills that fleet.
-    hb_add_pane grid -v "$FLEET_ROOT/fleet.sh"
+    # FULL WINDOW WIDTH (-f), and the flag is load-bearing rather than layout taste: the
+    # session route's sidebar is the only thing that renders a session id, and it is gated
+    # on width > 120 (upstream routes/session/index.tsx; the traps registry has the row).
+    # A half split gave the grid 110 of the session's 220 columns, so the default cockpit
+    # could not show an id at all. Attach also re-clamps every pane to the client terminal,
+    # so the halved pane needed a ~242-column client; full width tracks the client itself,
+    # and any terminal of 121+ columns clears the gate, the same bound as running fleet.sh
+    # bare. MEASURED 2026-08-03 in both directions (docs/E2E.md finding 11: no id at 110
+    # columns, id plus cost line at 160). The cost is the nvim pane's height when both
+    # optional panes are up. NOTE: hb_add_pane's @hb_role marker makes panes idempotent,
+    # so a fleet built before this flag keeps its half-width grid until `down` + `start`.
+    hb_add_pane grid -vf "$FLEET_ROOT/fleet.sh"
   fi
   if [ "$HB_RUN" = "hb-main" ]; then
     echo "hb-fleet: up. attach with: $0 attach   (state dir: $HB_FLEET_DIR)"
@@ -490,6 +501,12 @@ spawn)
     *) usage;;
   esac; done
   t has-session -t "$HB_RUN" 2>/dev/null || { echo "hb-fleet: no session — run '$0 up' first" >&2; exit 2; }
+  # kill-pane on the LAST crewmate takes the crew window with it (tmux destroys an empty
+  # window), and the split refusal below then misreads the missing window as a full one.
+  # MEASURED 2026-08-03 while testing the kill close: the first spawn after such a kill
+  # dead-ended with "crew window is full". Re-ensure it, the same line `up` uses.
+  t list-windows -t "$HB_RUN" -F '#{window_name}' | grep -qx crew || \
+    t new-window -d -t "$HB_RUN" -n crew -c "$REPO"
   # Before the pool lease, not after: a --slot spawn that cannot possibly come up must not
   # first take a worktree off the pool. This is also the whole reason the detector exists —
   # without it a signed-out root costs HB_SPAWN_TIMEOUT seconds of ready-wait per crewmate
@@ -507,6 +524,20 @@ spawn)
   fi
   [ -d "${DIR:-}" ] || { echo "hb-fleet: --dir does not exist: '$DIR'" >&2; exit 2; }
   DIR="$(cd "$DIR" && pwd)"
+  release_slot_on_failure() {
+    # A spawn that dies after the lease must not keep it. MEASURED 2026-08-03 while
+    # testing the kill close: a refused split left slot-1 leased to a crewmate that never
+    # existed. Plain release only, so a slot that somehow holds work is refused, kept,
+    # and named by the pool itself. Called on the two split refusals and the boot death;
+    # deliberately NOT on the ready-wait timeout, where the crewmate is alive in its pane
+    # and may still boot — releasing would reset the tree under a live process.
+    [ "$USE_SLOT" = 1 ] || return 0
+    if "$VENVPY" "$FLEET_ROOT/pool.py" release "$DIR" --if-owner "$HB_RUN"; then
+      echo "hb-fleet: released the just-leased slot back to the pool." >&2
+    else
+      echo "hb-fleet: could not release the just-leased slot (the pool's reason is above)." >&2
+    fi
+  }
 
   SID="$(uuidgen | tr 'A-Z' 'a-z')"
 
@@ -536,9 +567,10 @@ spawn)
   if ! PANE="$(spawn_split "$@" 2>/dev/null)"; then
     if [ -n "$PLACEHOLDER" ]; then
       t kill-pane -t "$PLACEHOLDER"; PLACEHOLDER=""
-      PANE="$(spawn_split "$@")" || { echo "hb-fleet: crew window cannot fit another pane even after reclaiming the placeholder — kill a crewmate or start a second fleet (HB_RUN=...)" >&2; exit 2; }
+      PANE="$(spawn_split "$@")" || { echo "hb-fleet: crew window cannot fit another pane even after reclaiming the placeholder — kill a crewmate or start a second fleet (HB_RUN=...)" >&2; release_slot_on_failure; exit 2; }
     else
       echo "hb-fleet: crew window is full (split-window refused) — kill a crewmate or start a second fleet (HB_RUN=...)" >&2
+      release_slot_on_failure
       exit 2
     fi
   fi
@@ -559,11 +591,16 @@ print(backend.transcript_path(sys.argv[1], sys.argv[2]))
 PY
 )"
 
-  py - "$MANIFEST" "$NAME" "$PANE" "$DIR" "$SID" "$TRANSCRIPT" "${MODEL:-settings-pin}" <<'PY'
+  # The slot field is kill's discriminator: a --slot spawn's dir IS a pool worktree, but
+  # nothing in the row said so before this field, so kill could not know a lease was at
+  # stake (docs/E2E.md finding 9). Rows written before the field have none; manifest_get
+  # exits 3 on a missing field, which kill reads as not-a-slot. Safe degradation.
+  py - "$MANIFEST" "$NAME" "$PANE" "$DIR" "$SID" "$TRANSCRIPT" "${MODEL:-settings-pin}" "$USE_SLOT" <<'PY'
 import json, sys, time
-path, name, pane, d, sid, transcript, model = sys.argv[1:8]
+path, name, pane, d, sid, transcript, model, use_slot = sys.argv[1:9]
 row = {"name": name, "pane": pane, "dir": d, "sid": sid,
-       "transcript": transcript, "model": model, "at": int(time.time())}
+       "transcript": transcript, "model": model, "at": int(time.time()),
+       "slot": int(use_slot)}
 with open(path, "a") as f:
     f.write(json.dumps(row) + "\n")
 PY
@@ -580,6 +617,7 @@ PY
     if pane_dead "$PANE"; then
       echo "hb-fleet: $NAME's pane died during boot — the corpse:" >&2
       t capture-pane -p -t "$PANE" | tail -15 >&2
+      release_slot_on_failure
       exit 1
     fi
     waited=$((waited + 1))
@@ -806,6 +844,8 @@ kill)
   NAME="${1:-}"; [ -n "$NAME" ] || usage
   P="$(resolve_pane "$NAME")"
   SID="$(manifest_get "$NAME" sid 2>/dev/null || echo '?')"
+  SLOT="$(manifest_get "$NAME" slot 2>/dev/null || echo 0)"
+  CREWDIR="$(manifest_get "$NAME" dir 2>/dev/null || true)"
   # Deliberately NOT pane_dead, which send and brief both use: that helper answers "dead OR
   # missing", and a DEAD pane is exactly the thing kill exists to reclaim (remain-on-exit is on,
   # so a crewmate whose process ended leaves a corpse holding a slot). Only the MISSING case
@@ -815,9 +855,28 @@ kill)
   if ! t kill-pane -t "$P" 2>/dev/null; then
     echo "hb-fleet: $NAME's pane $P is already gone — nothing to kill (the fleet went down, or it was killed already)." >&2
     echo "hb-fleet: its transcript survives: claude --resume $SID (from a shell that sourced env.claude.sh)" >&2
+    if [ "$SLOT" = "1" ]; then
+      # No auto-release on this branch: a stale row cannot prove the lease is still this
+      # crewmate's (the slot may have been released and re-leased since). Name it instead.
+      echo "hb-fleet: $NAME held a pool slot. Check it: $VENVPY $FLEET_ROOT/pool.py status" >&2
+    fi
     exit 2
   fi
   echo "hb-fleet: killed $NAME ($P). Its transcript survives; resume from an env.claude.sh shell: claude --resume $SID"
+  # Settle the lease (docs/E2E.md finding 9: kill used to leave the slot leased forever).
+  # A PLAIN release is safe by construction: the pool refuses while the slot holds work,
+  # keeps the lease on refusal, and prints the held files itself. Those lines reach the
+  # operator uncaptured; the fleet frames the outcome and never re-says the pool's reason.
+  # --if-owner scopes the release to this run's own lease. The call is if-guarded because
+  # a refusal exits 2 and set -eu would otherwise end kill here (the finding-15 shape).
+  if [ "$SLOT" = "1" ] && [ -d "${CREWDIR:-}" ] && [ -x "$VENVPY" ]; then
+    if "$VENVPY" "$FLEET_ROOT/pool.py" release "$CREWDIR" --if-owner "$HB_RUN"; then
+      echo "hb-fleet: released $NAME's pool slot; it is leasable again."
+    else
+      echo "hb-fleet: the pool did not release $NAME's slot (its reason is above). If it holds work:"
+      echo "hb-fleet:   copy the work out, then: $VENVPY $FLEET_ROOT/pool.py release '$CREWDIR' [--discard-work]"
+    fi
+  fi
   ;;
 
 down)
