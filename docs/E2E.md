@@ -284,7 +284,17 @@ said no*. TESTED with `opencode/` hidden: the citations and twin checks both rep
 derived checkout is absent and name the page that rebuilds it, and the gate exits **2**, not 3.
 VERIFIED at `gate/gate.py:124`: a Tier-1 row's state is decided by the subprocess exit code
 alone — `PASS` on 0, `ERROR` only when the code is `None` (the executable could not be
-launched), `BLOCKED` for every other nonzero. A probe that ran, discovered its input missing
+launched, or it timed out — `gate/gate.py:73`), `BLOCKED` for every other nonzero.
+
+The three exits an operator can actually reach here were each measured rather than reasoned
+about, after a push review pointed out that two of them were being asserted. TESTED in the
+throwaway clone: with `opencode/` absent the gate is **2**; with the venv moved *outside the
+tree* and `gate.py` run directly, all four Tier-1 rows are ERROR and the gate is **3**; and on
+the real `git push` path with the venv absent, `gate/hooks/pre-push` refuses at **1** by name
+before the gate starts, so an operator following the documented workflow never sees the 3. The
+first attempt at the middle measurement was contaminated and is worth recording: parking the
+venv *inside* the repo put 522 files into the change and the run came back 2, which is the
+right answer to a question I had not meant to ask. A probe that ran, discovered its input missing
 and exited 1 is therefore BLOCKED, however loudly it says it could not measure anything. The
 gate's own lattice comment defines ERROR as *a check could not run*, so the code and the
 doc-level gloss disagree; `docs/CLONE.md` §8 already records the exit-2 observation without
