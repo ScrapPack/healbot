@@ -17,7 +17,7 @@ venv/bin/python probe_fleet.py       # 10/10 does harness/fleet.sh do what it cl
 venv/bin/python probe_error_state.py # 10/10 does a hard-errored session render ERROR?
                                      #       (replays the 350K run's real overflow DB)
 venv/bin/python probe_focus.py       # 24/24 does `enter` open the SELECTED session? (same DB)
-venv/bin/python probe_twin.py        # 23/23 is there still exactly ONE implementation of
+venv/bin/python probe_twin.py        # 25/25 is there still exactly ONE implementation of
                                      #       retirement, and does the untyped request channel
                                      #       agree at both ends? (NOT a document comparison any
                                      #       more — see below)
@@ -41,12 +41,12 @@ venv/bin/python probe_pool.py        # 24/24 does harness/pool.py's lease/guard 
 venv/bin/python probe_arm_factory.py # 19/19 does a synthesized arm hold EXACTLY its declared
                                      #       delta? (arms.py: freeze/materialize/tamper-refuse,
                                      #       then boots BOTH arms and diffs GET /skill)
-venv/bin/python probe_citations.py   # 14/14 do this repo's file:line citations still point at
+venv/bin/python probe_citations.py   # 20/20 do this repo's file:line citations still point at
                                      #       code? Resolves ~930 citations across 25 documents and
                                      #       asserts the file exists, the line exists, and it is not
                                      #       blank. fork/README.md's "drift mode 2", which was named
                                      #       as a risk for eleven phases with no check behind it
-venv/bin/python probe_rig_contract.py# 29/29 does every rig in this suite still report FAILURE as
+venv/bin/python probe_rig_contract.py# 40/40 does every rig in this suite still report FAILURE as
                                      #       failure — and can it SEE one? Reads all 24 entrypoints
                                      #       (itself included) as SOURCE and asserts six contracts:
                                      #       a declared assertion FLOOR, a satisfiable one, no
@@ -67,7 +67,7 @@ venv/bin/python probe_gate_scope.py  # 17/17 does the pre-push gate gate the PUS
                                      #       passes. Pins run 20260802-184854, the merge push that
                                      #       gated as zero files. Needs ruff on PATH; no checkout,
                                      #       no venv beyond stdlib, so it survives a fresh clone
-venv/bin/python probe_turn_growth.py # 13/16 RED SINCE PHASE 12, exit 1, AND THE RED IS CORRECT.
+venv/bin/python probe_turn_growth.py # 20/20 green again; the Phase-12 red below was CORRECT and is RESOLVED.
                                      #       A single turn measured 299,326 on the pinned model —
                                      #       71% above the 175,148 RETIRE_AT is derived from — so
                                      #       180,000 + 299,326 = 479,326 against a ~360K ceiling and
@@ -79,7 +79,8 @@ venv/bin/python probe_turn_growth.py # 13/16 RED SINCE PHASE 12, exit 1, AND THE
                                      #       Phase 12's two runs and the maximum is still 175,148.
                                      #       DO NOT clear hb/project or drop a DB to make this green
                                      #       — that deletes the measurement to restore the number.
-                                     #       docs/OUTCOME.md §10; the decision is the owner's.
+                                     #       docs/OUTCOME.md §10; decided in §11: declared scope,
+                                     #       RETIRE_AT stands (NEXT.md carries it as DECIDED).
                                      #       (was 16/16) is ~170K the TAIL or the MIDDLE of single-turn growth?
                                      #       Re-derives the `worst_turn` that SIZES RETIRE_AT from
                                      #       every session DB on disk instead of the one turn it
