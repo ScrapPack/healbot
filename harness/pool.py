@@ -46,6 +46,7 @@ probe ports, which is rig surgery with its own discipline — out of scope here,
                                                # re-verifies and repairs existing slots too
     $venv harness/pool.py provision --count 4
     $venv harness/pool.py acquire --owner me --purpose "ab arm B"   # prints slot path
+    $venv harness/pool.py adopt <slot> --pid P [--if-owner me]      # record the real holder
     $venv harness/pool.py release <slot> [--if-owner me] [--keep|--discard-work]
     $venv harness/pool.py reset <slot> [--discard-work]   # repair an unleased soiled slot
     $venv harness/pool.py status
@@ -248,8 +249,15 @@ def acquire(owner, purpose):
         dirty, _, committed, _, _ = work_state(slot)
         if dirty or committed:
             continue  # abandoned state is a human's decision, not auto-clean fodder
+        # NO holder pid at acquire, deliberately. Every real acquirer is short-lived — a
+        # crew spawn takes the lease through a command substitution, and a shell acquire
+        # IS the pool.py invocation — so recording os.getpid() here made status's liveness
+        # hint structurally always-DEAD for exactly the callers the pool was built for,
+        # measured from the operator's chair as docs/E2E.md finding 8. The process that
+        # actually outlives the acquire declares itself afterwards via `adopt`; until it
+        # does, status makes no liveness claim instead of a false one.
         lease = {"slot": slot_name(slot), "path": slot, "owner": owner, "purpose": purpose,
-                 "lease_id": uuid.uuid4().hex, "pid": os.getpid(),
+                 "lease_id": uuid.uuid4().hex, "pid": None,
                  "acquired_at": time.strftime("%Y-%m-%d %H:%M:%S")}
         try:
             fd = os.open(lease_path(slot), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -265,6 +273,37 @@ def acquire(owner, purpose):
           "— see `pool.py status`; `provision --count N` grows the pool", file=sys.stderr,
           flush=True)
     return 2
+
+
+# ==========================================================================================
+def adopt(slot, pid, if_owner=None):
+    """Record the lease's real holder after the fact. The acquiring process never outlives
+    a lease (acquire's comment above the lease dict), so the process that will actually
+    hold the work — for a crew spawn, the pane's root process — declares itself here once
+    it exists. Refusals mirror release: not-leased and wrong-owner are 2; a malformed pid
+    is 3. The rewrite goes temp-then-rename so a concurrent status never reads a torn
+    lease; acquire's O_EXCL create guards creation races only."""
+    slot = f"{SLOTS}/{slot_name(slot)}"
+    lease = read_json(lease_path(slot))
+    if lease is None:
+        print(f"{slot_name(slot)}: not leased — nothing to adopt", flush=True)
+        return 2
+    if if_owner and lease.get("owner") != if_owner:
+        print(f"{slot_name(slot)}: leased by {lease.get('owner')}, not {if_owner} — refusing",
+              flush=True)
+        return 2
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        print(f"adopt needs --pid <integer>, got {pid!r}\n{USAGE}", flush=True)
+        return 3
+    lease["pid"] = pid
+    tmp = lease_path(slot) + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(lease, fh, indent=2)
+    os.replace(tmp, lease_path(slot))
+    print(f"{slot_name(slot)}: holder pid {pid} recorded on the lease", flush=True)
+    return 0
 
 
 # ==========================================================================================
@@ -358,6 +397,10 @@ def status():
                     # Durable lease: never auto-reaped. The note is the escalation.
                 except PermissionError:
                     pass  # EPERM = the process EXISTS under another user — alive, not dead
+            else:
+                # Explicit, because silence on a probed pid means "alive": a lease with
+                # no recorded holder must not read as one whose holder was checked.
+                age_note = " — liveness unclaimed (no holder pid recorded; `adopt` sets one)"
             bits.append(f"LEASED {lease['owner']} ({lease['purpose']}) since {lease['acquired_at']}{age_note}")
         else:
             bits.append("free")
@@ -389,6 +432,7 @@ def destroy(slot, really=False):
 
 # ==========================================================================================
 USAGE = "Commands: provision [--count N] | acquire --owner O --purpose P | " \
+        "adopt <slot> --pid P [--if-owner O] | " \
         "release <slot> [--if-owner O] [--keep|--discard-work] | " \
         "reset <slot> [--discard-work] | status | destroy <slot> --really"
 
@@ -410,7 +454,7 @@ def main():
         return rest[i + 1]
 
     def positional():
-        value_flags = {"--if-owner", "--count"}  # flags that consume the next token
+        value_flags = {"--if-owner", "--count", "--pid"}  # flags that consume the next token
         skip = False
         for a in rest:
             if skip:
@@ -431,6 +475,8 @@ def main():
         return provision(count)
     if cmd == "acquire":
         return acquire(flag("--owner"), flag("--purpose"))
+    if cmd == "adopt":
+        return adopt(positional(), flag("--pid"), if_owner=flag("--if-owner"))
     if cmd == "release":
         return release(positional(), if_owner=flag("--if-owner"),
                        keep="--keep" in rest, discard_work="--discard-work" in rest)

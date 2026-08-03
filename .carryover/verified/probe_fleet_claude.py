@@ -85,8 +85,9 @@ CONFIG_MATERIALIZED = Env(
 # (finding 9), the manifest's slot discriminator with one, the grid pane's full-window split
 # with one (finding 11), and the two defects the close's own live test measured — spawn
 # re-ensuring the crew window kill can destroy, and spawn's post-lease failure paths
-# releasing the lease they just took — each with a mutation leg. 79.
-r = Results(expect=79, skip_max=2)
+# releasing the lease they just took — each with a mutation leg. 79. The item-B close
+# (finding 8) adds two: spawn adopting the pane pid onto the lease, with its leg. 81.
+r = Results(expect=81, skip_max=2)
 
 
 def sh_n(path):
@@ -660,6 +661,23 @@ try:
     r.check("MUTATION: a failure path that keeps the lease is caught",
             not spawn_failures_settle_the_lease(_mutate_spawn(
                 src, "      release_slot_on_failure\n      exit 1", "      exit 1")))
+
+    def spawn_adopts_the_pane_pid(s):
+        # E2E finding 8's fleet half: acquire cannot know the holder because the pane
+        # does not exist yet, so spawn records the pane's root pid on the lease AFTER
+        # the split, and pool.py status's liveness note becomes true exactly when the
+        # crewmate dies instead of always.
+        block = spawn_block(s)
+        return block.find('pool.py" adopt') > block.find("select-pane") > 0 \
+            and "#{pane_pid}" in block
+
+    r.check("spawn adopts the pane's root pid onto the slot lease after the split",
+            spawn_adopts_the_pane_pid(src),
+            "MEASURED 2026-08-03 (docs/E2E.md finding 8): the recorded acquirer pid died "
+            "in seconds, so status called every live crewmate's slot abandoned")
+    r.check("MUTATION: a spawn that never adopts is caught",
+            not spawn_adopts_the_pane_pid(_mutate_spawn(src, 'pool.py" adopt',
+                                                        'pool.py" noop')))
 
     def grid_pane_full_width(s):
         # The session route's sidebar is the only renderer of a session id and it is gated

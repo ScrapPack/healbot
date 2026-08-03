@@ -265,7 +265,7 @@ detector gained the CLI settings-migration containment and its mutation leg, →
 close (docs/E2E.md §7, items C and E plus the two defects the close's own test measured);
 `skip_max=2` throughout), because the first of the two was also split:
 
-- **`probe_fleet_claude.py:210`, the CLAUDE.md symlink** — now four rows, of which only the
+- **`probe_fleet_claude.py:211`, the CLAUDE.md symlink** — now four rows, of which only the
   last is environment-bound. The symlink is untracked and ignored by the whitelist's catch-all
   `*` (`harness/claude/.gitignore:15`), so `git worktree add` never populates it; it is
   materialized by `env.claude.sh:34-36`'s `ln -s` at source time. What a slot CAN check, and
@@ -276,7 +276,7 @@ close (docs/E2E.md §7, items C and E plus the two defects the close's own test 
   ever run on. Only "the link is on disk right now" is guarded, by
   `claude-config-materialized`. Still do NOT "fix" a slot by creating the file: `gate.py:220`
   bans that name anywhere in the tracked tree, which is the whole reason for the convention.
-- **`probe_fleet_claude.py:709`, the skill twins**, guarded by `main-checkout`. Firstmate-only
+- **`probe_fleet_claude.py:727`, the skill twins**, guarded by `main-checkout`. Firstmate-only
   until later on 2026-08-02, when `healbot-traps.md` was found to have drifted for two days
   while the one guarded specimen held (HARNESS.md Traps has the row); now one aggregate row
   compares every `harness/skills/<name>.md` against `~/.agents/skills/<name>/SKILL.md`, which

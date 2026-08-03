@@ -185,14 +185,16 @@ the documented behaviour.
 
 **Finding 8 — a crewmate's pool lease reports its holder as dead from the moment the spawn
 returns.** TESTED: with `alpha` alive and working, `pool.py status` read
-*`LEASED hb-main (crew alpha) … — holder pid DEAD; release explicitly if abandoned`*. VERIFIED
-at `harness/pool.py:252`: the lease records `os.getpid()`, and the process that calls
+*`LEASED hb-main (crew alpha) … — holder pid DEAD; release explicitly if abandoned`*. VERIFIED,
+at the time, at line 252 of `harness/pool.py` (the lease dict as it then stood): the lease
+recorded `os.getpid()`, and the process that calls
 `acquire` is the short-lived `pool.py` invocation inside `spawn`'s command substitution, which
 exits seconds later. The crewmate is never the recorded holder, so the liveness hint is
 structurally always-dead for exactly the caller the pool was built for, and it advises the
 operator to release a slot that is genuinely in use. Not repaired: what pid *should* be
 recorded is a design choice (the pane's process, the tmux server, or nothing at all — and
-`os.kill(pid, 0)` is already named Mac-only), so it is open item B.
+`os.kill(pid, 0)` is already named Mac-only), so it is open item B. Closed the same day;
+item B records the design.
 
 **Finding 9 — `kill` leaves the slot leased, confirmed.** TESTED end to end: after
 `kill alpha` (exit 0, with the resume hint), `pool.py status` still showed slot-1 leased to
@@ -376,11 +378,25 @@ deliberately partial machine must not fail — but it makes `doctor && next-comm
 light on a clone that can run one tier of five (finding 1). Either the exit code grows a third
 state or the docs stop implying it is a gate.
 
-**B. What pid a pool lease should record.** `harness/pool.py:252` records the acquiring
+**B. What pid a pool lease should record.** Line 252 of `harness/pool.py`, as the walk found
+it, recorded the acquiring
 process, which for every crew spawn is a process that exits immediately, so the status line
 tells the operator a live crewmate's slot is abandoned (finding 8). The candidates — the crew
 pane's own process, the tmux server, or dropping the liveness hint — differ in what they claim
 and one of them has to be chosen deliberately.
+
+CLOSED 2026-08-03: the pane's root process, recorded after the fact. Acquire now records no
+pid at all, because every real acquirer is short-lived (a shell acquire IS the pool.py
+invocation, so the false-DEAD note was never the fleet's alone), and a new `adopt` verb lets
+the process that actually outlives the acquire declare itself; spawn adopts the pane's root
+pid onto the lease once the pane exists. TESTED live: a working crewmate's slot line now
+carries no note at all, and a lease with no recorded pid says "liveness unclaimed" explicitly
+rather than staying silent, because silence on a probed pid means alive. The DEAD note fires
+exactly when the holder died, which probe_pool now exercises with a real corpse pid, the
+first exercise that branch has ever had. The tmux-server candidate was rejected because its
+claim is about the fleet rather than the holder: one server, many slots, and a killed
+crewmate would read ALIVE, inverting the measured error instead of fixing it.
+`os.kill(pid, 0)` stays, so the pool's Mac-only boundary is unchanged.
 
 **C. The cockpit's grid pane is below the sidebar's width gate.** 110 columns against a
 gate of 120, so the session route shows no session id in the default layout (finding 11).

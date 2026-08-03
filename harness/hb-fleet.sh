@@ -580,6 +580,18 @@ spawn)
   t select-layout -t "$HB_RUN:crew" tiled
   t select-pane -t "$PANE" -T "$NAME"
 
+  if [ "$USE_SLOT" = 1 ]; then
+    # The lease records no holder pid at acquire: the acquiring process is this spawn's
+    # command substitution, gone in seconds, which is why pool.py status read every live
+    # crewmate's slot as holder-DEAD (docs/E2E.md finding 8). The pane's root process is
+    # the real holder and it exists now, so record it; the status liveness note becomes
+    # true exactly when the crewmate dies. A failed adopt costs the note, not the spawn.
+    PANE_PID="$(t display -p -t "$PANE" '#{pane_pid}' 2>/dev/null || true)"
+    if ! { [ -n "$PANE_PID" ] && "$VENVPY" "$FLEET_ROOT/pool.py" adopt "$DIR" --pid "$PANE_PID" --if-owner "$HB_RUN" >/dev/null 2>&1; }; then
+      echo "hb-fleet: could not record ${NAME}'s pane pid on the slot lease — pool.py status will make no liveness claim" >&2
+    fi
+  fi
+
   # Transcript path is knowable BEFORE the session exists because we chose the uuid, and
   # backend.transcript_path owns the slug rule AND honors CLAUDE_CONFIG_DIR — crew
   # transcripts land under the REDIRECTED root, not ~/.claude (review finding; SHIP.md §3).

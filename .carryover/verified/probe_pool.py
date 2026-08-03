@@ -17,6 +17,8 @@ baseline, an acquire that leases soiled or unproven slots, an exit that leaves t
   venv/bin/python probe_pool.py
 """
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -31,7 +33,12 @@ sys.path.insert(0, f"{HEALBOT}/harness")
 import pool  # noqa: E402
 from rig import Results  # noqa: E402
 
-r = Results(expect=24)
+# 24 through the state-machine build; the 2026-08-03 adopt work (docs/E2E.md finding 8:
+# acquire recorded its own short-lived pid, so status called every live crewmate's slot
+# abandoned) adds eight — the pid-less default, both polarities of the unclaimed marker,
+# adopt's three refusal shapes, and both polarities of the DEAD note, whose branch no
+# earlier row had ever exercised. 32.
+r = Results(expect=32)
 TMP = tempfile.mkdtemp(prefix="probe-pool-")
 
 
@@ -167,6 +174,45 @@ try:
         fh.write("x\n")
     r.check("status exits 2 again when unleased work appears — the pool self-reports",
             pool.status() == 2, "")
+
+    # -- adopt: the real holder declares itself after the fact (docs/E2E.md finding 8) ----
+    # The acquiring process never outlives a lease, so acquire records pid=None and the
+    # holder that exists later adopts. Both status branches get a polarity pair: the
+    # unclaimed marker fires on a pid-less lease and clears on adoption; the DEAD note
+    # fires on a real dead pid and stays silent for a live one. The DEAD branch had no
+    # exercise at all before these rows — every earlier status check here ran leaseless.
+    def slot1_status_line():
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            pool.status()
+        return next(ln for ln in buf.getvalue().splitlines() if "slot-1" in ln)
+
+    pool.acquire("A", "adopt exercise")  # slot-1: sorted first among clean, free slots
+    r.check("acquire records NO holder pid — the acquirer never outlives the lease",
+            (pool.read_json(pool.lease_path(s1)) or {}).get("pid") is None,
+            "recording os.getpid() here was E2E finding 8: structurally always-DEAD")
+    r.check("status says a pid-less lease makes no liveness claim, explicitly",
+            "liveness unclaimed" in slot1_status_line(),
+            "silence on a probed pid means alive, so absence-of-claim must be spoken")
+    r.check("adopt on an unleased slot refuses 2", pool.adopt("slot-2", 12345) == 2, "")
+    r.check("adopt with the wrong owner refuses 2 and records nothing",
+            pool.adopt("slot-1", 12345, if_owner="Z") == 2
+            and (pool.read_json(pool.lease_path(s1)) or {}).get("pid") is None, "")
+    r.check("adopt with a malformed pid errors 3",
+            pool.adopt("slot-1", "not-a-pid", if_owner="A") == 3, "")
+    r.check("adopt records the holder pid on the lease",
+            pool.adopt("slot-1", os.getpid(), if_owner="A") == 0
+            and (pool.read_json(pool.lease_path(s1)) or {}).get("pid") == os.getpid(), "")
+    line = slot1_status_line()
+    r.check("NEGATIVE: a LIVE adopted holder draws neither DEAD nor unclaimed",
+            "DEAD" not in line and "liveness unclaimed" not in line,
+            "this probe's own pid is the live holder")
+    corpse = subprocess.Popen(["true"])
+    corpse.wait()
+    pool.adopt("slot-1", corpse.pid, if_owner="A")
+    r.check("a DEAD adopted holder fires the DEAD note — first exercise of that branch",
+            "holder pid DEAD" in slot1_status_line(),
+            f"pid {corpse.pid} exited and was reaped before the probe read status")
 
 except Exception:
     # A crash must look like a failure. `sys.exit()` in a `finally` discards the escaping
