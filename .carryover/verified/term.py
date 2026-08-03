@@ -14,10 +14,38 @@ import time
 import pyte
 
 
+class Screen(pyte.Screen):
+    """pyte.Screen, minus the two handlers that make it unable to host tmux.
+
+    tmux probes its terminal at startup with PRIVATE device queries — `CSI ? 6 n`,
+    `CSI > 0 q` and kin. pyte 0.8 dispatches those to `report_device_status` /
+    `report_device_attributes` with `private=True`, and neither accepts the keyword, so
+    `stream.feed()` raises `TypeError` mid-render. MEASURED 2026-08-03: it kills a driver
+    on the FIRST pump, before a single assertion runs.
+
+    Nothing in the suite had hit it because every rig here drives the opencode TUI, which
+    sends no private queries. The repair is deliberately narrow — swallow those two, leave
+    every other handler alone — because this class is what the whole rig renders through.
+    Answering the queries is not wanted either: a reply is written into the child's stdin
+    and lands in whatever is reading it (MEASURED: a stray `6c` typed into the captain's
+    shell), so the queries go unanswered, which is what an unsupporting terminal does.
+    """
+
+    def report_device_status(self, *args, **kwargs):
+        if kwargs.pop("private", False):
+            return
+        super().report_device_status(*args, **kwargs)
+
+    def report_device_attributes(self, *args, **kwargs):
+        if kwargs.pop("private", False):
+            return
+        super().report_device_attributes(*args, **kwargs)
+
+
 class Term:
     def __init__(self, argv, env=None, cwd=None, cols=150, rows=45):
         self.cols, self.rows = cols, rows
-        self.screen = pyte.Screen(cols, rows)
+        self.screen = Screen(cols, rows)
         self.stream = pyte.ByteStream(self.screen)
         self.alive = True
         environ = dict(os.environ)

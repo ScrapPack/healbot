@@ -50,12 +50,13 @@ than for this one. Everything else under `docs/` is a **dated phase record**: th
 behind a number or a decision, written at the time and corrected in place by appending,
 never rewritten. `docs/CLONE.md` is both — a Phase 9 record, and the page to read before
 trusting any suite run from a fresh environment. You do not need the records to run the
-harness; you need them before you argue with a figure. `HARNESS.md` indexes **all seventeen**
-of them newest-first and says what each settles — MEASURED 2026-08-02, and the two `docs/`
+harness; you need them before you argue with a figure. `HARNESS.md` indexes **all eighteen**
+of them newest-first and says what each settles — MEASURED 2026-08-03, and the two `docs/`
 files it does not list are `OPERATIONS.md` and `WINDOWS.md`, which are live surface, not
 record. Its own exit test — *"from this file alone you should be able to name the file that
-owns any given behavior"* — held for fifteen of the seventeen until that date; `docs/AFK.md`
-and `docs/REFUSAL-RESCORE.md` appeared in it **zero** times.
+owns any given behavior"* — held for fifteen of the seventeen indexed on 2026-08-02;
+`docs/AFK.md` and `docs/REFUSAL-RESCORE.md` appeared in it **zero** times. `docs/E2E.md` is
+the eighteenth, added the next day.
 
 ## Quickstart — macOS / Linux
 
@@ -102,8 +103,13 @@ is a named skip, never a refusal), and attaches. Re-running it on a live fleet j
 reattaches. Inside the cockpit, `C-b ?` is the command card; the one-time login the preflight
 asks for is the Claude Code half above.
 
+That login is **per config root, not per machine**: the credential is keyed to
+`harness/claude/`, so every clone, worktree and pool slot starts signed out and
+`harness/doctor.py` says which state yours is in.
+
 `docs/OPERATIONS.md` is the full command surface, including the crew fleet
-(`harness/hb-fleet.sh`) and the gate.
+(`harness/hb-fleet.sh`) and the gate. `docs/E2E.md` is the same surface walked end to end by
+an operator, with every place the two disagreed.
 
 ## Quickstart — Windows
 
@@ -129,7 +135,10 @@ recorded corpus is tracked precisely so the derivations remain checkable without
 
 ## The load-bearing numbers, and their scope
 
-Retirement fires at **180,000 tokens of live occupancy** (`HEALBOT_RETIRE_AT`), derived from
+Retirement fires at **180,000 tokens of live occupancy** — the default inside the server
+plugin, overridable by setting `HEALBOT_RETIRE_AT` for the **server** process, which is why
+sourcing `harness/env.sh` exports no such variable and the plugin's arming line is where you
+read the live figure. It is derived from
 a measured context ceiling of **~360K** and a measured worst single-turn growth — the full
 derivation, with every correction it survived, lives in `harness/env.sh` and
 `docs/OUTCOME.md`. The number is **model-specific by measurement**: it is verified only while

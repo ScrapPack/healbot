@@ -110,4 +110,4 @@ these are the ones operators actually hit.
 | Fleet `state` says "no hook events" forever | `HB_FLEET_DIR` unset (interactive shells are hook-silent by design), or no `python`/`python3` on PATH — the hook is fail-open and will not error |
 | A probe prints green on a fresh clone | Green is not evidence that anything ran — floors catch it now, but read `docs/CLONE.md` before trusting any suite run from a new environment |
 | tier2 from a worktree slot shows reds | Expected: declared environment skips (`gate/GATE.MAP.md`, "Tier 2 from a pool slot") — a skip in the MAIN checkout is the defect |
-| Gate exit 3 vs 2 | 3 = a check could not run (claim unmeasured); 2 = a check ran and said no. Do not read either as "retry" |
+| Gate exit 3 vs 2 | 3 = the check could not be LAUNCHED (no interpreter, no venv); 2 = a check exited nonzero — including a probe that ran and reported its own inputs missing, which is why a clone without `opencode/` blocks at 2 rather than 3 (`gate/gate.py`'s tier-1 state map; `docs/E2E.md` finding 13). Do not read either as "retry" |

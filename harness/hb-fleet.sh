@@ -303,7 +303,7 @@ hb_help() {
   cat <<'EOF'
 
 COCKPIT KEYS  (press the tmux prefix C-b first, then the key)
-  ?    this card                 z    zoom the pane under the cursor
+  ?    this card (esc closes)    z    zoom the pane under the cursor
   0    bridge window             1    crew window
   d    detach — the fleet keeps running, reattach with `start` or `attach`
   [    scrollback (q leaves)     :    tmux command prompt
@@ -416,13 +416,25 @@ up)
   # Key bindings are SERVER-global in tmux — there is no session-scoped key table — so this
   # one is shared by every fleet on this socket. That is acceptable here and ONLY here,
   # because the popup renders static text out of this script and carries no per-fleet state;
-  # anything fleet-specific must not be bound this way. Without -E the popup stays up until
-  # it is dismissed (q or Escape), which is what makes it readable rather than a flash.
+  # anything fleet-specific must not be bound this way. Without -E the popup stays up until it
+  # is dismissed, which is what makes it readable rather than a flash. The dismissal key is
+  # ESCAPE, and only Escape: this line used to read "q or Escape", and TESTED twice on tmux 3.7
+  # (2026-08-03) `q` leaves the popup open — it reaches the finished command's pane, not tmux.
+  # An operator who believes the old comment is stuck on a card with no way out, so the card's
+  # own `?` row names the key.
   # `?` shadows tmux's default list-keys binding, so the card names `:` to keep the full
   # binding list one prompt away.
+  # GEOMETRY IS PART OF THE CARD. A popup does not scroll: tmux renders the command's output
+  # into the box and drops whatever does not fit off the TOP, silently. MEASURED 2026-08-03
+  # driving `start` end to end for the first time: at -w 84 -h 28 the card wrapped to 45 rendered
+  # rows in a 26-row box, so the visible overlay began at `kill` — `start`, `spawn`, `ls`,
+  # `state` and `send` were all off-screen, and the card's own headline verb with them. The box
+  # is sized to the card here (94x34 of content against 32 lines, longest 91), and
+  # probe_fleet_claude.py asserts the fit from source, so a command line added to the header
+  # goes red instead of pushing the top out of view again.
   t unbind -T prefix '?' 2>/dev/null || true
   if tmux_has_popup; then
-    t bind -T prefix '?' display-popup -w 84 -h 28 "'$SELF' help"
+    t bind -T prefix '?' display-popup -w 96 -h 36 "'$SELF' help"
   else
     # No display-popup below 3.2: `run-shell` renders the card in the pane's view mode
     # (q dismisses), which is the fallback preflight promises.

@@ -16,6 +16,7 @@ catches.
 """
 
 import json
+import math
 import os
 import re
 import subprocess
@@ -72,8 +73,11 @@ CONFIG_MATERIALIZED = Env(
 # mutation leg: the merged floor both branches predicted. 53. Task 0's bring-up residue
 # (2026-08-03, live crewmate on 2.1.220) adds six: the busy-before-ready arm order, the
 # dialog-specific trust marker, and the version-shaped liveness arm, each with a mutation
-# leg, plus a fixture row proving the arm swap rewrites source. 60.
-r = Results(expect=60, skip_max=2)
+# leg, plus a fixture row proving the arm swap rewrites source. 60. The 2026-08-03 operator
+# walk (docs/E2E.md) adds five: the C-b ? popup geometry against the rendered card with two
+# mutation legs, and the card naming its own exit key with one — the first `hb-fleet.sh
+# start` run end to end showed the overlay opening on `kill`, its top 18 rows dropped. 65.
+r = Results(expect=65, skip_max=2)
 
 
 def sh_n(path):
@@ -479,6 +483,59 @@ try:
             not usage_range_complete(re.sub(
                 r"(hb_header\(\) \{ sed -n '4,)(\d+)(p')",
                 lambda m: m.group(1) + str(int(m.group(2)) - 1) + m.group(3), src, count=1)))
+
+    def card_lines(s):
+        """The card exactly as `hb_help` renders it: the header line range with its comment
+        prefix stripped, then the static key-map heredoc. Derived from source, never copied,
+        so it tracks whatever the header actually holds."""
+        m = re.search(r"hb_header\(\) \{ sed -n '4,(\d+)p'", s)
+        body = re.search(r"cat <<'EOF'\n(.*?)\nEOF\n", s, re.S)
+        if not m or not body:
+            return None
+        header = [re.sub(r"^#+ ?", "", ln) for ln in s.split("\n")[3:int(m.group(1))]]
+        return header + body.group(1).split("\n")
+
+    def card_fits_popup(s):
+        """The other half of the range check above. That one asserts the card's CONTENT is
+        whole; this asserts the BOX is big enough to show it. A tmux popup does not scroll —
+        overflow is dropped off the top with no indication — so a card that outgrows its
+        geometry is silently truncated at exactly the end an operator reads first.
+        MEASURED 2026-08-03 at the shipped -w 84 -h 28: 45 rendered rows into 26, and the
+        overlay opened on `kill`. Wrapping is computed as a terminal wraps (hard, at the
+        column), not as textwrap does.
+        """
+        card = card_lines(s)
+        g = re.search(r"display-popup -w (\d+) -h (\d+)", s)
+        if card is None or not g:
+            return False
+        inner_w, inner_h = int(g.group(1)) - 2, int(g.group(2)) - 2  # the border costs one each side
+        if inner_w < 1:
+            return False
+        rendered = sum(max(1, math.ceil(len(ln) / inner_w)) for ln in card)
+        return max(len(ln) for ln in card) <= inner_w and rendered <= inner_h
+
+    r.check("the C-b ? popup is big enough to render the whole command card",
+            card_fits_popup(src))
+    r.check("MUTATION: the pre-fix geometry (-w 84 -h 28) is caught",
+            not card_fits_popup(src.replace("display-popup -w 96 -h 36",
+                                            "display-popup -w 84 -h 28", 1)))
+    r.check("MUTATION: a card grown past the box by one line is caught",
+            not card_fits_popup(src.replace(
+                "\nCensus is `ls`, never the status bar",
+                "\n" + "x" * 40 + "\n" * 3 + "Census is `ls`, never the status bar", 1)))
+
+    def card_names_its_exit(s):
+        # The popup is modal and `q` does not close it (TESTED twice, tmux 3.7, 2026-08-03:
+        # q reaches the finished command's pane and the box stays up; only Escape closes).
+        # A card with no way out is the cockpit's own trap, so the `?` row carries the key.
+        card = card_lines(s)
+        if card is None:
+            return False
+        return any(ln.strip().startswith("?") and "esc" in ln.lower() for ln in card)
+
+    r.check("the card's `?` row names the key that closes it", card_names_its_exit(src))
+    r.check("MUTATION: dropping the exit hint is caught",
+            not card_names_its_exit(src.replace("this card (esc closes)", "this card", 1)))
 
     def panes_are_idempotent(s):
         # `start` runs `up` on every invocation, including against a live fleet, so an
