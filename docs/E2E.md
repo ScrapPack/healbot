@@ -326,8 +326,8 @@ fix: open item D.
 
 ## 6. The gate, as a contributor
 
-This change is the small real change. It carries repairs for findings 2, 3, 4, 5 and 13, the
-`term.py` repair below, five new probe rows with mutation legs, and this document.
+This change is the small real change. It carries repairs for findings 2, 3, 4, 5, 13 and 15,
+the `term.py` repair below, eight new probe rows with their mutation legs, and this document.
 
 **Finding 14 — the repo's own instrument for asserting on a rendered terminal could not host
 tmux, and nothing had noticed because nothing had tried.** TESTED: driving
@@ -356,9 +356,13 @@ through. Both removed.
 Suite and gate, this change (each exit code captured directly, never through a pipe):
 
 - **Free suite: 22 probes, every one exit 0** — four in the gate's Tier 1 and eighteen in
-  tier 2, each against its own declared floor. `probe_fleet_claude.py` runs 65 rows against a
-  floor of 65. The floor caught its own author: a first draft declared 66 for five new rows,
-  and `probe_rig_contract.py` went 39/40 on the unsatisfiable floor before the run did.
+  tier 2, each against its own declared floor. `probe_fleet_claude.py` finishes this change at
+  68 rows against a floor of 68, all 68 measured and passing. It reached that in two steps —
+  five rows for the cockpit, three more for finding 15 — and the floor caught its own author
+  at each: the first draft declared 66 for five rows and `probe_rig_contract.py` went 39/40 on
+  the unsatisfiable floor before the run did, and the count in this very paragraph was left at
+  the earlier figure until the push review read it back. A recorded score is a claim about a
+  file at a moment, and this page had to be told that twice.
 - **`gate/gate.py`: exit 0**, on the working tree and again on the pushed range through the
   hook.
 
