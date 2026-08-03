@@ -309,7 +309,18 @@ try:
         # A live crewmate's pane_current_command is the CLI VERSION (`2.1.220`), not
         # `claude`, so without a version-shaped arm every healthy crewmate read
         # `ambiguous` — the state firstmate escalates instead of trusting.
-        return "[0-9]*.[0-9]*.[0-9]*)" in s and 'LIVE="alive"' in s
+        #
+        # The arm must live INSIDE the liveness case and map to alive. An earlier draft
+        # paired the pattern with a bare `'LIVE="alive"' in s`, which the pre-existing
+        # *claude*|node|bun arm already satisfied: the conjunct could not fail, so a
+        # version arm reading `dead`, or the pattern demoted to a comment, passed both
+        # legs (review finding from the 40a669b push).
+        blk = re.search(r'ROW" \| awk .\{print \$3\}.\)" in(.*?)esac', s, re.S)
+        if not blk:
+            return False
+        arm = re.search(r'\[0-9\]\*\.\[0-9\]\*\.\[0-9\]\*\)\s*LIVE="(\w+)"',
+                        blk.group(1))
+        return bool(arm) and arm.group(1) == "alive"
 
     r.check("the liveness case has a version-shaped arm for the renamed process",
             version_arm(src),

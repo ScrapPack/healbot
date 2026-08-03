@@ -500,10 +500,11 @@ the opencode harness. The record is `docs/SHIP.md`; the working files:
 | `.carryover/verified/probe_fleet_claude.py` | free guard: live fail-open hook executions, a mutation control per source predicate, the canonical/installed skill twins (the whole `harness/skills/` population since 2026-08-02), the arms-tree separation. The count lives in the probe's own `Results(expect=)` floor and its printout, nowhere else |
 | `.carryover/verified/backend.py` | the measurement seam the fleet reads through: occupancy and transcripts, unchanged from its Phase 12 build |
 
-Open items live in `docs/SHIP.md` §5 — pinning
-the still-SUSPECTED busy/trust markers (ready was measured and repinned 2026-08-01,
-the same live run that verified the hook wiring), and the claude-side retirement
-marker: **provisional ~300K (30% of the 1M window), INFERRED not measured** — the
+Open items live in `docs/SHIP.md` §5. All three screen markers and all three hook
+events are now MEASURED (2026-08-03, a live crewmate on 2.1.220 — the busy marker in
+both directions, the trust marker repinned off the dialog's own menu item after the
+bare word `trust` false-positived on ordinary crewmate prose), so what remains open
+there is the claude-side retirement marker: **provisional ~300K (30% of the 1M window), INFERRED not measured** — the
 planning-stage degradation rule validated as transferring to claude-opus-5's 1M
 architecture on 2026-08-01; a claude-side growth measurement is what would verify it
 (the opencode numbers remain non-transferable). Deliberately not adopted, with reasons on record:

@@ -77,11 +77,14 @@ DECIDED — do not reopen any of these as a defect, and do not "fix" them:
 
 YOUR TASK — Phase 15. Everything in the build order is built and every known correctness
 hole is closed. Nothing is blocking you. Do not invent something to build.
-  0. FLEET BRING-UP RESIDUE, cheapest paid item: the one-time login, a live crewmate
-     (181 turns) and HB_READY_MARKER are done and recorded (docs/SHIP.md §5). Still open
-     there: HB_BUSY_MARKER and HB_TRUST_MARKER are SUSPECTED, not pinned, and the
-     fleet-state hooks firing with the expected stdin shape is unverified. Pin and record
-     both in docs/SHIP.md §5 and the environment. One short session's spend.
+  0. FLEET BRING-UP RESIDUE — DONE 2026-08-03, do not re-spend on it. All three screen
+     markers and all three hook events are MEASURED against a live crewmate on 2.1.220,
+     and the pinning session found two things it was not looking for: every healthy
+     crewmate read `ambiguous` (pane_current_command is the CLI VERSION), and `kill`
+     leaves the pool lease held. Both recorded in docs/SHIP.md §5; the first is fixed and
+     guarded, the second is operator surface. What is still UNMEASURED on the claude side
+     is the retirement marker (~300K, INFERRED) — that needs occupancy near the marker,
+     not another bring-up run.
   1. FREE, start here: run the suite. In each of the last five phases the finding came from
      reading a surface nobody had read AS AN ARTIFACT (a derivation, the suite from a fresh
      clone, the paid rigs as source, the prose as pointers, the shared library). If you find

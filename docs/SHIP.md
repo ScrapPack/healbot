@@ -259,7 +259,7 @@ detector gained the CLI settings-migration containment and its mutation leg, →
 2026-08-03 merge when the settings-VALUE hardening from the parallel worktree joined it;
 `skip_max=2` throughout), because the first of the two was also split:
 
-- **`probe_fleet_claude.py:198`, the CLAUDE.md symlink** — now four rows, of which only the
+- **`probe_fleet_claude.py:197`, the CLAUDE.md symlink** — now four rows, of which only the
   last is environment-bound. The symlink is untracked and ignored by the whitelist's catch-all
   `*` (`harness/claude/.gitignore:15`), so `git worktree add` never populates it; it is
   materialized by `env.claude.sh:34-36`'s `ln -s` at source time. What a slot CAN check, and
