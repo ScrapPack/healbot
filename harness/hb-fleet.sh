@@ -57,9 +57,12 @@
 #
 # STATE CHANNEL. harness/claude/hooks/fleet-state.sh writes $HB_FLEET_DIR/state/<sid>.json
 # on SessionStart/Stop/Notification (push); `state` merges that with a bounded screen
-# capture (poll backstop). Screen markers are version-dependent and SUSPECTED until pinned
-# against a live crewmate — override via HB_READY_MARKER / HB_BUSY_MARKER / HB_TRUST_MARKER
-# and record the pinned strings in docs/SHIP.md when the first crew comes up.
+# capture (poll backstop). All three events are MEASURED firing with the expected stdin
+# shape, and all three screen markers are MEASURED against a live crewmate (2026-08-03,
+# claude 2.1.220; docs/SHIP.md §5). Markers stay version-dependent, so a CLI upgrade
+# re-opens them: override via HB_READY_MARKER / HB_BUSY_MARKER / HB_TRUST_MARKER, and
+# re-pin against a live crewmate rather than by reading release notes. The defaults'
+# own comments carry what each was measured against.
 #
 # AUTH. Crew sessions run under CLAUDE_CONFIG_DIR = harness/claude, which needs its
 # ONE-TIME interactive login first (env.claude.sh header, which also records where the
