@@ -232,11 +232,12 @@ now carry a declared environment requirement (`rig.Env`, `gate/GATE.MAP.md` "Tie
 slot"): in a slot they record a counted, named SKIP and the tier's verdict is `declared-skip`;
 in the main checkout the requirements hold, the rows run, and the verdict is a plain `pass`.
 
-The probe is 52 rows now (floor 20 → 33 on 2026-08-01, → 44 on 2026-08-02 with the cockpit build
+The probe is 53 rows now (floor 20 → 33 on 2026-08-01, → 44 on 2026-08-02 with the cockpit build
 (auth preflight + the re-runnable-`start` pane marker), → 50 the same day when the twin check
 generalized from firstmate to the whole skills population, → 52 later that day when the auth
-detector gained the CLI settings-migration containment and its mutation leg; `skip_max=2`
-throughout), because the first of the two was also split:
+detector gained the CLI settings-migration containment and its mutation leg, → 53 at the
+2026-08-03 merge when the settings-VALUE hardening from the parallel worktree joined it;
+`skip_max=2` throughout), because the first of the two was also split:
 
 - **`probe_fleet_claude.py:195`, the CLAUDE.md symlink** — now four rows, of which only the
   last is environment-bound. The symlink is untracked and ignored by the whitelist's catch-all

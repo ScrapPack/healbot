@@ -144,8 +144,14 @@ tmux_has_popup() {
 # PRESENT, not that the token is live. An expired token passes here and dies at the crewmate's
 # first turn; the refusal text says so rather than promising more than the check measured.
 #
-# Property 4 is why the call is wrapped: snapshot the settings bytes, byte-restore iff THIS
-# invocation changed them, KEEP the stamp (doctor's check_claude_auth posture). The kept
+# Property 4 is why the call is wrapped: snapshot the settings bytes, byte-restore when the
+# file no longer matches the snapshot after the call, KEEP the stamp (doctor's
+# check_claude_auth posture). That comparison is against this invocation's snapshot, not an
+# authorship proof: two of these overlapping in the same UNSTAMPED root can interleave so
+# the later one snapshots migrated bytes and faithfully restores the flip after the earlier
+# one cleaned it. Accepted residual, not a guarantee gap to paper over with a lock: spawns
+# are issued serially, the window is the ~0.2s detector call, and the settings probe's
+# VALUE row catches the end state on any machine. The kept
 # stamp is the actual crew protection — this guard runs before every spawn, and in
 # preflight before anything is built, so by the time a crew pane (or the first login the
 # refusal prescribes) starts a session in this root, the ladder finds the stamp and fires

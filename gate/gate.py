@@ -395,8 +395,15 @@ def _ruff(py, head):
         return sh(["ruff", "check", "--no-cache", *py])
     outs, codes, secs = [], [], 0.0
     for f in py:
+        blob = sh(["git", "show", f"{head}:{f}"])
+        if blob["code"] != 0:
+            # An unreadable blob is an unmeasured claim, never an empty file to lint clean
+            # (sh() folds stderr into out, so git's error text would otherwise be the
+            # "source"): ERROR, same as every other check that could not run.
+            return {"cmd": f"git show {head}:{f}", "code": None,
+                    "out": blob["out"], "secs": secs + blob["secs"]}
         r = sh(["ruff", "check", "--no-cache", "--stdin-filename", f, "-"],
-               input=sh(["git", "show", f"{head}:{f}"])["out"])
+               input=blob["out"])
         outs.append(r["out"])
         codes.append(r["code"])
         secs += r["secs"]
