@@ -98,3 +98,13 @@ you recognize the red when it fires. HARNESS.md's "Traps" section is the canonic
   skill while only firstmate was guarded. A red's direction is a diff's call, never assumed.
   Guard: doctor's `skill twins` row (any machine) and probe_fleet_claude.py's population
   sweep (main checkout).
+- **The Claude CLI migrates each config root ONCE, and the migration rewrites the tracked
+  model pin.** claude 2.1.220's ladder step 13 rewrites exactly the alias `opus` →
+  `opus[1m]` (the 1M-context variant, premium-priced above 200K input) in
+  `harness/claude/settings.json` on the FIRST config-loading invocation (`auth status`,
+  `config list`; `--version` is safe) in any root whose untracked `.claude.json` lacks
+  `migrationVersion >= 13`, then stamps 13. Fresh worktrees, pool slots, and clones carry
+  only the tracked half, so each one rewrites once — a doctor run or crew spawn dirties a
+  tracked file mid-session. Other pin values pass byte-identical. Repair: revert the file,
+  keep the stamp. The main checkout is stamped; the pool slots are not. Guard:
+  probe_fleet_claude.py's settings row asserts the pin VALUE (opus) with a mutation leg.
