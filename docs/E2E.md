@@ -320,8 +320,9 @@ dependency and the claim was wrong. VERIFIED by reading the installed pyte in th
 `**kwargs` and has done nothing when `private` is set since pyte 0.7.0, so only the other
 handler could raise — which is exactly what the captured traceback named. No live `file:line`
 here on purpose: the venv is derived and gitignored, so a citation into it resolves for nobody,
-and the citation sweep said so before this page was pushed. The second override was redundant and the prose was a wrong belief about a dependency,
-held in the file every rig renders through. Both removed.
+and the citation sweep said so before this page was pushed. The second override was redundant
+and the prose was a wrong belief about a dependency, held in the file every rig renders
+through. Both removed.
 
 Suite and gate, this change (each exit code captured directly, never through a pipe):
 

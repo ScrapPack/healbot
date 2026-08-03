@@ -26,9 +26,8 @@ class Screen(pyte.Screen):
     no-opped on `private` since pyte 0.7.0, so the private DA tmux also sends was never the
     problem. (Read it in the venv; no line citation, because the venv is derived and
     gitignored, so a pointer into it resolves for no reader and for no probe.) A first draft
-    of this class overrode both and
-    said so in prose, which is a wrong belief about the dependency held in the file every
-    rig renders through — the push review caught it.
+    of this class overrode both and said so in prose, which is a wrong belief about the
+    dependency held in the file every rig renders through — the push review caught it.
 
     Nothing in the suite had hit any of this because every rig here drives the opencode
     TUI, which sends no private queries. The repair stays narrow because this class is what
