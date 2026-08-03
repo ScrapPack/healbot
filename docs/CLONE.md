@@ -111,11 +111,9 @@ losing one must. `rig.py`'s docstring carries the measurement that motivated it.
 | `probe_turn_predicate` | 18/18, exit 0 | **18/18, exit 0** |
 
 The table records the Phase 9 measurements. Since 2026-08-03 every declared cannot-measure
-refusal in the suite exits **3**, the sentinel the gate maps to ERROR: `probe_twin` and
-`probe_citations` on the absent checkout, `probe_backend` on the no-transcript state (via a
-flag its finally folds into the exit, so its SHORT RUN summary still prints), and
-`probe_focus` with `probe_error_state` on the absent paid corpus. docs/E2E.md item D owns
-that list; this note is a pointer, not a second copy.
+refusal in the suite exits **3**, the sentinel the gate maps to ERROR; on a fresh clone
+that is `probe_twin` and `probe_citations` refusing the absent checkout. The full adopter
+list and each refusal's condition live in docs/E2E.md item D, the list's one owner.
 
 `probe_turn_predicate` is the one probe that genuinely survives a fresh clone, and it is worth
 saying why: it depends only on **tracked** repo files — `harness/config/opencode/plugin/healbot.ts`
