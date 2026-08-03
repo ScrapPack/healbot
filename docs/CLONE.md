@@ -112,7 +112,9 @@ losing one must. `rig.py`'s docstring carries the measurement that motivated it.
 
 The table records the Phase 9 measurements. Since 2026-08-03 every declared cannot-measure
 refusal in the suite exits **3**, the sentinel the gate maps to ERROR; on a fresh clone
-that is `probe_twin` and `probe_citations` refusing the absent checkout. The full adopter
+that is `probe_twin` and `probe_citations` refusing the absent checkout, and
+`probe_backend` refusing the transcript no Claude Code session has yet written there
+(§8.2 records that red). The full adopter
 list and each refusal's condition live in docs/E2E.md item D, the list's one owner.
 
 `probe_turn_predicate` is the one probe that genuinely survives a fresh clone, and it is worth
