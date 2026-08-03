@@ -26,7 +26,7 @@ the checks this machine could not measure (see Tier 2 below).
 | Which checks are Tier 1 | `gate.py` `TIER1` |
 | Lint scoping | `gate.py` `lint()` |
 | The four banned filenames | `gate.py` `BANNED` / `banned_names()` |
-| Push enforcement | `gate/hooks/pre-push` — gates the pushed range via `--base <remote sha>`, refuses on exit 2/3 |
+| Push enforcement | `gate/hooks/pre-push` — gates the exact pushed range via `--base <remote sha> --head <pushed sha>`, refuses on exit 2/3 |
 | Model review stage | `gate/review.py` — single-pass fresh-context review, typed findings, advisory by default |
 | Evidence flow | `gate/publish.py` — attaches both run records to the pushed commit (or its open PR) on GitHub |
 | Tier 2 runner | `gate/tier2.py` — the rest of the free suite, at phase boundaries; trigger is the phase-close skill (`harness/skills/phase-close.md`) |
@@ -43,7 +43,12 @@ shapes).
 
 **Lint — scoped to the changed files:** `ruff` on changed Python; `tsgo --noEmit` plus
 `oxlint` on the checkout twins only when the change touches `fork/` TypeScript (since the
-2026-07-31 NEXT.md freeze this gate is the build gates' only owner). Repo-wide lint on a mixed tree reports
+2026-07-31 NEXT.md freeze this gate is the build gates' only owner). On a hook run the scope
+is the exact pushed range (`--base <remote sha> --head <pushed sha>`) and ruff lints the
+blobs at the pushed tip, never the working tree: the checkout the hook runs in can sit on
+another branch and hold none of the pushed files. Run `20260802-184854` is the incident
+this closed — a merge push bringing 800+ new lines gated as "0 changed file(s)" because
+the range ended at that checkout's HEAD, and every change-scoped linter skipped. Repo-wide lint on a mixed tree reports
 findings the change did not cause, and a gate that blames you for someone else's lint is a gate
 you route around.
 
@@ -85,7 +90,7 @@ interactive `claude -p 'reply ok'` from the owner's terminal settles it.
 ## What it deliberately does NOT run
 
 - **Tier 2** — the rest of the free suite: `probe_*.py` minus Tier 1, discovered by
-  subtraction at run time (13 today — seven boot a TUI or a server, six read living state;
+  subtraction at run time (18 as of 2026-08-02, floor-guarded in `tier2.py`;
   `gate/tier2.py --list` enumerates). Free, but minutes not seconds, and the output embeds
   timings, so no byte-stability claim and no per-row hash — deliberately. Run
   `gate/tier2.py` at phase boundaries; the phase-close skill is the trigger and owns the

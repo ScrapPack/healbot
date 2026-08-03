@@ -8,10 +8,13 @@
 # Escape hatch, git-native and deliberate: git push --no-verify. Using it means shipping
 # unverified commits; say so wherever the push is discussed.
 #
-# Scope: gate.py --base diffs <base>...HEAD, so the gate sees the files the pushed commits
-# changed. This repo pushes a single branch from HEAD, where that is exact; pushing a
-# non-HEAD ref would gate an approximation of the range, which still runs every Tier-1
-# probe and the banned-filename invariant regardless.
+# Scope: the hook hands gate.py the exact pushed range, --base <remote sha> --head <local
+# sha>, so even a push of a ref the checkout does not have checked out diffs
+# base...pushed-tip. Run 20260802-184854 is the counterexample this guards: gate.py used to
+# diff base...HEAD, this checkout sat parked on an ancestor branch, and a merge push
+# bringing 800+ new lines gated as "0 changed file(s)" with every change-scoped linter
+# skipped. Tier-1 probes and the invariant scans still read the checkout tree (gate.py
+# prints a NOTE when that tree is not the pushed tip); lint reads the pushed blobs.
 #
 # After the gate passes, the model review stage (gate/review.py) runs on the same range:
 # single-pass, fresh-context, typed findings, ADVISORY by default (findings are printed and
@@ -54,7 +57,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # /dev/null on stdin: a command inside a while-read loop otherwise inherits the loop's
   # stdin and can consume the remaining ref lines.
   if [ -n "$base" ]; then
-    $GATE --base "$base" >&2 < /dev/null
+    $GATE --base "$base" --head "$local_sha" >&2 < /dev/null
   else
     $GATE >&2 < /dev/null
   fi
@@ -72,7 +75,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # The model review stage. Exits nonzero only in blocking mode (or on a usage error), so
   # in the default advisory mode this refuses nothing and only surfaces findings.
   if [ -n "$base" ]; then
-    $REVIEW --base "$base" >&2 < /dev/null
+    $REVIEW --base "$base" --head "$local_sha" >&2 < /dev/null
   else
     $REVIEW >&2 < /dev/null
   fi

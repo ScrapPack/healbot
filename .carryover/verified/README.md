@@ -56,6 +56,17 @@ venv/bin/python probe_rig_contract.py# 29/29 does every rig in this suite still 
                                      #       decides a turn COMPLETED by counting fire()'s box.
                                      #       Six paid rigs failed the fourth and always exited 0;
                                      #       four rows failed the sixth and could not fail at all
+venv/bin/python probe_gate_scope.py  # 16/16 does the pre-push gate gate the PUSHED range, not the
+                                     #       checkout's HEAD? Builds a scratch bare remote plus a
+                                     #       work repo, drives a real merge push through the REAL
+                                     #       hook and gate.py from a checkout parked on an ancestor
+                                     #       branch, and asserts the planted F841 in the pushed
+                                     #       blob refuses the push. Two mutation legs (base...HEAD
+                                     #       scoping reverted; record head reverted to tree) are
+                                     #       both detected by the same predicates the live leg
+                                     #       passes. Pins run 20260802-184854, the merge push that
+                                     #       gated as zero files. Needs ruff on PATH; no checkout,
+                                     #       no venv beyond stdlib, so it survives a fresh clone
 venv/bin/python probe_turn_growth.py # 13/16 RED SINCE PHASE 12, exit 1, AND THE RED IS CORRECT.
                                      #       A single turn measured 299,326 on the pinned model —
                                      #       71% above the 175,148 RETIRE_AT is derived from — so

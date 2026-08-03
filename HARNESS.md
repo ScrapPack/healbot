@@ -549,7 +549,7 @@ What actually had to change, each measured or source-verified rather than assume
   untouched on POSIX.
 - **`python3` vs `python`.** fleet-state.sh resolves either (still fail-open); hb-fleet.sh's
   `py()` likewise.
-- The line-number shifts these edits caused were re-derived, not offset: the `gate.py:204`
+- The line-number shifts these edits caused were re-derived, not offset: the `gate.py:220`
   ban and the `harness/env.sh:63-68` shell-hole block are the two everything cites, and
   `docs/RELAY.md`'s pointer to the RETIRE_HARD statement was found already 12 lines stale
   and re-derived to `harness/env.sh:139`. Gate 14/14 after.

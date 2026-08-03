@@ -303,7 +303,7 @@ GNHF_TELEMETRY=0 REPO=~/Desktop/healbot STALL_MIN=20 MAX_HOURS=2 \
 Caps rationale: `--max-iterations 3` bounds *iterations*, not dollars — the spend is one rig
 invocation, and the prompt is what bounds that. Three leaves room for pre-flight, the run, and the
 document corrections. `MAX_HOURS=2` is the real money guard, sized against the ~6–11 minute wall
-clock recorded for a comparable rig in `.carryover/verified/README.md:159`.
+clock recorded for a comparable rig in `.carryover/verified/README.md:176`.
 
 ---
 
@@ -333,9 +333,9 @@ choice down.
 ### 3.2 The four banned filenames
 
 `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, `SKILL.md` are banned **anywhere in the tree**
-(HARNESS.md:9-13, now enforced at `gate/gate.py:204`). The first three auto-ingest into every
+(HARNESS.md:9-13, now enforced at `gate/gate.py:220`). The first three auto-ingest into every
 session's context via `packages/opencode/src/session/instruction.ts:64-68`; `SKILL.md` collides
-with opencode's `**/SKILL.md` skill glob — and per `gate/gate.py:207-214`, *"a `SKILL.md` body
+with opencode's `**/SKILL.md` skill glob — and per `gate/gate.py:223-230`, *"a `SKILL.md` body
 containing `` !`cmd` `` shell-executes on slash-invoke with no permission check
 (`harness/env.sh:63-68`, re-verified 2026-07-31 against 1.18.5 … still unfixed)."* Maps are
 `<DIR>.MAP.md`.
