@@ -90,7 +90,7 @@ interactive `claude -p 'reply ok'` from the owner's terminal settles it.
 ## What it deliberately does NOT run
 
 - **Tier 2** — the rest of the free suite: `probe_*.py` minus Tier 1, discovered by
-  subtraction at run time (13 today — seven boot a TUI or a server, six read living state;
+  subtraction at run time (18 as of 2026-08-02, floor-guarded in `tier2.py`;
   `gate/tier2.py --list` enumerates). Free, but minutes not seconds, and the output embeds
   timings, so no byte-stability claim and no per-row hash — deliberately. Run
   `gate/tier2.py` at phase boundaries; the phase-close skill is the trigger and owns the

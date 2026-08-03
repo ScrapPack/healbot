@@ -303,7 +303,7 @@ GNHF_TELEMETRY=0 REPO=~/Desktop/healbot STALL_MIN=20 MAX_HOURS=2 \
 Caps rationale: `--max-iterations 3` bounds *iterations*, not dollars — the spend is one rig
 invocation, and the prompt is what bounds that. Three leaves room for pre-flight, the run, and the
 document corrections. `MAX_HOURS=2` is the real money guard, sized against the ~6–11 minute wall
-clock recorded for a comparable rig in `.carryover/verified/README.md:159`.
+clock recorded for a comparable rig in `.carryover/verified/README.md:176`.
 
 ---
 
