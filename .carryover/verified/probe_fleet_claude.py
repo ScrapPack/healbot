@@ -665,18 +665,18 @@ try:
     def spawn_failures_settle_the_lease(s):
         # A spawn that dies AFTER the pool lease must release it — MEASURED 2026-08-03:
         # a refused split leaked slot-1 to a crewmate that never existed. The shape is one
-        # helper and exactly four call sites (the transcript computation, both split
-        # refusals, and the boot death), so the count is 5 with the definition.
-        # EQUALITY, not a floor: a fifth call site would mean someone wired the
-        # ready-wait timeout, where the crewmate is alive in its pane and a release
-        # would reset the tree under a live process.
+        # helper and exactly five call sites (the dir refusal, the transcript
+        # computation, both split refusals, and the boot death), so the count is 6 with
+        # the definition. EQUALITY, not a floor: a sixth call site would mean someone
+        # wired the ready-wait timeout, where the crewmate is alive in its pane and a
+        # release would reset the tree under a live process.
         block = spawn_block(s)
-        return block.count("release_slot_on_failure") == 5
+        return block.count("release_slot_on_failure") == 6
 
     r.check("spawn's post-lease failure paths settle the lease they just took",
             spawn_failures_settle_the_lease(src),
-            "definition + transcript failure + both split refusals + the boot death; "
-            "the timeout keeps it")
+            "definition + dir refusal + transcript failure + both split refusals + the "
+            "boot death; the timeout keeps it")
     r.check("MUTATION: a failure path that keeps the lease is caught",
             not spawn_failures_settle_the_lease(_mutate_spawn(
                 src, "      release_slot_on_failure\n      exit 1", "      exit 1")))

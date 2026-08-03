@@ -527,15 +527,15 @@ spawn)
       || { echo "hb-fleet: no slot leased (the pool's reason is above)." >&2; exit 2; }
     DIR="$(printf '%s\n' "$ACQ_OUT" | tail -1)"
   fi
-  [ -d "${DIR:-}" ] || { echo "hb-fleet: --dir does not exist: '$DIR'" >&2; exit 2; }
-  DIR="$(cd "$DIR" && pwd)"
   release_slot_on_failure() {
     # A spawn that dies after the lease must not keep it. MEASURED 2026-08-03 while
     # testing the kill close: a refused split left slot-1 leased to a crewmate that never
     # existed. Plain release only, so a slot that somehow holds work is refused, kept,
-    # and named by the pool itself. Called on the two split refusals and the boot death;
-    # deliberately NOT on the ready-wait timeout, where the crewmate is alive in its pane
-    # and may still boot — releasing would reset the tree under a live process.
+    # and named by the pool itself. Called on the dir refusal, the transcript failure,
+    # the two split refusals, and the boot death; deliberately NOT on the ready-wait
+    # timeout, where the crewmate is alive in its pane and may still boot — releasing
+    # would reset the tree under a live process. Defined before the first exit that can
+    # follow the lease, which is why it sits above the dir check.
     [ "$USE_SLOT" = 1 ] || return 0
     if "$VENVPY" "$FLEET_ROOT/pool.py" release "$DIR" --if-owner "$HB_RUN"; then
       echo "hb-fleet: released the just-leased slot back to the pool." >&2
@@ -543,6 +543,8 @@ spawn)
       echo "hb-fleet: could not release the just-leased slot (the pool's reason is above)." >&2
     fi
   }
+  [ -d "${DIR:-}" ] || { echo "hb-fleet: --dir does not exist: '$DIR'" >&2; release_slot_on_failure; exit 2; }
+  DIR="$(cd "$DIR" && pwd)"
 
   SID="$(uuidgen | tr 'A-Z' 'a-z')"
 

@@ -258,7 +258,8 @@ listed in `README.md` under *"free — no model turns, no API credits"*. On a fr
 with `hb/retire350.db not found — run verify_retire_350k.py first` — and `verify_retire_350k.py` is
 the ~5M-token full-scale run. The diagnostic is honest and actionable, which is why this is a
 documentation correction and not a defect: the probes are free **to re-run**, not free **to run for
-the first time**. `README.md` now says so.
+the first time**. `README.md` now says so. Since 2026-08-03 that refusal exits **3**, the
+declared cannot-measure sentinel (docs/E2E.md item D).
 
 **`probe_twin` died with a raw `FileNotFoundError`** from a module-level call, because it reads the
 gitignored checkout. Exit code was already 1, so this was never in the false-green class; it now

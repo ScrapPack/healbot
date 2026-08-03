@@ -42,8 +42,12 @@ r = Results(expect=10)
 try:
     shutil.copyfile(SOURCE, REPLAY)
 except FileNotFoundError:
+    # Exit 3, the declared cannot-measure sentinel (docs/E2E.md item D): the named corpus
+    # is absent, so every claim below is unmeasured. The no-errored-session exit further
+    # down stays 1 — there the corpus was read and said no. Module-level on purpose;
+    # inside the big try the finally's verdict exit would replace it.
     print(f"!! {SOURCE} not found — run verify_retire_350k.py first", flush=True)
-    sys.exit(1)
+    sys.exit(3)
 
 conn = sqlite3.connect(REPLAY)
 rows = conn.execute("SELECT id, time_archived FROM session").fetchall()

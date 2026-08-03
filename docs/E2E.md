@@ -447,11 +447,14 @@ would close it.
 
 CLOSED 2026-08-03: the sentinel is exit 3, the code the gate itself exits with on ERROR, so
 the probes now speak the lattice the gate already speaks (harness/pool.py's docstring
-declared the same one). The three declared refusals adopted it — `probe_citations` and
-`probe_twin` on the absent checkout in tier 1, and `probe_backend` on a checkout holding no
-recorded transcript in tier 2, the third one found by the push review after this close first
-claimed exactly two — and nothing else: crashes and red verdicts stay
+declared the same one). The five declared refusals adopted it — `probe_citations` and
+`probe_twin` on the absent checkout in tier 1; `probe_backend` on a checkout with no
+recorded transcript, and `probe_focus` with `probe_error_state` on an absent paid corpus,
+all three in tier 2 — and nothing else: crashes and red verdicts stay
 BLOCKED, deliberately, so a broken probe cannot downgrade a real finding to retry-shaped.
+This close first claimed exactly two refusals, then three; two review passes each found
+members the enumeration missed, which is what enumerations deserve, and the count above is
+the sweep's, not memory's.
 The tier-1 mapping and tier2's row mapping each changed in place by one line, which is why
 every `gate/gate.py` citation above still resolves. TESTED end to end through the real hook
 by `probe_gate_scope.py`'s two new legs: a tier-1 stub exiting 3 records ERROR and refuses

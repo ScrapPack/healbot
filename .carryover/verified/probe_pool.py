@@ -188,9 +188,15 @@ try:
             pool.status()
         return next(ln for ln in buf.getvalue().splitlines() if "slot-1" in ln)
 
-    pool.acquire("A", "adopt exercise")  # slot-1: sorted first among clean, free slots
-    r.check("acquire records NO holder pid — the acquirer never outlives the lease",
-            (pool.read_json(pool.lease_path(s1)) or {}).get("pid") is None,
+    # The acquire's return code and the lease's EXISTENCE are both asserted: the first
+    # draft's `(read_json(...) or {}).get("pid") is None` was vacuously true with no lease
+    # file at all, so a refusing acquire left the row green over nothing (review finding
+    # from this push). The `.get` default plays the same role below.
+    adopt_rc = pool.acquire("A", "adopt exercise")  # slot-1: first clean, free slot
+    adopt_lease = pool.read_json(pool.lease_path(s1))
+    r.check("acquire leased slot-1 and recorded NO holder pid on the lease",
+            adopt_rc == 0 and adopt_lease is not None
+            and adopt_lease.get("pid", "absent") is None,
             "recording os.getpid() here was E2E finding 8: structurally always-DEAD")
     r.check("status says a pid-less lease makes no liveness claim, explicitly",
             "liveness unclaimed" in slot1_status_line(),
@@ -198,7 +204,8 @@ try:
     r.check("adopt on an unleased slot refuses 2", pool.adopt("slot-2", 12345) == 2, "")
     r.check("adopt with the wrong owner refuses 2 and records nothing",
             pool.adopt("slot-1", 12345, if_owner="Z") == 2
-            and (pool.read_json(pool.lease_path(s1)) or {}).get("pid") is None, "")
+            and (pool.read_json(pool.lease_path(s1))
+                 or {"pid": "lease gone"}).get("pid") is None, "")
     r.check("adopt with a malformed pid errors 3",
             pool.adopt("slot-1", "not-a-pid", if_owner="A") == 3, "")
     r.check("adopt refuses pid 0 and negatives at 3 — the domain, not just the form",
