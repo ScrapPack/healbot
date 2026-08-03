@@ -284,7 +284,8 @@ said no*. TESTED with `opencode/` hidden: the citations and twin checks both rep
 derived checkout is absent and name the page that rebuilds it, and the gate exits **2**, not 3.
 VERIFIED at `gate/gate.py:124`: a Tier-1 row's state is decided by the subprocess exit code
 alone — `PASS` on 0, `ERROR` only when the code is `None` (the executable could not be
-launched at `gate/gate.py:73`, or it timed out at `:75`), `BLOCKED` for every other nonzero.
+launched at `gate/gate.py:73`, or it timed out at `gate/gate.py:75`), `BLOCKED` for every
+other nonzero.
 
 The three exits an operator can actually reach here were each measured rather than reasoned
 about, after a push review pointed out that two of them were being asserted. TESTED in the
