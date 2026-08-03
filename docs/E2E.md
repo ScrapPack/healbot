@@ -201,6 +201,15 @@ and the manual repair worked exactly as the pool's refusals promise — `release
 and printed the uncommitted file rather than destroying it, and `release --discard-work` exited
 0, reset the slot and dropped the lease.
 
+One smaller thing, found while cleaning up rather than while testing: `kill` on a crewmate
+whose pane is already gone exits 1 with tmux's own `can't find pane: %5`, not a framed
+`hb-fleet:` line like every other refusal in the script. VERIFIED at the `kill` branch — under
+`set -eu` the failing `kill-pane` ends the script before the report line — and TESTED by
+killing a crewmate that `down` had already taken with it. The exit code is honest and nothing
+is lost; only the message speaks tmux's language instead of the fleet's. Recorded, not
+repaired, because framing it means deciding whether an already-dead crewmate is an error at
+all.
+
 **Finding 10 — an unexplained line in a crewmate's composer, explained.** `peek` showed
 `❯ fourth probe line` on `alpha` — text nobody had sent. It is not in the transcript, not in
 the fleet's buffers, and not in any brief. Captured with escape sequences rather than guessed
