@@ -26,7 +26,7 @@ the checks this machine could not measure (see Tier 2 below).
 | Which checks are Tier 1 | `gate.py` `TIER1` |
 | Lint scoping | `gate.py` `lint()` |
 | The four banned filenames | `gate.py` `BANNED` / `banned_names()` |
-| Push enforcement | `gate/hooks/pre-push` — gates the exact pushed range via `--base <remote sha> --head <pushed sha>`, refuses on exit 2/3 |
+| Push enforcement | `gate/hooks/pre-push` — gates the exact pushed range via `--base <remote sha> --head <pushed sha>`, refuses on exit 2/3; a wholly absent rig venv (fresh clone/worktree) refuses up front by name, with the reconstitution remedy |
 | Model review stage | `gate/review.py` — single-pass fresh-context review, typed findings, advisory by default |
 | Evidence flow | `gate/publish.py` — attaches both run records to the pushed commit (or its open PR) on GitHub |
 | Tier 2 runner | `gate/tier2.py` — the rest of the free suite, at phase boundaries; trigger is the phase-close skill (`harness/skills/phase-close.md`) |

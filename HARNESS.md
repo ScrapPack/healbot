@@ -540,8 +540,11 @@ What actually had to change, each measured or source-verified rather than assume
   the Phase-14 sweep's contrary %APPDATA% claim was checked against the package source and
   was wrong.
 - **The venv layout.** `gate/gate.py` and `gate/hooks/pre-push` resolve
-  `venv/Scripts/python.exe` when `venv/bin/python` is absent; a missing venv still reports
-  the same ERROR it always has. `tier2.py` inherits via its `PY` import.
+  `venv/Scripts/python.exe` when `venv/bin/python` is absent; in gate.py a missing venv
+  still reports the same ERROR it always has, and since 2026-08-02 the hook refuses a
+  wholly absent venv up front by name (fresh clone/worktree — the measured symptom was a
+  Windows path and "exit 127, unknown" on macOS; remedy in
+  `.carryover/verified/README.md`). `tier2.py` inherits via its `PY` import.
 - **`probe_citations.py`'s resolver** compared normpath'd (os.sep) paths against a
   `"/"`-joined needle — on Windows that never matches and the fallback silently widens to
   every basename collision, in a Tier-1 gate check. The needle is os.sep-normalized now;

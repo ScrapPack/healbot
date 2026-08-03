@@ -33,12 +33,45 @@ set -u
 
 ZERO=0000000000000000000000000000000000000000
 ROOT="$(git rev-parse --show-toplevel)"
-VENVPY="$ROOT/.carryover/verified/venv/bin/python"
-# Windows venv layout puts the interpreter under Scripts/; fall through only when bin/ is absent.
-[ -x "$VENVPY" ] || VENVPY="$ROOT/.carryover/verified/venv/Scripts/python.exe"
+# The probe interpreter lives in the rig venv, which has two layouts (docs/WINDOWS.md):
+# POSIX bin/, Windows Scripts/. Choose between them only when one is PRESENT. A fresh clone
+# or fresh git worktree has no venv at all — it is gitignored; the suite is not portable
+# (HARNESS.md "Traps") — and the old fall-through picked the Windows layout there, dying
+# mid-loop with "Scripts/python.exe: No such file or directory ... gate exit 127, unknown":
+# a Windows path and a wrong diagnosis on macOS. Measured 2026-08-02 from a scratch worktree.
+VENV="$ROOT/.carryover/verified/venv"
+if [ -x "$VENV/bin/python" ]; then
+  VENVPY="$VENV/bin/python"
+elif [ -x "$VENV/Scripts/python.exe" ]; then
+  VENVPY="$VENV/Scripts/python.exe"
+else
+  VENVPY=""
+fi
 GATE=${HEALBOT_GATE:-"$VENVPY $ROOT/gate/gate.py"}
 REVIEW=${HEALBOT_REVIEW_CMD:-"$VENVPY $ROOT/gate/review.py"}
 PUBLISH=${HEALBOT_PUBLISH_CMD:-"$VENVPY $ROOT/gate/publish.py"}
+
+# A missing venv is a named precondition, not an unknown failure: refuse up front with the
+# remedy, the way doctor.py ("rig venv not built") and hb-fleet preflight ("rig venv
+# absent") name it. Refuse only when a stage below would actually run $VENVPY: a fully
+# stubbed plumbing run (HEALBOT_GATE and HEALBOT_REVIEW_CMD set, publish off or stubbed)
+# never touches the venv and proceeds as before — the stubs already had that power.
+# HEALBOT_REVIEW=off does NOT excuse the venv: the off-switch lives inside review.py, which
+# still needs an interpreter to reach it.
+if [ -z "$VENVPY" ]; then
+  needs_venv=""
+  [ -z "${HEALBOT_GATE:-}" ] && needs_venv=1
+  [ -z "${HEALBOT_REVIEW_CMD:-}" ] && needs_venv=1
+  [ "${HEALBOT_PUBLISH:-on}" != "off" ] && [ -z "${HEALBOT_PUBLISH_CMD:-}" ] && needs_venv=1
+  if [ -n "$needs_venv" ]; then
+    echo "pre-push gate: REFUSING the push (rig venv not built: no interpreter under" >&2
+    echo "pre-push gate: .carryover/verified/venv — neither bin/python nor Scripts/python.exe)." >&2
+    echo "pre-push gate: a fresh clone or fresh worktree starts this way; nothing ran, nothing was measured." >&2
+    echo "pre-push gate: build it per .carryover/verified/README.md (docs/CLONE.md is the full story)," >&2
+    echo "pre-push gate: or 'git push --no-verify' deliberately and say so." >&2
+    exit 1
+  fi
+fi
 T0=$(date +%s)
 
 while read -r local_ref local_sha remote_ref remote_sha; do
