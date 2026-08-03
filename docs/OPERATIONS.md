@@ -93,6 +93,7 @@ Installed at `~/.agents/skills/<name>/` (canonical copies in `harness/skills/`);
 | `firstmate` | Running the crew fleet as controller |
 | `tdd` | Red-green-refactor build work |
 | `plainspec` | Writing docs, PR text, or error messages to the controlled prose standard ("STE mode" means strict) |
+| `plaincode` | Writing or reviewing Python to the controlled code standard — PEP 8 at the measured width plus the compaction judgment pass (`docs/PLAINCODE.md` is the measurement record; gate enforcement deliberately not flipped) |
 
 ## Troubleshooting, distilled from the traps
 
