@@ -69,8 +69,11 @@ CONFIG_MATERIALIZED = Env(
 # root, and the flipped value passed bool()) hardens the settings row to the pin VALUE and
 # adds its mutation leg. 51. The same day's containment in hb_auth_state (the fleet's own
 # detector call fired that migration in every unstamped root) adds its guard row and
-# mutation leg: the merged floor both branches predicted. 53.
-r = Results(expect=53, skip_max=2)
+# mutation leg: the merged floor both branches predicted. 53. Task 0's bring-up residue
+# (2026-08-03, live crewmate on 2.1.220) adds six: the busy-before-ready arm order, the
+# dialog-specific trust marker, and the version-shaped liveness arm, each with a mutation
+# leg, plus a fixture row proving the arm swap rewrites source. 60.
+r = Results(expect=60, skip_max=2)
 
 
 def sh_n(path):
@@ -244,6 +247,77 @@ try:
         return "synchronize-panes off" in s
 
     r.check("synchronize-panes is pinned off at bootstrap", sync_off(src))
+
+    # -- the three screen markers and the liveness arms, MEASURED 2026-08-03 -------------
+    # Task 0's bring-up residue, pinned against claude 2.1.220 with a live crewmate. Each
+    # row below guards a fact that was SUSPECTED before that session and is measured now.
+    def busy_before_ready(s):
+        # The busy footer CONTAINS the ready marker ("… bypass permissions on … esc to
+        # interrupt …"), so a screen case that tests ready first reports a working
+        # crewmate as idle. Arm order is the whole guarantee.
+        #
+        # EVERY such block is checked, not the first one found: the file holds three
+        # `case "$SCREEN" in` blocks and the first is the spawn loop, which has no busy
+        # arm at all. A first-match predicate read that block and went red against
+        # correct code — caught here because the mutation leg passed while the live leg
+        # failed, which is the shape of a broken predicate rather than a broken subject.
+        bodies = re.findall(r'case "\$SCREEN" in(.*?)esac', s, re.S)
+        both = [b for b in bodies
+                if "HB_BUSY_MARKER" in b and "HB_READY_MARKER" in b]
+        return bool(both) and all(
+            b.find("HB_BUSY_MARKER") < b.find("HB_READY_MARKER") for b in both)
+
+    r.check("the screen case tests BUSY before READY (the busy footer carries both)",
+            busy_before_ready(src),
+            "MEASURED 2026-08-03: the idle footer reads `bypass permissions on (shift+tab "
+            "to cycle) · ← for agents` and the busy footer inserts `esc to interrupt` into "
+            "that same line, so ready-first would classify every working crewmate idle")
+    # The swap targets the ARM LINES, not the first name in the file: a plain
+    # replace(..., 1) rewrites the variable DECLARATIONS at the top and leaves the case
+    # block correctly ordered, so the mutation passed while mutating nothing (caught by
+    # this leg going green against a subject it had not changed).
+    BUSY_ARM = '*"$HB_BUSY_MARKER"*)  SCR="busy";;'
+    READY_ARM = '*"$HB_READY_MARKER"*) SCR="idle";;'
+    swapped = (src.replace(BUSY_ARM, "@@ARM@@")
+               .replace(READY_ARM, BUSY_ARM)
+               .replace("@@ARM@@", READY_ARM))
+    r.check("fixture: the arm swap actually rewrote the source",
+            swapped != src and BUSY_ARM in swapped and READY_ARM in swapped,
+            "a mutation that edits nothing proves nothing; this row fails if the arm "
+            "text drifts out from under the two literals above")
+    r.check("MUTATION: swapping the busy and ready arms is caught",
+            not busy_before_ready(swapped))
+
+    def trust_marker_specific(s):
+        # The default must not be a word ordinary replies contain. MEASURED as a real
+        # false positive: with the old bare "trust" default, an idle crewmate replying
+        # "I trust this result." classified as trust-dialog — blocked on a human decision.
+        m = re.search(r'HB_TRUST_MARKER="\$\{HB_TRUST_MARKER:-([^}]*)\}"', s)
+        return bool(m) and len(m.group(1).split()) >= 3
+
+    r.check("the trust marker is a dialog-specific phrase, not a common word",
+            trust_marker_specific(src),
+            "the 2.1.220 dialog's own menu item is `Yes, I trust this folder`; the crew "
+            "constraints file uses the bare word twice, so the prose that tripped the old "
+            "default is prose this harness ships")
+    r.check("MUTATION: reverting the trust marker to a bare word is caught",
+            not trust_marker_specific(
+                re.sub(r'(HB_TRUST_MARKER="\$\{HB_TRUST_MARKER:-)[^}]*(\}")',
+                       r"\1trust\2", src)))
+
+    def version_arm(s):
+        # A live crewmate's pane_current_command is the CLI VERSION (`2.1.220`), not
+        # `claude`, so without a version-shaped arm every healthy crewmate read
+        # `ambiguous` — the state firstmate escalates instead of trusting.
+        return "[0-9]*.[0-9]*.[0-9]*)" in s and 'LIVE="alive"' in s
+
+    r.check("the liveness case has a version-shaped arm for the renamed process",
+            version_arm(src),
+            "MEASURED 2026-08-03: `tmux list-panes -F '#{pane_current_command}'` returned "
+            "`2.1.220` for a working crewmate, and the composite read `ambiguous` while "
+            "the screen and hook channels both said idle")
+    r.check("MUTATION: dropping the version arm is caught",
+            not version_arm(src.replace("[0-9]*.[0-9]*.[0-9]*)", "__none__)")))
 
     def history_before_spawn(s):
         # Match the COMMAND, not the guardrail prose above it (the first draft matched

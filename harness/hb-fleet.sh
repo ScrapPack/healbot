@@ -92,8 +92,18 @@ HB_RUN="${HB_RUN:-hb-main}"
 HB_FLEET_DIR="${HB_FLEET_DIR:-$REPO/.fleet/$HB_RUN}"
 HB_CLAUDE="${HB_CLAUDE:-$(command -v claude || echo "$HOME/.local/bin/claude")}"  # PATH first, then the native installer's path: the old bare pin was one machine's layout, and doctor.py's claude row resolves through PATH — so the pin could be wrong while preflight said PASS
 HB_READY_MARKER="${HB_READY_MARKER:-bypass permissions on}"  # footer line under the bypass default (MEASURED 2026-08-01)
-HB_BUSY_MARKER="${HB_BUSY_MARKER:-esc to interrupt}"   # spinner line (SUSPECTED, pin at bring-up)
-HB_TRUST_MARKER="${HB_TRUST_MARKER:-trust}"            # first-launch trust dialog (SUSPECTED)
+# MEASURED 2026-08-03 on claude 2.1.220, against a live crewmate, both directions:
+# present mid-turn and ABSENT at idle, which is what makes it discriminate. The busy
+# footer also carries HB_READY_MARKER, so the screen case below MUST test busy before
+# ready — that arm order is load-bearing, not stylistic.
+HB_BUSY_MARKER="${HB_BUSY_MARKER:-esc to interrupt}"
+# The trust dialog's menu item, verbatim. The old default was the bare word "trust",
+# which MEASURED as a false positive the same day: an idle crewmate that merely SAID the
+# word ("I trust this result.") classified as trust-dialog, i.e. as blocked on a human
+# decision — and the crew constraints file itself uses the word twice, so the prose that
+# trips it is prose the harness ships. The menu item cannot appear in a reply that is not
+# quoting the dialog.
+HB_TRUST_MARKER="${HB_TRUST_MARKER:-Yes, I trust this folder}"
 HB_SPAWN_TIMEOUT="${HB_SPAWN_TIMEOUT:-90}"
 MANIFEST="$HB_FLEET_DIR/manifest.jsonl"
 VENVPY="$REPO/.carryover/verified/venv/bin/python"
@@ -591,7 +601,14 @@ state)
     if [ -z "$ROW" ]; then LIVE="missing"
     elif [ "$(echo "$ROW" | awk '{print $2}')" = "1" ]; then LIVE="dead"
     else case "$(echo "$ROW" | awk '{print $3}')" in
+           # The version-string arm is not a guess: MEASURED 2026-08-03, a healthy
+           # crewmate's pane_current_command is `2.1.220` — the CLI renames its process
+           # to its own version — so EVERY live crewmate fell to the `*` arm and read
+           # `ambiguous`, the one state firstmate is told to escalate rather than trust.
+           # A false ambiguous is the expensive direction: it sends the captain to a
+           # crewmate that is fine. Matched by shape, so the next version still hits it.
            *claude*|node|bun) LIVE="alive";;
+           [0-9]*.[0-9]*.[0-9]*) LIVE="alive";;
            sh|bash|zsh|dash|"") LIVE="dead";;
            *) LIVE="ambiguous";;
          esac

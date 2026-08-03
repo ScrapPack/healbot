@@ -162,23 +162,43 @@ probe_twin pattern — and asserts the body carries no `!`cmd`` shell-substituti
    crew run): under the `bypassPermissions` default the idle footer reads
    `bypass permissions on` — the pre-bypass hint `? for shortcuts` stopped rendering
    the moment deb50ae landed, which timed out every spawn until the repin.
-   `HB_BUSY_MARKER`/`HB_TRUST_MARKER` remain SUSPECTED; both classifiers were observed
-   false-positiving on crewmate REPORT PROSE containing the words, and two startup
-   dialogs match no marker at all (the Chrome-extension offer, and the bypass
-   acceptance WARNING — the latter appears once per config root, capitalized, so it
-   cannot false-match the lowercase ready pin).
+   **CLOSED 2026-08-03, all three MEASURED against a live crewmate on 2.1.220.**
+   `HB_BUSY_MARKER` = `esc to interrupt`, confirmed in both directions — present in the
+   footer mid-turn, ABSENT at idle, which is what makes it discriminate. It shares that
+   footer line with the ready marker, so the screen case MUST test busy before ready;
+   that arm order was already right and is now guarded rather than incidental.
+   `HB_TRUST_MARKER` was the bare word `trust`, and the suspected false positive is now
+   a measured one: an idle crewmate asked to reply *"I trust this result."* classified as
+   `trust-dialog` — blocked on a human decision — while its hook channel read `stop` and
+   its footer read idle. The crew constraints file itself uses the word twice, so the
+   prose that trips it is prose this harness ships. Repinned to the dialog's own menu
+   item, `Yes, I trust this folder`, captured verbatim from a spawn into a never-trusted
+   directory. The two unmatched startup dialogs stand as recorded.
 3. **Verify the hook events live.** The wiring layer moved up a tier in the review's
    red-capable doctor test: the harness settings.json VALIDATES on the real 2.1.220
    binary (a control file with bad types produced typed errors naming the full valid
    event list, which includes SessionStart, Stop, and Notification), the pinned model is a
    documented alias, and hook commands run through `/bin/sh -c` with inherited
-   environment, so `$CLAUDE_CONFIG_DIR` expands. Still open: the events actually FIRING
-   with the expected stdin shape — the first-crewmate session settles it. The 2026-08-01
-   repin (`opus` / `xhigh` / `bypassPermissions`, §2) re-opens one strand of this: every
-   new key was verified present in the binary by grep, but the file has NOT been
-   re-validated by the binary since, and whether bypass mode suppresses the Notification
-   event for the dialogs it does NOT remove (bypass acceptance, per-directory trust) is
-   UNVERIFIED. Same first-crewmate session settles both.
+   environment, so `$CLAUDE_CONFIG_DIR` expands. **CLOSED 2026-08-03: all three events
+   FIRE with the expected stdin shape.** Evidenced from the state files themselves, one
+   per event: `session-start` from a fresh briefless spawn, `stop` after a crewmate's
+   turn, and `notification` from an idle crewmate — each carrying a real `session_id`
+   key, the crewmate's `cwd`, and a `transcript_path` under the redirected root. The
+   Notification strand closes with them: bypass mode does NOT suppress the event, so the
+   push channel covers the attention states rather than leaning on the screen backstop.
+
+   Two findings came out of that same session and are fixed here:
+   - **Every healthy crewmate read `ambiguous`.** `pane_current_command` for a live
+     session is `2.1.220` — the CLI renames its process to its own version — which
+     matched no arm of the liveness case, so the composite fell through to `ambiguous`
+     while the screen and hook channels both said idle. That is the one state the
+     firstmate skill says to escalate rather than trust, so the fleet was pointed at
+     healthy crew by design. A version-shaped arm now matches it.
+   - **`kill` does not release the pool lease.** A killed crewmate leaves its slot
+     `LEASED … holder pid DEAD`, and `pool.py release --force` is the manual repair. The
+     pool is fail-closed on purpose, so this is recorded as operator surface rather than
+     patched blind: the next slot lease after an un-released kill is the failure, and the
+     status line already names it.
 3b. **Settle where the harness login lands. CLOSED 2026-08-02: it ISOLATES.** A login under
    the redirected root creates its OWN login-keychain item; it does not reuse the owner's and
    does not write the `.credentials.json` fallback. The service name is derived from the
@@ -239,7 +259,7 @@ detector gained the CLI settings-migration containment and its mutation leg, →
 2026-08-03 merge when the settings-VALUE hardening from the parallel worktree joined it;
 `skip_max=2` throughout), because the first of the two was also split:
 
-- **`probe_fleet_claude.py:195`, the CLAUDE.md symlink** — now four rows, of which only the
+- **`probe_fleet_claude.py:198`, the CLAUDE.md symlink** — now four rows, of which only the
   last is environment-bound. The symlink is untracked and ignored by the whitelist's catch-all
   `*` (`harness/claude/.gitignore:15`), so `git worktree add` never populates it; it is
   materialized by `env.claude.sh:34-36`'s `ln -s` at source time. What a slot CAN check, and
@@ -250,7 +270,7 @@ detector gained the CLI settings-migration containment and its mutation leg, →
   ever run on. Only "the link is on disk right now" is guarded, by
   `claude-config-materialized`. Still do NOT "fix" a slot by creating the file: `gate.py:220`
   bans that name anywhere in the tracked tree, which is the whole reason for the convention.
-- **`probe_fleet_claude.py:427`, the skill twins**, guarded by `main-checkout`. Firstmate-only
+- **`probe_fleet_claude.py:501`, the skill twins**, guarded by `main-checkout`. Firstmate-only
   until later on 2026-08-02, when `healbot-traps.md` was found to have drifted for two days
   while the one guarded specimen held (HARNESS.md Traps has the row); now one aggregate row
   compares every `harness/skills/<name>.md` against `~/.agents/skills/<name>/SKILL.md`, which
