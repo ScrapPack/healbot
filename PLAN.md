@@ -22,7 +22,7 @@ correction. **Where they disagree, this table wins.**
 > **Citations below are pinned to THIS revision of this file — errata rev 4.** Two counters,
 > do not confuse them: the `(rev 2)` on the title line counts revisions of the *body*, which
 > is frozen as a historical record and does not move again; this one counts revisions of
-> *this table*, and it is the one to bump. `HARNESS.md:28` calls the header rev-3 — correct
+> *this table*, and it is the one to bump. `HARNESS.md` line 28 calls the header rev-3 — correct
 > for the Phase 6 state it described, one behind after this pass.
 >
 > Every `:NNN` in the *Where* column was silently wrong by exactly **+31** until Phase 5 —

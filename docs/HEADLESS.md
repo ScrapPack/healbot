@@ -236,7 +236,7 @@ this block at all.** The grid's own reconcile is the only reason it was ever ans
 
 ## 3. The control agent — build-order step 5
 
-`PLAN.md:378`: *"Control agent. Its own session in the same server, with tools to spawn / prompt /
+`PLAN.md:393`: *"Control agent. Its own session in the same server, with tools to spawn / prompt /
 abort / retire the others (`POST /session`, `/prompt_async`, `/abort`). Same registry you see."*
 
 Two pieces: five tools on the server plugin's `tool` hook, and
