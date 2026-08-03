@@ -37,8 +37,9 @@ from rig import Results  # noqa: E402
 # acquire recorded its own short-lived pid, so status called every live crewmate's slot
 # abandoned) adds eight — the pid-less default, both polarities of the unclaimed marker,
 # adopt's three refusal shapes, and both polarities of the DEAD note, whose branch no
-# earlier row had ever exercised. 32.
-r = Results(expect=32)
+# earlier row had ever exercised. 32. The push review adds the pid DOMAIN row (0 and
+# negatives refuse at 3, not just unparsable text). 33.
+r = Results(expect=33)
 TMP = tempfile.mkdtemp(prefix="probe-pool-")
 
 
@@ -200,6 +201,11 @@ try:
             and (pool.read_json(pool.lease_path(s1)) or {}).get("pid") is None, "")
     r.check("adopt with a malformed pid errors 3",
             pool.adopt("slot-1", "not-a-pid", if_owner="A") == 3, "")
+    r.check("adopt refuses pid 0 and negatives at 3 — the domain, not just the form",
+            pool.adopt("slot-1", 0, if_owner="A") == 3
+            and pool.adopt("slot-1", -1, if_owner="A") == 3,
+            "0 would contradict status's no-claim reading; a negative probes a process "
+            "GROUP and reads permanently alive (push-review finding)")
     r.check("adopt records the holder pid on the lease",
             pool.adopt("slot-1", os.getpid(), if_owner="A") == 0
             and (pool.read_json(pool.lease_path(s1)) or {}).get("pid") == os.getpid(), "")

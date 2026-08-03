@@ -305,10 +305,11 @@ walk had to keep working, and are recorded as such rather than assumed true.
 `docs/OPERATIONS.md` says *3 = a check could not run (claim unmeasured); 2 = a check ran and
 said no*. TESTED with `opencode/` hidden: the citations and twin checks both report that the
 derived checkout is absent and name the page that rebuilds it, and the gate exits **2**, not 3.
-VERIFIED at `gate/gate.py:124`: a Tier-1 row's state is decided by the subprocess exit code
-alone — `PASS` on 0, `ERROR` only when the code is `None` (the executable could not be
+VERIFIED, at the time, at line 124 of `gate/gate.py` (the tier-1 mapping as it then stood): a
+Tier-1 row's state was decided by the subprocess exit code
+alone — `PASS` on 0, `ERROR` only when the code was `None` (the executable could not be
 launched at `gate/gate.py:73`, or it timed out at `gate/gate.py:75`), `BLOCKED` for every
-other nonzero.
+other nonzero. Item D's close changed that exact line later the same day.
 
 The three exits an operator can actually reach here were each measured rather than reasoned
 about, after a push review pointed out that two of them were being asserted. TESTED in the
@@ -412,7 +413,11 @@ exactly when the holder died, which probe_pool now exercises with a real corpse 
 first exercise that branch has ever had. The tmux-server candidate was rejected because its
 claim is about the fleet rather than the holder: one server, many slots, and a killed
 crewmate would read ALIVE, inverting the measured error instead of fixing it.
-`os.kill(pid, 0)` stays, so the pool's Mac-only boundary is unchanged.
+`os.kill(pid, 0)` stays, so the pool's Mac-only boundary is unchanged. One residual
+accepted rather than locked, from the push review: an adopt racing a release inside a
+single spawn's sub-second window would resurrect the just-deleted lease file. The ghost
+lands in status's existing DEAD-note escalation, whose named repair is release, and a
+one-sided lock on adopt would be decoration while release stays lockless.
 
 **C. The cockpit's grid pane is below the sidebar's width gate.** 110 columns against a
 gate of 120, so the session route shows no session id in the default layout (finding 11).
@@ -429,8 +434,9 @@ tmux change would buy patch drift forever. Guarded by a probe row and its mutati
 consequence worth knowing: the `@hb_role` marker makes panes idempotent, so a fleet built
 before this change keeps its half-width grid until `down` and a fresh `start`.
 
-**D. Tier 1 cannot distinguish "could not run" from "ran and said no."** `gate/gate.py:124`
-maps every nonzero probe exit to BLOCKED, so for tier-1 probes the interface is coarser than
+**D. Tier 1 cannot distinguish "could not run" from "ran and said no."** Line 124 of
+`gate/gate.py`, as the walk found it,
+mapped every nonzero probe exit to BLOCKED, so for tier-1 probes the interface was coarser than
 `gate/GATE.MAP.md`'s "error is not blocked" paragraph describes (finding 13; the paragraph
 was cited here by line and GATE.MAP moved under it, so the pointer is by name now). Note the
 rest of the gate does make the
@@ -441,8 +447,10 @@ would close it.
 
 CLOSED 2026-08-03: the sentinel is exit 3, the code the gate itself exits with on ERROR, so
 the probes now speak the lattice the gate already speaks (harness/pool.py's docstring
-declared the same one). Exactly the two declared refusals adopted it — `probe_citations` and
-`probe_twin` on the absent checkout — and nothing else: crashes and red verdicts stay
+declared the same one). The three declared refusals adopted it — `probe_citations` and
+`probe_twin` on the absent checkout in tier 1, and `probe_backend` on a checkout holding no
+recorded transcript in tier 2, the third one found by the push review after this close first
+claimed exactly two — and nothing else: crashes and red verdicts stay
 BLOCKED, deliberately, so a broken probe cannot downgrade a real finding to retry-shaped.
 The tier-1 mapping and tier2's row mapping each changed in place by one line, which is why
 every `gate/gate.py` citation above still resolves. TESTED end to end through the real hook

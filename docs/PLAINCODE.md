@@ -17,7 +17,7 @@ mechanizing because it is nearly free, and worth nothing as a slop detector.
 
 The slop signal lives in the other layer. `--select F,SIM,ARG,ERA,PLR,C90` finds 214,
 led by magic-value comparisons and unmanaged `open()` calls. The table below carries
-the counts, the worst complexity hit is `run_refusal.py`'s `main` at 27, and
+the counts, the worst complexity hit is `plainspec-check.py`'s `check_text` at 50, and
 commented-out code is absent. And the failure mode the owner actually named,
 bloat from speculative abstraction and indirection, is invisible to every linter. That
 half became plaincode's five judgment rules, on plainspec's contract: a JUDGE pass
@@ -72,15 +72,18 @@ enforcement arrives change by change with no gate edit. The price, measured: the
 edit to a heavy offender owes that file's backlog, 59 findings on
 `probe_study_driver.py`. A one-time clean-slate sweep instead pays all 671 at once.
 
-One finding is self-inflicted this very day: the cannot-measure sentinel's trailing
-comment on the tier-1 mapping line is 190 columns. Rewrapping it would shift cited
-lines, the citation-hygiene coupling in miniature. That is the honest cost of flipping
+Two findings are self-inflicted this very day: the cannot-measure sentinel's trailing
+comments on the tier-1 and tier-2 mapping lines run 190 and 178 columns. Rewrapping the
+first would shift six documents' cited lines, and the second stays one line to match
+it, the citation-hygiene coupling in miniature. That is the honest cost of flipping
 enforcement late, and the flip stays the owner's call, not this page's.
 
 ## What was deliberately not done
 
 No `ruff.toml` landed, so the gate's behavior is unchanged. No repo-wide fix sweep ran,
-so every number above is still true of the tree. The skill governs sessions that invoke
+and every number above remains true of the a9ca1c2 tree it names. The commits beside
+this page moved the tree: 58 tracked files, 460 PEP 8-layer findings under the same
+pinned ruff. The skill governs sessions that invoke
 it, the same standing plainspec holds, and the twins are installed so both harnesses
 load it. If the owner flips adoption, run the sweep, and this page's baseline becomes a
 before picture, which is what a dated record is for.

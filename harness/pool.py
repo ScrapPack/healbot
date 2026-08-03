@@ -282,7 +282,15 @@ def adopt(slot, pid, if_owner=None):
     hold the work — for a crew spawn, the pane's root process — declares itself here once
     it exists. Refusals mirror release: not-leased and wrong-owner are 2; a malformed pid
     is 3. The rewrite goes temp-then-rename so a concurrent status never reads a torn
-    lease; acquire's O_EXCL create guards creation races only."""
+    lease; acquire's O_EXCL create guards creation races only.
+
+    ACCEPTED RESIDUAL, recorded rather than locked: a release landing between this
+    function's read and its os.replace would be resurrected as a stale lease file. The
+    window is the sub-second gap inside a single spawn, releasing a slot leased moments
+    ago races the operator against their own command, and the failure lands in status's
+    existing DEAD-note escalation (the recorded holder is gone, release is the named
+    repair). A one-sided flock here would be decoration while release stays lockless;
+    same posture as hb_auth_state's accepted snapshot race (hb-fleet.sh, AUTH)."""
     slot = f"{SLOTS}/{slot_name(slot)}"
     lease = read_json(lease_path(slot))
     if lease is None:
@@ -293,9 +301,17 @@ def adopt(slot, pid, if_owner=None):
               flush=True)
         return 2
     try:
+        # bool is an int subclass and int("x") is the usual failure; both land here. The
+        # domain check matters because status's `if pid:` treats 0 as no-claim — adopting
+        # 0 would make adopt's success line and status contradict each other — and a
+        # negative pid probes a process GROUP, reading permanently alive.
+        if isinstance(pid, bool):
+            raise ValueError
         pid = int(pid)
+        if pid < 1:
+            raise ValueError
     except (TypeError, ValueError):
-        print(f"adopt needs --pid <integer>, got {pid!r}\n{USAGE}", flush=True)
+        print(f"adopt needs --pid <positive integer>, got {pid!r}\n{USAGE}", flush=True)
         return 3
     lease["pid"] = pid
     tmp = lease_path(slot) + ".tmp"

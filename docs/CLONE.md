@@ -112,7 +112,9 @@ losing one must. `rig.py`'s docstring carries the measurement that motivated it.
 
 The table records the Phase 9 measurements. Since 2026-08-03 the `probe_twin` refusal exits
 **3**, not 1 — the declared cannot-measure sentinel the gate maps to ERROR (docs/E2E.md
-item D) — and `probe_citations` refuses an absent checkout the same way.
+item D) — and `probe_citations` refuses an absent checkout the same way. So does
+`probe_backend`'s no-transcript refusal, via a flag its finally folds into the exit, so its
+SHORT RUN summary still prints.
 
 `probe_turn_predicate` is the one probe that genuinely survives a fresh clone, and it is worth
 saying why: it depends only on **tracked** repo files — `harness/config/opencode/plugin/healbot.ts`

@@ -256,16 +256,20 @@ now carry a declared environment requirement (`rig.Env`, `gate/GATE.MAP.md` "Tie
 slot"): in a slot they record a counted, named SKIP and the tier's verdict is `declared-skip`;
 in the main checkout the requirements hold, the rows run, and the verdict is a plain `pass`.
 
-The probe is 53 rows now (floor 20 → 33 on 2026-08-01, → 44 on 2026-08-02 with the cockpit build
+The probe is 84 rows now (floor 20 → 33 on 2026-08-01, → 44 on 2026-08-02 with the cockpit build
 (auth preflight + the re-runnable-`start` pane marker), → 50 the same day when the twin check
 generalized from firstmate to the whole skills population, → 52 later that day when the auth
 detector gained the CLI settings-migration containment and its mutation leg, → 53 at the
 2026-08-03 merge when the settings-VALUE hardening from the parallel worktree joined it,
 → 68 at the 2026-08-03 operator walk (docs/E2E.md §6), → 79 at the same day's open-items
-close (docs/E2E.md §7, items C and E plus the two defects the close's own test measured);
-`skip_max=2` throughout), because the first of the two was also split:
+close (docs/E2E.md §7, items C and E plus the two defects the close's own test measured),
+→ 81 and → 83 at the item-B and item-A closes, → 84 when the close's push review hardened
+two of its own predicates; `skip_max=2` throughout — the floor at
+`Results(expect=` in the probe is the only owner of the current number, and this chain is
+its correction trail), because the first of the two was also split:
 
-- **`probe_fleet_claude.py:211`, the CLAUDE.md symlink** — now four rows, of which only the
+- **`probe_fleet_claude.py:216`** — *"the banned-filename convention: safe name tracked,
+  real name materialized"* — the CLAUDE.md symlink, now four rows, of which only the
   last is environment-bound. The symlink is untracked and ignored by the whitelist's catch-all
   `*` (`harness/claude/.gitignore:15`), so `git worktree add` never populates it; it is
   materialized by `env.claude.sh:34-36`'s `ln -s` at source time. What a slot CAN check, and
@@ -276,7 +280,8 @@ close (docs/E2E.md §7, items C and E plus the two defects the close's own test 
   ever run on. Only "the link is on disk right now" is guarded, by
   `claude-config-materialized`. Still do NOT "fix" a slot by creating the file: `gate.py:220`
   bans that name anywhere in the tracked tree, which is the whole reason for the convention.
-- **`probe_fleet_claude.py:727`, the skill twins**, guarded by `main-checkout`. Firstmate-only
+- **`probe_fleet_claude.py:746`** — *"skill twins: harness/skills/*.md vs
+  ~/.agents/skills/<name>/SKILL.md"* — guarded by `main-checkout`. Firstmate-only
   until later on 2026-08-02, when `healbot-traps.md` was found to have drifted for two days
   while the one guarded specimen held (HARNESS.md Traps has the row); now one aggregate row
   compares every `harness/skills/<name>.md` against `~/.agents/skills/<name>/SKILL.md`, which

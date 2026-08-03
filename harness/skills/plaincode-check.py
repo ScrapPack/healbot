@@ -11,8 +11,9 @@ JUDGE checklist and never fails the exit code, plainspec-check's contract exactl
     python3 plaincode-check.py --selftest     every fixture, fire and clean legs both
 
 Exit codes follow the gate's lattice (gate/GATE.MAP.md, exit codes): 0 clean of
-violations (JUDGE flags allowed), 1 at least one violation, 2 usage or unreadable input,
-3 ruff absent, the declared cannot-measure refusal. The engine is ruff because the gate's
+violations (JUDGE flags allowed), 1 at least one violation, 2 usage, 3 ruff absent or
+ruff itself broken, the declared cannot-measure refusal. A missing or unreadable INPUT
+file surfaces as ruff's own E902 finding and exits 1 with the rest. The engine is ruff because the gate's
 own lint row already runs ruff on every changed Python file (gate/gate.py lint()), so the
 dependency is one the repo has already accepted, and adopting the same selects repo-wide
 is a one-file decision recorded in docs/PLAINCODE.md, deliberately not taken here.
@@ -66,8 +67,12 @@ def find_ruff():
 
 
 def run_ruff(ruff, select, paths, stdin_text=None, stdin_name=None):
-    """-> (findings, hard_error). Findings are ruff's JSON rows; a nonzero exit with
-    unparsable output is a hard error (ruff itself broke, not the code under check)."""
+    """-> (findings, hard_error). Findings are ruff's JSON rows. ruff's exit contract is
+    0 clean and 1 findings, JSON on stdout either way; any other exit means ruff ITSELF
+    broke (usage error, unloadable config) with EMPTY stdout and the reason on stderr —
+    which `json.loads(p.stdout or "[]")` alone would launder into a clean run. The first
+    shipped draft did exactly that and reported a false green on a malformed select
+    (push-review finding, 2026-08-03); the returncode gate below is the repair."""
     cmd = [ruff, "check", "--no-cache", "--line-length", WIDTH,
            "--select", select, "--output-format", "json"]
     if stdin_text is not None:
@@ -75,6 +80,8 @@ def run_ruff(ruff, select, paths, stdin_text=None, stdin_name=None):
         p = subprocess.run(cmd, input=stdin_text, capture_output=True, text=True)
     else:
         p = subprocess.run([*cmd, *paths], capture_output=True, text=True)
+    if p.returncode not in (0, 1):
+        return [], ((p.stderr or p.stdout).strip() or f"ruff exited {p.returncode}")[:300]
     try:
         return json.loads(p.stdout or "[]"), None
     except ValueError:
@@ -95,10 +102,16 @@ def report(findings, label):
 LONG = "x = 1  #" + " padding" * 15
 BRANCHY = "def f(n):\n" + "".join(
     f"    if n == {i}:\n        n += {i}\n" for i in range(11)) + "    return n\n"
+WIDE_BRANCHY = "def f(n):\n" + "".join(
+    f"    if n == {i}:\n        n += {i}\n" for i in range(13)) + "    return n\n"
+RETURNY = "def f(n):\n" + "".join(
+    f"    if n == {i}:\n        return {i}\n" for i in range(7)) + "    return n\n"
+LONG_BODY = "def f():\n" + "".join(f"    x{i} = {i}\n" for i in range(51)) + "    return x0\n"
 FIXTURES = [
     ("layout: a line past 100 columns", "E501", LONG + "\n", "x = 1\n"),
     ("layout: import below code", "E402", "x = 1\nimport os\nprint(os.sep)\n",
      "import os\nprint(os.sep)\n"),
+    ("layout: trailing whitespace", "W291", "x = 1 \n", "x = 1\n"),
     ("slop: unused import", "F401", "import os\n", "import os\nprint(os.sep)\n"),
     ("slop: unused local", "F841", "def f():\n    y = 1\n    return 2\n",
      "def f():\n    y = 1\n    return y\n"),
@@ -110,6 +123,11 @@ FIXTURES = [
      "def f(p):\n    fh = open(p)\n    return fh.read()\n",
      "def f(p):\n    with open(p) as fh:\n        return fh.read()\n"),
     ("slop: complexity past 10", "C901", BRANCHY, "def f(n):\n    return n\n"),
+    ("slop: more than twelve branches", "PLR0912", WIDE_BRANCHY,
+     "def f(n):\n    return n\n"),
+    ("slop: more than six returns", "PLR0911", RETURNY, "def f(n):\n    return n\n"),
+    ("slop: more than fifty statements", "PLR0915", LONG_BODY,
+     "def f():\n    return 0\n"),
     ("slop: more than five arguments", "PLR0913",
      "def f(a, b, c, d, e, g):\n    return a + b + c + d + e + g\n",
      "def f(a, b, c):\n    return a + b + c\n"),

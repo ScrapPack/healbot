@@ -520,7 +520,12 @@ spawn)
     fi
   fi
   if [ "$USE_SLOT" = 1 ]; then
-    DIR="$("$VENVPY" "$FLEET_ROOT/pool.py" acquire --owner "$HB_RUN" --purpose "crew $NAME" | tail -1)"
+    # Capture first, tail second: a pipeline's status is tail's, so the old one-liner
+    # swallowed acquire's exit 2 (pool exhausted) and fell through to a --dir refusal
+    # naming a flag the operator never passed (push-review finding, 2026-08-03).
+    ACQ_OUT="$("$VENVPY" "$FLEET_ROOT/pool.py" acquire --owner "$HB_RUN" --purpose "crew $NAME")" \
+      || { echo "hb-fleet: no slot leased (the pool's reason is above)." >&2; exit 2; }
+    DIR="$(printf '%s\n' "$ACQ_OUT" | tail -1)"
   fi
   [ -d "${DIR:-}" ] || { echo "hb-fleet: --dir does not exist: '$DIR'" >&2; exit 2; }
   DIR="$(cd "$DIR" && pwd)"
@@ -540,6 +545,24 @@ spawn)
   }
 
   SID="$(uuidgen | tr 'A-Z' 'a-z')"
+
+  # Transcript path is knowable BEFORE the pane exists because we chose the uuid, and
+  # computing it here — rather than after the split, where it lived until the push
+  # review read the gap — means its failure path holds no crewmate: the lease releases
+  # cleanly and no pane outlives an aborted spawn. backend.transcript_path owns the slug
+  # rule AND honors CLAUDE_CONFIG_DIR — crew transcripts land under the REDIRECTED root,
+  # not ~/.claude (review finding; SHIP.md §3).
+  if ! TRANSCRIPT="$("$VENVPY" - "$SID" "$DIR" "$REPO" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[3] + "/.carryover/verified")
+import backend
+print(backend.transcript_path(sys.argv[1], sys.argv[2]))
+PY
+)"; then
+    echo "hb-fleet: could not compute ${NAME}'s transcript path (backend.transcript_path failed — traceback above)" >&2
+    release_slot_on_failure
+    exit 1
+  fi
 
   # Guardrail 7: never respawn an existing pane. Identify the placeholder (a bare shell
   # no manifest row claims) so it can be killed AFTER a successful split; if the split
@@ -575,10 +598,13 @@ spawn)
     fi
   fi
   if [ -n "$PLACEHOLDER" ]; then
-    t kill-pane -t "$PLACEHOLDER"
+    # Best-effort from here down to the title: a placeholder that vanished between the
+    # scan and this kill, or a layout/title call failing, must not end spawn under
+    # set -eu with the lease held and a live untracked crewmate (push-review finding).
+    t kill-pane -t "$PLACEHOLDER" 2>/dev/null || true
   fi
-  t select-layout -t "$HB_RUN:crew" tiled
-  t select-pane -t "$PANE" -T "$NAME"
+  t select-layout -t "$HB_RUN:crew" tiled 2>/dev/null || true
+  t select-pane -t "$PANE" -T "$NAME" 2>/dev/null || true
 
   if [ "$USE_SLOT" = 1 ]; then
     # The lease records no holder pid at acquire: the acquiring process is this spawn's
@@ -591,17 +617,6 @@ spawn)
       echo "hb-fleet: could not record ${NAME}'s pane pid on the slot lease — pool.py status will make no liveness claim" >&2
     fi
   fi
-
-  # Transcript path is knowable BEFORE the session exists because we chose the uuid, and
-  # backend.transcript_path owns the slug rule AND honors CLAUDE_CONFIG_DIR — crew
-  # transcripts land under the REDIRECTED root, not ~/.claude (review finding; SHIP.md §3).
-  TRANSCRIPT="$("$VENVPY" - "$SID" "$DIR" "$REPO" <<'PY'
-import sys
-sys.path.insert(0, sys.argv[3] + "/.carryover/verified")
-import backend
-print(backend.transcript_path(sys.argv[1], sys.argv[2]))
-PY
-)"
 
   # The slot field is kill's discriminator: a --slot spawn's dir IS a pool worktree, but
   # nothing in the row said so before this field, so kill could not know a lease was at
@@ -888,6 +903,13 @@ kill)
       echo "hb-fleet: the pool did not release $NAME's slot (its reason is above). If it holds work:"
       echo "hb-fleet:   copy the work out, then: $VENVPY $FLEET_ROOT/pool.py release '$CREWDIR' [--discard-work]"
     fi
+  elif [ "$SLOT" = "1" ]; then
+    # The guard above needs the slot worktree and the venv python; when either is gone
+    # (a venv rebuild between spawn and kill, an out-of-band worktree removal), the
+    # release cannot run — and a silent skip would break this verb's own contract, so
+    # the skip is spoken (push-review finding: the already-gone branch warned, this
+    # branch did not).
+    echo "hb-fleet: $NAME held a pool slot but the release cannot run (slot worktree or rig venv missing) — the lease may still be held. Check: $VENVPY $FLEET_ROOT/pool.py status" >&2
   fi
   ;;
 

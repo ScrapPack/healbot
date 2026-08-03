@@ -54,6 +54,7 @@ CORPUS_DOTTED = Env(
 )
 
 r = Results(expect=16, skip_max=1)
+refusal = 0  # 3 after a declared cannot-measure refusal; the finally folds it into the exit
 try:
     # --- the program exists -------------------------------------------------------------------
     binary = shutil.which(backend.CLAUDE)
@@ -91,12 +92,15 @@ try:
     # ending `None.jsonl` and dies with a bare FileNotFoundError from inside backend.py.
     # MEASURED 2026-08-02 by cloning the repo and running the suite in it: a fresh clone is a
     # directory Claude Code has never run in, so this is the ordinary first-run state, not an
-    # exotic one. Exit was already 1 and the rows above already say what is missing, so this
-    # is Phase 9's legibility fix (probe_twin's `read()`) applied to the second probe that
-    # needed it — the cause instead of a traceback. Deliberately NOT a declared skip: the
-    # rows below are the whole probe, and a skip that large would be a green run measuring
-    # almost nothing.
+    # exotic one. Phase 9's legibility fix (probe_twin's `read()`) applied to the second
+    # probe that needed it — the cause instead of a traceback. Deliberately NOT a declared
+    # skip: the rows below are the whole probe, and a skip that large would be a green run
+    # measuring almost nothing. Exit 3 since 2026-08-03, the declared cannot-measure
+    # sentinel (docs/E2E.md item D; tier2 maps a probe's 3 to ERROR): the named input is
+    # absent, so the claim is unmeasured. Via the `refusal` flag, because a sys.exit inside
+    # this try is replaced by the finally's own verdict exit.
     if not sid:
+        refusal = 3
         print(
             f"\n!! no Claude Code transcript for {HEALBOT}.\n"
             f"   Looked in {backend.CC_PROJECTS}/{ours}/ (CLAUDE_CONFIG_DIR selects the corpus).\n"
@@ -105,7 +109,7 @@ try:
             "   once — `. harness/env.claude.sh && claude` for the harness corpus — and re-run.\n",
             file=sys.stderr,
         )
-        raise SystemExit(1)
+        raise SystemExit(3)
 
     records = backend.read_transcript(sid, HEALBOT)
     msgs = backend.normalize(records, sid)
@@ -213,4 +217,4 @@ except Exception:
     r.check("UNEXPECTED EXCEPTION", False, "see traceback above")
 finally:
     ok = r.summary()
-    sys.exit(0 if ok else 1)
+    sys.exit(refusal or (0 if ok else 1))

@@ -42,7 +42,8 @@ to the range machinery that test reverted.
 
 Commit identities and dates are pinned, so the scratch shas are stable and this probe's
 output is byte-identical across runs: MEASURED 2026-08-03 at 19 rows (the sentinel legs
-included), 4 runs, one sha256 over the full output. Tier 2 hashes nothing, so nothing depends on that; it is measured because
+included), 4 runs, one sha256 over the full output. Tier 2 hashes nothing, so nothing
+depends on that; it is measured because
 the gate's determinism note says to measure rather than hope, and it is what Tier 1
 membership would require. Needs `ruff` on PATH, the same requirement the gate's own lint
 stage carries.

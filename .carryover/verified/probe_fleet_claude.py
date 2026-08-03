@@ -88,8 +88,11 @@ CONFIG_MATERIALIZED = Env(
 # releasing the lease they just took — each with a mutation leg. 79. The item-B close
 # (finding 8) adds two: spawn adopting the pane pid onto the lease, with its leg. 81. The
 # item-A close (finding 1) adds two: doctor's exit reading the tier verdicts, with its
-# leg. 83.
-r = Results(expect=83, skip_max=2)
+# leg. 83. The push review of the close (2026-08-03) found two predicates a mutant could
+# survive — the slot conjunct anchored to guard lines instead of the heredoc argv, and
+# the release position read without the branch boundary — and hardening the first splits
+# its leg in two. 84.
+r = Results(expect=84, skip_max=2)
 
 
 def sh_n(path):
@@ -589,12 +592,19 @@ try:
         work and keeps the lease on refusal, so the call is safe by the pool's own design —
         conditionally scoped (--if-owner) to this run's lease, and only AFTER the pane is
         dead. Comments are stripped for the same reason the finding-15 predicate strips
-        them: the comment above the call names both the verb and the flag."""
+        them: the comment above the call names both the verb and the flag.
+
+        The success path is found STRUCTURALLY, not by raw position: the already-gone
+        branch ends at its `exit 2`, and the release must sit after that terminator. The
+        first version compared raw find() offsets, which a mutant moving the release INTO
+        the already-gone branch — the exact placement that branch's own comment forbids —
+        satisfied in green (push-review finding, 2026-08-03)."""
         branch = s.split("\nkill)", 1)[-1].split("\ndown)", 1)[0]
         code = "\n".join(ln for ln in branch.split("\n") if not ln.lstrip().startswith("#"))
-        kill_at = code.find("t kill-pane")
-        rel = code.find('pool.py" release')
-        return kill_at > 0 and rel > kill_at and '--if-owner "$HB_RUN"' in code
+        gone, _, success = code.partition("exit 2")
+        return ("t kill-pane" in gone and 'pool.py" release' in success
+                and 'pool.py" release' not in gone
+                and '--if-owner "$HB_RUN"' in success)
 
     def _mutate_kill(s, old, new):
         # Scope a replacement to the kill branch. spawn's release_slot_on_failure calls
@@ -618,15 +628,20 @@ try:
         # The release path above is gated on a persisted discriminator: a --slot spawn's
         # dir IS a pool worktree, but the manifest row never said so before this field.
         # Old rows lack it; manifest_get exits 3 on a missing field, read as not-a-slot.
+        # Both conjuncts anchor to the heredoc INVOCATION, not to any '"$USE_SLOT"'
+        # occurrence: three guard lines in the spawn block carry that token too, so the
+        # first version's loose conjunct passed a mutant that hardcoded the argv to "0" —
+        # every row slot=0, kill never releasing, in green (push-review finding).
         block = spawn_block(s)
-        return '"slot"' in block and '"$USE_SLOT"' in block
+        return '"slot": int(use_slot)' in block and '"$USE_SLOT" <<' in block
 
     r.check("spawn's manifest row records whether the dir is a leased pool slot",
             manifest_records_the_slot(src),
             "kill's release attempt is gated on this field")
     r.check("MUTATION: dropping the slot field from the row is caught",
-            not manifest_records_the_slot(src.replace('"slot": int(use_slot)', "", 1)
-                                          .replace('"$USE_SLOT"', '"0"', 1)))
+            not manifest_records_the_slot(src.replace('"slot": int(use_slot)', "", 1)))
+    r.check("MUTATION: an argv hardcoded to \"0\" (every row not-a-slot) is caught",
+            not manifest_records_the_slot(src.replace('"$USE_SLOT" <<', '"0" <<', 1)))
 
     def spawn_reensures_crew_window(s):
         # kill-pane on the LAST crewmate destroys the now-empty crew window, and spawn's
@@ -650,16 +665,18 @@ try:
     def spawn_failures_settle_the_lease(s):
         # A spawn that dies AFTER the pool lease must release it — MEASURED 2026-08-03:
         # a refused split leaked slot-1 to a crewmate that never existed. The shape is one
-        # helper and exactly three call sites (both split refusals and the boot death),
-        # so the count is 4 with the definition. EQUALITY, not a floor: a fourth call
-        # site would mean someone wired the ready-wait timeout, where the crewmate is
-        # alive in its pane and a release would reset the tree under a live process.
+        # helper and exactly four call sites (the transcript computation, both split
+        # refusals, and the boot death), so the count is 5 with the definition.
+        # EQUALITY, not a floor: a fifth call site would mean someone wired the
+        # ready-wait timeout, where the crewmate is alive in its pane and a release
+        # would reset the tree under a live process.
         block = spawn_block(s)
-        return block.count("release_slot_on_failure") == 4
+        return block.count("release_slot_on_failure") == 5
 
     r.check("spawn's post-lease failure paths settle the lease they just took",
             spawn_failures_settle_the_lease(src),
-            "definition + both split refusals + the boot death; the timeout keeps it")
+            "definition + transcript failure + both split refusals + the boot death; "
+            "the timeout keeps it")
     r.check("MUTATION: a failure path that keeps the lease is caught",
             not spawn_failures_settle_the_lease(_mutate_spawn(
                 src, "      release_slot_on_failure\n      exit 1", "      exit 1")))
