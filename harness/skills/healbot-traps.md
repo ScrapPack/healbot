@@ -108,3 +108,8 @@ you recognize the red when it fires. HARNESS.md's "Traps" section is the canonic
   tracked file mid-session. Other pin values pass byte-identical. Repair: revert the file,
   keep the stamp. The main checkout is stamped; the pool slots are not. Guard:
   probe_fleet_claude.py's settings row asserts the pin VALUE (opus) with a mutation leg.
+  Contained at both known triggers since 2026-08-02: the doctor restores its own trigger
+  (check_claude_auth snapshots and byte-restores the settings file, stamp kept), and the
+  fleet contains it at hb_auth_state, which stamps the root before every spawn and
+  preflight. Residual: a hand-run interactive `claude` in an unstamped root still fires
+  once; repair unchanged.
