@@ -91,18 +91,16 @@ CONFIG_MATERIALIZED = Env(
 # leg. 83. The push review of the close (2026-08-03) found two predicates a mutant could
 # survive — the slot conjunct anchored to guard lines instead of the heredoc argv, and
 # the release position read without the branch boundary — and hardening the first splits
-# its leg in two. 84. The 2026-08-04 close of item E's named residual adds nine: `down`
+# its leg in two. 84. The 2026-08-04 close of item E's named residual adds eleven: `down`
 # settling every slot lease the fleet still holds, in the order crew-then-leases-then-
-# session, with eight mutation legs covering all nine conjuncts of _down_order — no
-# release, an unscoped release, the release left after kill-session (the pushed first
-# version, MEASURED dead from the bridge pane), no session kill, no crew kill (a worktree
-# reset under a live crewmate), a release hoisted into the census, any statement left after
-# kill-session, and a census read through pane_dead, which is the one leg flipping two
-# conjuncts and it asserts both. The review of that push found two position legs dying on
-# the crew-kill conjunct instead of the ones they named, which is why the predicate returns
-# its conjuncts separately and each leg names the ones it flips; the review of the REPAIR
-# then found the coverage claim wider than the legs, one conjunct having none. 93.
-r = Results(expect=93, skip_max=2)
+# session; the mutation legs in DOWN_LEGS, each asserting the conjuncts it names; a row
+# holding the defect leg's crew kill TRUE so it cannot pass on the wrong clause; and a
+# COMPUTED coverage row. Four review rounds walked this one item down a ladder, each
+# finding a claim wider than the thing behind it: the fix was dead on the captain's path,
+# then two legs died on a conjunct neither named, then one conjunct had no leg under a
+# description saying all did, then the leg-to-conjunct ratio was wrong. The coverage claim
+# is computed rather than written because of that ladder. 95.
+r = Results(expect=95, skip_max=2)
 
 
 def sh_n(path):
@@ -740,41 +738,59 @@ try:
             down_settles_the_leases(src),
             "docs/E2E.md section 7E: kill settled its own crewmate's lease and down left "
             "every one of them held")
-    r.check("MUTATION: a down that never calls release is caught (release_after_crew)",
-            not _down_order(_mutate_down(src, 'pool.py" release',
-                                         'pool.py" status'))["release_after_crew"])
-    r.check("MUTATION: an unconditional release, no --if-owner, is caught (scoped)",
-            not _down_order(_mutate_down(src, ' --if-owner "$HB_RUN"', ''))["scoped"])
-    r.check("MUTATION: the measured defect, the release left after kill-session has "
-            "SIGHUPed the caller, is caught (release_before_session, with the crew kill "
-            "still present so it cannot die on that instead)",
-            (lambda v: v["has_crew_kill"] and not v["release_before_session"])(
-                _down_order(_pushed_defect_shape(src))))
-    r.check("MUTATION: a down that never kills the session at all is caught "
-            "(has_session_kill)",
-            not _down_order(_mutate_down(src, 't kill-session -t "$HB_RUN"',
-                                         't list-sessions'))["has_session_kill"])
-    r.check("MUTATION: a down that never kills the crew window, so release resets a tree "
-            "under a live crewmate, is caught (has_crew_kill)",
-            not _down_order(_mutate_down(src, 't kill-window -t "$HB_RUN:crew"',
-                                         't list-windows -t "$HB_RUN"'))["has_crew_kill"])
-    r.check("MUTATION: a release hoisted into the census, ahead of both kills, is caught "
-            "(release_not_in_census)",
-            not _down_order(_mutate_down(
-                src, '  HELD=""\n',
-                '  HELD=""\n  "$VENVPY" "$FLEET_ROOT/pool.py" release "$D" '
-                '--if-owner "$HB_RUN"\n'))["release_not_in_census"])
-    r.check("MUTATION: a statement left after kill-session, dead on the captain's path, "
-            "is caught (nothing_after_session)",
-            not _down_order(_mutate_down(
-                src, '  t kill-session -t "$HB_RUN" 2>/dev/null || true\n',
-                '  t kill-session -t "$HB_RUN" 2>/dev/null || true\n'
-                '  echo "hb-fleet: this line never runs from the bridge pane"\n'
-            ))["nothing_after_session"])
-    r.check("MUTATION: censusing with pane_dead, which drops lease-holding corpses, is "
-            "caught (census_first and no_pane_dead)",
-            (lambda v: not v["census_first"] and not v["no_pane_dead"])(
-                _down_order(_mutate_down(src, 'pane_exists "$P"', 'pane_dead "$P"'))))
+    # (label, mutant source, the conjuncts this leg ASSERTS). The named keys are asserted
+    # individually, so no leg can pass by dying on a clause it did not claim. A mutation is
+    # free to flip OTHER conjuncts as a side effect and several do — the defect shape and
+    # the crew-kill leg each flip four — which is harmless for exactly that reason, and is
+    # why the leg count is not a coverage claim. The coverage row below COMPUTES the claim
+    # instead of stating it: four consecutive review rounds found this description wider
+    # than the legs standing behind it (a leg per conjunct, then one to one), so it stops
+    # being a description. A conjunct added to _down_order with no leg goes red there.
+    DOWN_LEGS = [
+        ("a down that never calls release",
+         _mutate_down(src, 'pool.py" release', 'pool.py" status'),
+         ["release_after_crew"]),
+        ("an unconditional release, no --if-owner",
+         _mutate_down(src, ' --if-owner "$HB_RUN"', ''),
+         ["scoped"]),
+        ("the measured defect, the release left after kill-session has SIGHUPed the "
+         "caller (has_crew_kill asserted TRUE in the same row, so it cannot die there)",
+         _pushed_defect_shape(src),
+         ["release_before_session"]),
+        ("a down that never kills the session at all",
+         _mutate_down(src, 't kill-session -t "$HB_RUN"', 't list-sessions'),
+         ["has_session_kill"]),
+        ("a down that never kills the crew window, so release resets a tree under a live "
+         "crewmate",
+         _mutate_down(src, 't kill-window -t "$HB_RUN:crew"', 't list-windows -t "$HB_RUN"'),
+         ["has_crew_kill"]),
+        ("a release hoisted into the census, ahead of both kills",
+         _mutate_down(src, '  HELD=""\n',
+                      '  HELD=""\n  "$VENVPY" "$FLEET_ROOT/pool.py" release "$D" '
+                      '--if-owner "$HB_RUN"\n'),
+         ["release_not_in_census"]),
+        ("a statement left after kill-session, dead on the captain's path",
+         _mutate_down(src, '  t kill-session -t "$HB_RUN" 2>/dev/null || true\n',
+                      '  t kill-session -t "$HB_RUN" 2>/dev/null || true\n'
+                      '  echo "hb-fleet: this line never runs from the bridge pane"\n'),
+         ["nothing_after_session"]),
+        ("censusing with pane_dead, which drops lease-holding corpses",
+         _mutate_down(src, 'pane_exists "$P"', 'pane_dead "$P"'),
+         ["census_first", "no_pane_dead"]),
+    ]
+    for _label, _mutant, _keys in DOWN_LEGS:
+        _v = _down_order(_mutant)
+        r.check("MUTATION: %s is caught (%s)" % (_label, ", ".join(_keys)),
+                all(not _v[k] for k in _keys))
+
+    r.check("the defect leg keeps the crew kill, so it cannot pass on the wrong conjunct",
+            _down_order(_pushed_defect_shape(src))["has_crew_kill"],
+            "the review's finding on the 8d20353 push: two legs deleting the same literal "
+            "both died on has_crew_kill rather than on the positions they named")
+    r.check("every conjunct down_settles_the_leases decides on has a leg asserting it",
+            {k for _, _, ks in DOWN_LEGS for k in ks} == set(_down_order(src)),
+            "COMPUTED, not written: has_session_kill shipped with no leg once, under a "
+            "description that said every conjunct had one")
 
     def spawn_reensures_crew_window(s):
         # kill-pane on the LAST crewmate destroys the now-empty crew window, and spawn's
