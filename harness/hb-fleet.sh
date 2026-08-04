@@ -285,6 +285,14 @@ pane_dead() {  # 0 = dead or missing, 1 = alive pane
   return 0
 }
 
+pane_exists() {  # 0 = the pane id is still listed in the crew window, ALIVE OR A CORPSE
+  # Deliberately NOT pane_dead, for the same reason kill avoids it: that helper answers
+  # "dead OR missing" and would drop exactly the corpses that still hold pool slots
+  # (remain-on-exit is on). `down` asks a different question, was this crewmate ever
+  # killed, and a pane tmux still lists was not.
+  t list-panes -t "$HB_RUN:crew" -F '#{pane_id}' 2>/dev/null | awk -v p="$1" '$1==p{f=1} END{exit !f}'
+}
+
 # The range is the header's command list PLUS the selector paragraph, and it is a LINE range
 # into this file: inserting a command line above shifts the paragraph and silently truncates
 # the last line of it. Bumped 22 -> 23 for `preflight`, 23 -> 25 for `start`/`help`.
@@ -916,9 +924,49 @@ kill)
   ;;
 
 down)
+  # Settle the slot leases this fleet still holds, finding 9's other half (docs/E2E.md
+  # section 7E): kill learned to settle its own crewmate's lease, and `down` went on taking
+  # the whole session and leaving every one of them leased. Two orderings, both deliberate.
+  # The CENSUS runs BEFORE kill-session, because afterwards there is no pane left to ask. The
+  # RELEASE runs AFTER it, because release restores the worktree, and resetting a tree under a
+  # live process is the thing spawn's ready-wait branch refuses to do for the same reason.
+  # The discriminator is a pane that still EXISTS, corpse included: a crewmate whose pane is
+  # GONE was killed, and kill settled that lease already (or said why it could not).
+  # Residual, named rather than guarded: tmux restarts pane ids at %0 with a new server, so a
+  # row left by a fleet on an older server can collide with a live pane id. The worst it buys
+  # is a release aimed at a slot this same HB_RUN holds, which `down` is tearing down anyway,
+  # or a "did not release" line over a lease that is already gone. Neither can reach work: the
+  # pool refuses any slot holding it, and --if-owner refuses another run's lease.
+  HELD=""
+  for N in $(manifest_names); do
+    [ "$(manifest_get "$N" slot 2>/dev/null || echo 0)" = "1" ] || continue
+    P="$(manifest_get "$N" pane 2>/dev/null || true)"
+    { [ -n "$P" ] && pane_exists "$P"; } || continue
+    HELD="$HELD $N"
+  done
+
   t kill-session -t "$HB_RUN" 2>/dev/null || true
   echo "hb-fleet: session $HB_RUN down. kill-session is SIGHUP — in-flight turns aborted, transcripts intact."
   echo "hb-fleet: resume any crewmate from an env.claude.sh shell: claude --resume <sid> (see $MANIFEST)"
+
+  for N in $HELD; do
+    D="$(manifest_get "$N" dir 2>/dev/null || true)"
+    # The same spoken skip kill carries: a release that could not run must never read like
+    # one that did.
+    if [ ! -d "${D:-}" ] || [ ! -x "$VENVPY" ]; then
+      echo "hb-fleet: $N held a pool slot but the release cannot run (slot worktree or rig venv missing) — the lease may still be held. Check: $VENVPY $FLEET_ROOT/pool.py status" >&2
+      continue
+    fi
+    # if-guarded for kill's reason and one more: a refusal exits 2, and under set -eu that
+    # would end `down` here, stranding every lease after this one. That is the bug this
+    # closes, rebuilt inside its own fix.
+    if "$VENVPY" "$FLEET_ROOT/pool.py" release "$D" --if-owner "$HB_RUN"; then
+      echo "hb-fleet: released $N's pool slot; it is leasable again."
+    else
+      echo "hb-fleet: the pool did not release $N's slot (its reason is above). If it holds work:"
+      echo "hb-fleet:   copy the work out, then: $VENVPY $FLEET_ROOT/pool.py release '$D' [--discard-work]"
+    fi
+  done
   ;;
 
 *) usage;;

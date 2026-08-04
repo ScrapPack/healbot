@@ -487,3 +487,33 @@ now release the just-taken lease, while the ready-wait timeout deliberately keep
 that crewmate is alive in its pane and may still boot. Still open from the same family:
 `down` strands every slot crewmate's lease. Named here rather than silently widened into
 this close.
+
+CLOSED 2026-08-04: `down` settles them itself, on `kill`'s terms: a plain
+`pool.py release --if-owner`, the pool's own lines uncaptured, the fleet framing the
+outcome. Two orderings carry the fix and both are deliberate. The CENSUS of which slot
+crewmates still hold panes runs BEFORE `kill-session`, because afterwards there is no pane
+left to ask. The RELEASE runs AFTER it, because release restores the worktree, and
+resetting a tree under a live process is what spawn's ready-wait branch already refuses to
+do for the same reason. The discriminator is a pane that still EXISTS, corpse included:
+`remain-on-exit` leaves dead panes holding slots, while a pane that is GONE belongs to a
+crewmate `kill` already settled, which is why this branch reads a new `pane_exists` helper
+rather than `pane_dead`.
+
+TESTED on a throwaway fleet with its own socket session and state dir (`HB_RUN=hb-downtest`,
+crew panes and manifest rows built to stand in for spawned crewmates, so no crewmate had to
+be paid for): a clean slot released and came back free; a slot holding an uncommitted file
+was refused by name with the lease kept and `down` still exiting 0; a row whose pane was
+already gone was skipped in silence rather than re-released; and a refusal on the first row
+did not strand the second. That last one is the `set -eu` regression the if-guard exists
+for, and the one this fix could most easily have rebuilt inside itself. Guarded by a probe
+row in `probe_fleet_claude.py` whose mutation legs include a release moved ahead of
+`kill-session` and a census read through `pane_dead`.
+
+One residual named rather than guarded, in the branch's own comment: tmux restarts pane ids
+at `%0` with a new server, so a manifest row left by a fleet on an older server can collide
+with a live pane id and be censused as still held. What that buys is bounded in both
+directions: a release aimed at a slot this same `HB_RUN` holds, which `down` is tearing
+down anyway, or a "did not release" line over a lease that is already gone. Neither can
+reach work: the pool refuses any slot holding it, and `--if-owner` refuses another run's
+lease. Guarding it properly would need a server generation in the manifest row, which is a
+new field for a failure whose worst case is a redundant line.

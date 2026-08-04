@@ -91,8 +91,12 @@ CONFIG_MATERIALIZED = Env(
 # leg. 83. The push review of the close (2026-08-03) found two predicates a mutant could
 # survive — the slot conjunct anchored to guard lines instead of the heredoc argv, and
 # the release position read without the branch boundary — and hardening the first splits
-# its leg in two. 84.
-r = Results(expect=84, skip_max=2)
+# its leg in two. 84. The 2026-08-04 close of item E's named residual adds five: `down`
+# settling every slot lease the fleet still holds, with legs for a down that never
+# releases, an unscoped release, a release moved ahead of kill-session (a worktree reset
+# under a live crewmate), and a census read through pane_dead, which drops the corpses
+# that still hold leases. 89.
+r = Results(expect=89, skip_max=2)
 
 
 def sh_n(path):
@@ -642,6 +646,56 @@ try:
             not manifest_records_the_slot(src.replace('"slot": int(use_slot)', "", 1)))
     r.check("MUTATION: an argv hardcoded to \"0\" (every row not-a-slot) is caught",
             not manifest_records_the_slot(src.replace('"$USE_SLOT" <<', '"0" <<', 1)))
+
+    def down_settles_the_leases(s):
+        """Finding 9's OTHER half (docs/E2E.md section 7E): kill learned to settle its own
+        crewmate's lease while `down` went on taking the whole session and leaving every
+        slot crewmate's lease held. Two orderings carry the fix, so the predicate reads
+        both. The CENSUS of which panes still exist, corpses included, must run BEFORE
+        kill-session, because afterwards there is no pane left to ask. The RELEASE must run
+        AFTER it, because release restores the worktree, and resetting a tree under a live
+        process is what spawn's ready-wait branch refuses to do for the same reason.
+
+        Comments are stripped first for the finding-15 reason, and here it is not a
+        precaution: this branch's own comment names kill-session twice ABOVE the command,
+        so an unstripped partition would split at the prose and read the real ordering
+        backwards, in green.
+
+        pane_dead is the wrong helper and its absence is asserted: it answers dead-OR-
+        missing, which drops exactly the corpses that still hold leases (remain-on-exit is
+        on), where a pane tmux still lists is one kill never took."""
+        branch = s.split("\ndown)", 1)[-1].split("\n*) usage", 1)[0]
+        code = "\n".join(ln for ln in branch.split("\n") if not ln.lstrip().startswith("#"))
+        census, sep, after = code.partition("kill-session")
+        return (sep != "" and "pane_exists" in census and "pane_dead" not in code
+                and 'pool.py" release' in after and 'pool.py" release' not in census
+                and '--if-owner "$HB_RUN"' in after)
+
+    def _mutate_down(s, old, new):
+        # Scoped for _mutate_kill's reason, one branch further up: spawn and kill both call
+        # the same verb with the same flag EARLIER in the file, so an unscoped
+        # first-occurrence replace mutates one of THEM and leaves down's copy intact, a
+        # leg that passes against correct code.
+        head, sep, tail = s.partition("\ndown)")
+        return head + sep + tail.replace(old, new, 1)
+
+    r.check("down settles every slot lease the fleet still holds, after the session dies",
+            down_settles_the_leases(src),
+            "docs/E2E.md section 7E: kill settled its own crewmate's lease and down left "
+            "every one of them held")
+    r.check("MUTATION: a down that never calls release is caught",
+            not down_settles_the_leases(_mutate_down(src, 'pool.py" release',
+                                                     'pool.py" status')))
+    r.check("MUTATION: an unconditional release (no --if-owner) is caught",
+            not down_settles_the_leases(_mutate_down(src, ' --if-owner "$HB_RUN"', '')))
+    r.check("MUTATION: releasing BEFORE kill-session, under a live crewmate, is caught",
+            not down_settles_the_leases(_mutate_down(
+                src, 'HELD=""',
+                'HELD=""\n  "$VENVPY" "$FLEET_ROOT/pool.py" release "$D" '
+                '--if-owner "$HB_RUN"')))
+    r.check("MUTATION: censusing with pane_dead, which drops lease-holding corpses, is caught",
+            not down_settles_the_leases(_mutate_down(src, 'pane_exists "$P"',
+                                                     'pane_dead "$P"')))
 
     def spawn_reensures_crew_window(s):
         # kill-pane on the LAST crewmate destroys the now-empty crew window, and spawn's
