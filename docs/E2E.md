@@ -525,7 +525,8 @@ for. All four were re-run after the reorder and still hold, and the case that ma
 is the fifth: `down` from the bridge pane, which now releases.
 
 Guarded by a probe row in `probe_fleet_claude.py` reading all three positions, with a
-mutation leg per conjunct. The limit is stated there rather than implied: no static leg can
+mutation leg for every conjunct it decides on (one leg flips two of them and asserts both;
+the rest are one to one). The limit is stated there rather than implied: no static leg can
 see a SIGHUP. What the rows lock in is the order the live test proved, and the live test is
 the evidence.
 
@@ -534,10 +535,17 @@ in this item that a green was narrower than its label.** Both new position legs 
 deleting the same literal, `t kill-window`, so both died on the has-a-crew-kill conjunct
 rather than on the positions they were named for. The leg titled "the measured defect is
 caught" was not catching it by the clause written to catch it, and two conjuncts had no
-exercise at all. The predicate now returns its conjuncts separately and every leg asserts
-the single one it flips, with the defect leg additionally asserting that the crew kill
-SURVIVES its mutation so it cannot die on that instead. The defect shape is rebuilt by
-moving the real `kill-session` line rather than by deleting a literal.
+exercise at all. The predicate now returns its conjuncts separately and every leg names the
+ones it flips, with the defect leg additionally asserting that the crew kill SURVIVES its
+mutation so it cannot die on that instead. The defect shape is rebuilt by moving the real
+`kill-session` line rather than by deleting a literal.
+
+The review of that repair then made the same point a fourth time, one level up: the repair
+described itself as a leg per conjunct while the predicate decided on nine and the legs
+covered eight, leaving *has_session_kill*, a `down` that never kills the session at all,
+with no exercise. The hole is filled and the claim is now the measured one. Worth recording
+as a shape rather than as an incident: every round of this item found a label wider than
+what stood behind it. First the fix, then the guard, then the guard's own description.
 
 Two consequences of that round are now rules rather than observations. **Nothing follows
 `kill-session` in the branch**, because anything there is dead on the captain's path; the

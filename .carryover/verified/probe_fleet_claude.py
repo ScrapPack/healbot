@@ -91,16 +91,18 @@ CONFIG_MATERIALIZED = Env(
 # leg. 83. The push review of the close (2026-08-03) found two predicates a mutant could
 # survive — the slot conjunct anchored to guard lines instead of the heredoc argv, and
 # the release position read without the branch boundary — and hardening the first splits
-# its leg in two. 84. The 2026-08-04 close of item E's named residual adds eight: `down`
+# its leg in two. 84. The 2026-08-04 close of item E's named residual adds nine: `down`
 # settling every slot lease the fleet still holds, in the order crew-then-leases-then-
-# session, with a leg per conjunct — no release, an unscoped release, the release left
-# after kill-session (the pushed first version, MEASURED dead from the bridge pane), no
-# crew kill (a worktree reset under a live crewmate), a release hoisted into the census,
-# any statement left after kill-session, and a census read through pane_dead. The review of
-# that push found the first two position legs both dying on the crew-kill conjunct instead
-# of the ones they named, which is why the predicate now returns its conjuncts separately
-# and every leg asserts the single one it flips. 92.
-r = Results(expect=92, skip_max=2)
+# session, with eight mutation legs covering all nine conjuncts of _down_order — no
+# release, an unscoped release, the release left after kill-session (the pushed first
+# version, MEASURED dead from the bridge pane), no session kill, no crew kill (a worktree
+# reset under a live crewmate), a release hoisted into the census, any statement left after
+# kill-session, and a census read through pane_dead, which is the one leg flipping two
+# conjuncts and it asserts both. The review of that push found two position legs dying on
+# the crew-kill conjunct instead of the ones they named, which is why the predicate returns
+# its conjuncts separately and each leg names the ones it flips; the review of the REPAIR
+# then found the coverage claim wider than the legs, one conjunct having none. 93.
+r = Results(expect=93, skip_max=2)
 
 
 def sh_n(path):
@@ -748,6 +750,10 @@ try:
             "still present so it cannot die on that instead)",
             (lambda v: v["has_crew_kill"] and not v["release_before_session"])(
                 _down_order(_pushed_defect_shape(src))))
+    r.check("MUTATION: a down that never kills the session at all is caught "
+            "(has_session_kill)",
+            not _down_order(_mutate_down(src, 't kill-session -t "$HB_RUN"',
+                                         't list-sessions'))["has_session_kill"])
     r.check("MUTATION: a down that never kills the crew window, so release resets a tree "
             "under a live crewmate, is caught (has_crew_kill)",
             not _down_order(_mutate_down(src, 't kill-window -t "$HB_RUN:crew"',
