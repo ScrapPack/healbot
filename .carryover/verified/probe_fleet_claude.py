@@ -91,13 +91,16 @@ CONFIG_MATERIALIZED = Env(
 # leg. 83. The push review of the close (2026-08-03) found two predicates a mutant could
 # survive — the slot conjunct anchored to guard lines instead of the heredoc argv, and
 # the release position read without the branch boundary — and hardening the first splits
-# its leg in two. 84. The 2026-08-04 close of item E's named residual adds six: `down`
+# its leg in two. 84. The 2026-08-04 close of item E's named residual adds eight: `down`
 # settling every slot lease the fleet still holds, in the order crew-then-leases-then-
-# session, with legs for a down that never releases, an unscoped release, a release left
-# after kill-session (the pushed first version, MEASURED dead from the bridge pane), a
-# release with the crew still alive (a worktree reset under it), and a census read through
-# pane_dead, which drops the corpses that still hold leases. 90.
-r = Results(expect=90, skip_max=2)
+# session, with a leg per conjunct — no release, an unscoped release, the release left
+# after kill-session (the pushed first version, MEASURED dead from the bridge pane), no
+# crew kill (a worktree reset under a live crewmate), a release hoisted into the census,
+# any statement left after kill-session, and a census read through pane_dead. The review of
+# that push found the first two position legs both dying on the crew-kill conjunct instead
+# of the ones they named, which is why the predicate now returns its conjuncts separately
+# and every leg asserts the single one it flips. 92.
+r = Results(expect=92, skip_max=2)
 
 
 def sh_n(path):
@@ -679,16 +682,37 @@ try:
         pane_dead is the wrong helper and its absence is asserted: it answers dead-OR-
         missing, which drops exactly the corpses that still hold leases (remain-on-exit is
         on), where a pane tmux still lists is one kill never took."""
+        return all(_down_order(s).values())
+
+    def _down_order(s):
+        """The conjuncts, separately, so a mutation leg can name the ONE it flips and prove
+        it did not die on a different clause. Written after the review found both new legs
+        deleting the same literal and therefore both dying on has_crew_kill rather than on
+        the positions they were named for: two legs, one reason, and the conjunct each
+        claimed to exercise never exercised at all. That is this suite's signature defect,
+        found inside the guard written to close it."""
         branch = s.split("\ndown)", 1)[-1].split("\n*) usage", 1)[0]
         code = "\n".join(ln for ln in branch.split("\n") if not ln.lstrip().startswith("#"))
-        pre_session, sep, post_session = code.partition("kill-session")
-        census, csep, post_crew = pre_session.partition("kill-window")
-        return (sep != "" and csep != ""
-                and "pane_exists" in census and "pane_dead" not in code
-                and 'pool.py" release' in post_crew
-                and 'pool.py" release' not in census
-                and 'pool.py" release' not in post_session
-                and '--if-owner "$HB_RUN"' in post_crew)
+        # Anchored to `t kill-…`, the tmux helper INVOCATION, not to the bare verb. The
+        # branch's own down-notice echo carries the words "kill-session is SIGHUP", and
+        # partitioning on the verb split there instead of at the command, which read every
+        # later statement as dead code. Comment-stripping does not reach it: this one is a
+        # string, not a comment. Third appearance of prose contaminating a positional read
+        # in this file, after finding 15's guard and this row's own docstring.
+        pre_session, sep, post_session = code.partition("t kill-session")
+        census, csep, post_crew = pre_session.partition("t kill-window")
+        tail = post_session.split("\n", 1)[1] if "\n" in post_session else ""
+        return {
+            "has_session_kill": sep != "",
+            "has_crew_kill": csep != "",
+            "census_first": "pane_exists" in census,
+            "no_pane_dead": "pane_dead" not in code,
+            "release_after_crew": 'pool.py" release' in post_crew,
+            "release_not_in_census": 'pool.py" release' not in census,
+            "release_before_session": 'pool.py" release' not in post_session,
+            "nothing_after_session": all(ln.strip() in ("", ";;") for ln in tail.split("\n")),
+            "scoped": '--if-owner "$HB_RUN"' in post_crew,
+        }
 
     def _mutate_down(s, old, new):
         # Scoped for _mutate_kill's reason, one branch further up: spawn and kill both call
@@ -698,27 +722,53 @@ try:
         head, sep, tail = s.partition("\ndown)")
         return head + sep + tail.replace(old, new, 1)
 
+    def _pushed_defect_shape(s):
+        """The 2d7d7f3 source shape, reconstructed: kill-session moved back ahead of the
+        release loop while the crew-window kill STAYS. Built by moving the real line rather
+        than by deleting a literal, so has_crew_kill survives and the leg can only be
+        caught by the position conjuncts, which is the whole point of it."""
+        moved = _mutate_down(s, '  t kill-session -t "$HB_RUN" 2>/dev/null || true\n', "")
+        return _mutate_down(moved,
+                            '  t kill-window -t "$HB_RUN:crew" 2>/dev/null || true\n',
+                            '  t kill-window -t "$HB_RUN:crew" 2>/dev/null || true\n'
+                            '  t kill-session -t "$HB_RUN" 2>/dev/null || true\n')
+
     r.check("down settles every slot lease the fleet still holds: crew, then leases, "
             "then session",
             down_settles_the_leases(src),
             "docs/E2E.md section 7E: kill settled its own crewmate's lease and down left "
             "every one of them held")
-    r.check("MUTATION: a down that never calls release is caught",
-            not down_settles_the_leases(_mutate_down(src, 'pool.py" release',
-                                                     'pool.py" status')))
-    r.check("MUTATION: an unconditional release (no --if-owner) is caught",
-            not down_settles_the_leases(_mutate_down(src, ' --if-owner "$HB_RUN"', '')))
-    r.check("MUTATION: the measured defect, releasing after kill-session has SIGHUPed the "
-            "caller, is caught",
-            not down_settles_the_leases(_mutate_down(src, 't kill-window -t "$HB_RUN:crew"',
-                                                     't kill-session -t "$HB_RUN"')))
-    r.check("MUTATION: releasing with the crew still alive, resetting a tree under it, "
-            "is caught",
-            not down_settles_the_leases(_mutate_down(src, 't kill-window -t "$HB_RUN:crew"',
-                                                     't list-windows -t "$HB_RUN"')))
-    r.check("MUTATION: censusing with pane_dead, which drops lease-holding corpses, is caught",
-            not down_settles_the_leases(_mutate_down(src, 'pane_exists "$P"',
-                                                     'pane_dead "$P"')))
+    r.check("MUTATION: a down that never calls release is caught (release_after_crew)",
+            not _down_order(_mutate_down(src, 'pool.py" release',
+                                         'pool.py" status'))["release_after_crew"])
+    r.check("MUTATION: an unconditional release, no --if-owner, is caught (scoped)",
+            not _down_order(_mutate_down(src, ' --if-owner "$HB_RUN"', ''))["scoped"])
+    r.check("MUTATION: the measured defect, the release left after kill-session has "
+            "SIGHUPed the caller, is caught (release_before_session, with the crew kill "
+            "still present so it cannot die on that instead)",
+            (lambda v: v["has_crew_kill"] and not v["release_before_session"])(
+                _down_order(_pushed_defect_shape(src))))
+    r.check("MUTATION: a down that never kills the crew window, so release resets a tree "
+            "under a live crewmate, is caught (has_crew_kill)",
+            not _down_order(_mutate_down(src, 't kill-window -t "$HB_RUN:crew"',
+                                         't list-windows -t "$HB_RUN"'))["has_crew_kill"])
+    r.check("MUTATION: a release hoisted into the census, ahead of both kills, is caught "
+            "(release_not_in_census)",
+            not _down_order(_mutate_down(
+                src, '  HELD=""\n',
+                '  HELD=""\n  "$VENVPY" "$FLEET_ROOT/pool.py" release "$D" '
+                '--if-owner "$HB_RUN"\n'))["release_not_in_census"])
+    r.check("MUTATION: a statement left after kill-session, dead on the captain's path, "
+            "is caught (nothing_after_session)",
+            not _down_order(_mutate_down(
+                src, '  t kill-session -t "$HB_RUN" 2>/dev/null || true\n',
+                '  t kill-session -t "$HB_RUN" 2>/dev/null || true\n'
+                '  echo "hb-fleet: this line never runs from the bridge pane"\n'
+            ))["nothing_after_session"])
+    r.check("MUTATION: censusing with pane_dead, which drops lease-holding corpses, is "
+            "caught (census_first and no_pane_dead)",
+            (lambda v: not v["census_first"] and not v["no_pane_dead"])(
+                _down_order(_mutate_down(src, 'pane_exists "$P"', 'pane_dead "$P"'))))
 
     def spawn_reensures_crew_window(s):
         # kill-pane on the LAST crewmate destroys the now-empty crew window, and spawn's

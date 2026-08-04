@@ -524,11 +524,30 @@ did not strand the second. That last one is the `set -eu` regression the if-guar
 for. All four were re-run after the reorder and still hold, and the case that matters most
 is the fifth: `down` from the bridge pane, which now releases.
 
-Guarded by a probe row in `probe_fleet_claude.py` reading all three positions, whose
-mutation legs include the measured defect itself (the release left after `kill-session`), a
-release with the crew still alive, and a census read through `pane_dead`. The limit is
-stated there rather than implied: no static leg can see a SIGHUP. What the rows lock in is
-the order the live test proved, and the live test is the evidence.
+Guarded by a probe row in `probe_fleet_claude.py` reading all three positions, with a
+mutation leg per conjunct. The limit is stated there rather than implied: no static leg can
+see a SIGHUP. What the rows lock in is the order the live test proved, and the live test is
+the evidence.
+
+**The review of the repair found the repair's own guard defective, which is the third time
+in this item that a green was narrower than its label.** Both new position legs mutated by
+deleting the same literal, `t kill-window`, so both died on the has-a-crew-kill conjunct
+rather than on the positions they were named for. The leg titled "the measured defect is
+caught" was not catching it by the clause written to catch it, and two conjuncts had no
+exercise at all. The predicate now returns its conjuncts separately and every leg asserts
+the single one it flips, with the defect leg additionally asserting that the crew kill
+SURVIVES its mutation so it cannot die on that instead. The defect shape is rebuilt by
+moving the real `kill-session` line rather than by deleting a literal.
+
+Two consequences of that round are now rules rather than observations. **Nothing follows
+`kill-session` in the branch**, because anything there is dead on the captain's path; the
+two closing notices moved above it and the first reads "taking down", which is what is true
+when it prints. A probe leg asserts the branch ends at that call. And the predicate anchors
+on `t kill-session`, the helper invocation, not on the bare verb: the down-notice echo
+contains the words *kill-session is SIGHUP*, so partitioning on the verb split at the
+message and read every later statement as dead code. Comment-stripping cannot reach that
+one, because it is a string. It is the third appearance in this file of prose contaminating
+a positional read, after finding 15's guard and this row's own docstring.
 
 One residual named rather than guarded, in the branch's own comment: tmux restarts pane ids
 at `%0` with a new server, so a manifest row left by a fleet on an older server can collide

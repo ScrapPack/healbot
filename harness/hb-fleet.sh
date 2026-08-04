@@ -980,9 +980,15 @@ down)
     fi
   done
 
-  t kill-session -t "$HB_RUN" 2>/dev/null || true
-  echo "hb-fleet: session $HB_RUN down. kill-session is SIGHUP — in-flight turns aborted, transcripts intact."
+  # Nothing follows kill-session, and that is now the branch's rule rather than an accident
+  # of where these two lines sat: anything after it is dead when `down` runs from the bridge
+  # pane, which is the seat the card sends the captain to. The wording is "taking down"
+  # because that is what is true at the moment it prints. Neither line is readable from
+  # inside anyway (the pane is destroyed a statement later), so this buys the invariant, not
+  # the message: a probe leg asserts the branch ends here.
+  echo "hb-fleet: taking $HB_RUN down. kill-session is SIGHUP — in-flight turns aborted, transcripts intact."
   echo "hb-fleet: resume any crewmate from an env.claude.sh shell: claude --resume <sid> (see $MANIFEST)"
+  t kill-session -t "$HB_RUN" 2>/dev/null || true
   ;;
 
 *) usage;;
