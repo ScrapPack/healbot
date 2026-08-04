@@ -926,12 +926,26 @@ kill)
 down)
   # Settle the slot leases this fleet still holds, finding 9's other half (docs/E2E.md
   # section 7E): kill learned to settle its own crewmate's lease, and `down` went on taking
-  # the whole session and leaving every one of them leased. Two orderings, both deliberate.
-  # The CENSUS runs BEFORE kill-session, because afterwards there is no pane left to ask. The
-  # RELEASE runs AFTER it, because release restores the worktree, and resetting a tree under a
-  # live process is the thing spawn's ready-wait branch refuses to do for the same reason.
-  # The discriminator is a pane that still EXISTS, corpse included: a crewmate whose pane is
-  # GONE was killed, and kill settled that lease already (or said why it could not).
+  # the whole session and leaving every one of them leased.
+  #
+  # THE ORDER IS THE WHOLE FIX, and it is crew, then leases, then session. kill-session is
+  # SIGHUP and the captain's seat is the bridge shell INSIDE this session (see the card
+  # above; `start` ends in attach), so a release loop placed after kill-session is killed
+  # with the pane that is running it. MEASURED 2026-08-04, from the bridge pane: session
+  # gone, slot-1 still leased, the strand rebuilt inside its own fix and green on every
+  # static leg. Killing the crew WINDOW first leaves the bridge, and therefore this script,
+  # alive to finish; kill-session goes last and takes both.
+  # The crew window dies before any release for the reason spawn's ready-wait branch keeps
+  # its lease: release restores the worktree, and a reset under a live process is the one
+  # thing the pool cannot undo. Same SIGHUP-then-reset race kill has carried since its own
+  # close, deliberately not widened here.
+  # The census runs first, before anything is killed, because afterwards there is no pane
+  # left to ask. The discriminator is a pane that still EXISTS, corpse included: a crewmate
+  # whose pane is GONE was killed, and kill settled that lease already (or said why it
+  # could not).
+  # Residual: `down` run from a CREW pane still kills its own caller before the releases.
+  # The captain's seat is the bridge, and a crewmate tearing down its own fleet is not a
+  # supported flow.
   # Residual, named rather than guarded: tmux restarts pane ids at %0 with a new server, so a
   # row left by a fleet on an older server can collide with a live pane id. The worst it buys
   # is a release aimed at a slot this same HB_RUN holds, which `down` is tearing down anyway,
@@ -945,9 +959,7 @@ down)
     HELD="$HELD $N"
   done
 
-  t kill-session -t "$HB_RUN" 2>/dev/null || true
-  echo "hb-fleet: session $HB_RUN down. kill-session is SIGHUP — in-flight turns aborted, transcripts intact."
-  echo "hb-fleet: resume any crewmate from an env.claude.sh shell: claude --resume <sid> (see $MANIFEST)"
+  t kill-window -t "$HB_RUN:crew" 2>/dev/null || true
 
   for N in $HELD; do
     D="$(manifest_get "$N" dir 2>/dev/null || true)"
@@ -967,6 +979,10 @@ down)
       echo "hb-fleet:   copy the work out, then: $VENVPY $FLEET_ROOT/pool.py release '$D' [--discard-work]"
     fi
   done
+
+  t kill-session -t "$HB_RUN" 2>/dev/null || true
+  echo "hb-fleet: session $HB_RUN down. kill-session is SIGHUP — in-flight turns aborted, transcripts intact."
+  echo "hb-fleet: resume any crewmate from an env.claude.sh shell: claude --resume <sid> (see $MANIFEST)"
   ;;
 
 *) usage;;

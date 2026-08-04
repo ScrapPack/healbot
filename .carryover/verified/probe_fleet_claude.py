@@ -91,12 +91,13 @@ CONFIG_MATERIALIZED = Env(
 # leg. 83. The push review of the close (2026-08-03) found two predicates a mutant could
 # survive — the slot conjunct anchored to guard lines instead of the heredoc argv, and
 # the release position read without the branch boundary — and hardening the first splits
-# its leg in two. 84. The 2026-08-04 close of item E's named residual adds five: `down`
-# settling every slot lease the fleet still holds, with legs for a down that never
-# releases, an unscoped release, a release moved ahead of kill-session (a worktree reset
-# under a live crewmate), and a census read through pane_dead, which drops the corpses
-# that still hold leases. 89.
-r = Results(expect=89, skip_max=2)
+# its leg in two. 84. The 2026-08-04 close of item E's named residual adds six: `down`
+# settling every slot lease the fleet still holds, in the order crew-then-leases-then-
+# session, with legs for a down that never releases, an unscoped release, a release left
+# after kill-session (the pushed first version, MEASURED dead from the bridge pane), a
+# release with the crew still alive (a worktree reset under it), and a census read through
+# pane_dead, which drops the corpses that still hold leases. 90.
+r = Results(expect=90, skip_max=2)
 
 
 def sh_n(path):
@@ -650,26 +651,44 @@ try:
     def down_settles_the_leases(s):
         """Finding 9's OTHER half (docs/E2E.md section 7E): kill learned to settle its own
         crewmate's lease while `down` went on taking the whole session and leaving every
-        slot crewmate's lease held. Two orderings carry the fix, so the predicate reads
-        both. The CENSUS of which panes still exist, corpses included, must run BEFORE
-        kill-session, because afterwards there is no pane left to ask. The RELEASE must run
-        AFTER it, because release restores the worktree, and resetting a tree under a live
-        process is what spawn's ready-wait branch refuses to do for the same reason.
+        slot crewmate's lease held. The fix is an ORDER, crew then leases then session, and
+        this predicate reads all three positions.
 
-        Comments are stripped first for the finding-15 reason, and here it is not a
-        precaution: this branch's own comment names kill-session twice ABOVE the command,
-        so an unstripped partition would split at the prose and read the real ordering
-        backwards, in green.
+        The RELEASE must precede kill-session. That is not tidiness: kill-session is SIGHUP
+        and the captain's seat is the bridge shell inside the session, so a release loop
+        after it is killed with the pane running it. MEASURED 2026-08-04 from the bridge
+        pane on the first version of this close: session gone, slot-1 still leased, and
+        every static leg here green over it. The advisory review found it; this row's
+        earlier form had the wrong order LOCKED IN.
+
+        The release must also follow the crew WINDOW's death, because release restores the
+        worktree and a reset under a live process is the one thing the pool cannot undo.
+        Killing the crew window rather than the session is what leaves the bridge, and so
+        the script, alive to finish.
+
+        The stated limit, because a green here is narrower than it looks: no static leg can
+        see a SIGHUP. What these rows lock in is the order the live test proved, and the
+        live test is the evidence, recorded in docs/E2E.md section 7E.
+
+        Comments are stripped first for the finding-15 reason: this branch's comment names
+        kill-session above the command, so an unstripped partition would split at the prose
+        and read the ordering off the explanation rather than off the code. Stated without
+        a count, because the earlier form of this docstring carried one and it was wrong
+        (the advisory review's second finding on the 2d7d7f3 push).
 
         pane_dead is the wrong helper and its absence is asserted: it answers dead-OR-
         missing, which drops exactly the corpses that still hold leases (remain-on-exit is
         on), where a pane tmux still lists is one kill never took."""
         branch = s.split("\ndown)", 1)[-1].split("\n*) usage", 1)[0]
         code = "\n".join(ln for ln in branch.split("\n") if not ln.lstrip().startswith("#"))
-        census, sep, after = code.partition("kill-session")
-        return (sep != "" and "pane_exists" in census and "pane_dead" not in code
-                and 'pool.py" release' in after and 'pool.py" release' not in census
-                and '--if-owner "$HB_RUN"' in after)
+        pre_session, sep, post_session = code.partition("kill-session")
+        census, csep, post_crew = pre_session.partition("kill-window")
+        return (sep != "" and csep != ""
+                and "pane_exists" in census and "pane_dead" not in code
+                and 'pool.py" release' in post_crew
+                and 'pool.py" release' not in census
+                and 'pool.py" release' not in post_session
+                and '--if-owner "$HB_RUN"' in post_crew)
 
     def _mutate_down(s, old, new):
         # Scoped for _mutate_kill's reason, one branch further up: spawn and kill both call
@@ -679,7 +698,8 @@ try:
         head, sep, tail = s.partition("\ndown)")
         return head + sep + tail.replace(old, new, 1)
 
-    r.check("down settles every slot lease the fleet still holds, after the session dies",
+    r.check("down settles every slot lease the fleet still holds: crew, then leases, "
+            "then session",
             down_settles_the_leases(src),
             "docs/E2E.md section 7E: kill settled its own crewmate's lease and down left "
             "every one of them held")
@@ -688,11 +708,14 @@ try:
                                                      'pool.py" status')))
     r.check("MUTATION: an unconditional release (no --if-owner) is caught",
             not down_settles_the_leases(_mutate_down(src, ' --if-owner "$HB_RUN"', '')))
-    r.check("MUTATION: releasing BEFORE kill-session, under a live crewmate, is caught",
-            not down_settles_the_leases(_mutate_down(
-                src, 'HELD=""',
-                'HELD=""\n  "$VENVPY" "$FLEET_ROOT/pool.py" release "$D" '
-                '--if-owner "$HB_RUN"')))
+    r.check("MUTATION: the measured defect, releasing after kill-session has SIGHUPed the "
+            "caller, is caught",
+            not down_settles_the_leases(_mutate_down(src, 't kill-window -t "$HB_RUN:crew"',
+                                                     't kill-session -t "$HB_RUN"')))
+    r.check("MUTATION: releasing with the crew still alive, resetting a tree under it, "
+            "is caught",
+            not down_settles_the_leases(_mutate_down(src, 't kill-window -t "$HB_RUN:crew"',
+                                                     't list-windows -t "$HB_RUN"')))
     r.check("MUTATION: censusing with pane_dead, which drops lease-holding corpses, is caught",
             not down_settles_the_leases(_mutate_down(src, 'pane_exists "$P"',
                                                      'pane_dead "$P"')))

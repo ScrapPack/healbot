@@ -490,14 +490,30 @@ this close.
 
 CLOSED 2026-08-04: `down` settles them itself, on `kill`'s terms: a plain
 `pool.py release --if-owner`, the pool's own lines uncaptured, the fleet framing the
-outcome. Two orderings carry the fix and both are deliberate. The CENSUS of which slot
-crewmates still hold panes runs BEFORE `kill-session`, because afterwards there is no pane
-left to ask. The RELEASE runs AFTER it, because release restores the worktree, and
-resetting a tree under a live process is what spawn's ready-wait branch already refuses to
-do for the same reason. The discriminator is a pane that still EXISTS, corpse included:
-`remain-on-exit` leaves dead panes holding slots, while a pane that is GONE belongs to a
-crewmate `kill` already settled, which is why this branch reads a new `pane_exists` helper
-rather than `pane_dead`.
+outcome. The fix is an ORDER, and the order is crew, then leases, then session. The census
+of which slot crewmates still hold panes runs first, before anything is killed, because
+afterwards there is no pane left to ask. The crew WINDOW dies next, which is what makes the
+release safe: release restores the worktree, and a reset under a live process is the one
+thing the pool cannot undo. The releases run then. `kill-session` goes last. The
+discriminator is a pane that still EXISTS, corpse included: `remain-on-exit` leaves dead
+panes holding slots, while a pane that is GONE belongs to a crewmate `kill` already
+settled, which is why this branch reads a new `pane_exists` helper rather than `pane_dead`.
+
+**The first version of this close put the releases AFTER `kill-session`, and it was dead on
+the operator's own path.** `kill-session` is SIGHUP and the captain's seat is the bridge
+shell INSIDE the session, so the loop was killed with the pane running it. MEASURED
+2026-08-04, `down` sent to the bridge pane of a throwaway fleet: session gone, slot-1 still
+leased. The strand this item exists to close, rebuilt inside its own fix, and green on
+every test that had been run, because every one of them drove `down` from a shell outside
+the session. The advisory review on the `2d7d7f3` push found it by reading the captain's
+seat against the ordering; the reproduction above is what turned that reading into a
+measurement. Killing the crew window rather than the session leaves the bridge, and
+therefore the script, alive to finish. Re-MEASURED from the bridge pane after the reorder:
+session gone, slot free.
+
+The general lesson is the one this project keeps re-learning in new clothes: the tests all
+passed because they exercised a path the operator does not use. Five static probe legs
+could not see it, and one of them had the wrong order LOCKED IN as its assertion.
 
 TESTED on a throwaway fleet with its own socket session and state dir (`HB_RUN=hb-downtest`,
 crew panes and manifest rows built to stand in for spawned crewmates, so no crewmate had to
@@ -505,9 +521,14 @@ be paid for): a clean slot released and came back free; a slot holding an uncomm
 was refused by name with the lease kept and `down` still exiting 0; a row whose pane was
 already gone was skipped in silence rather than re-released; and a refusal on the first row
 did not strand the second. That last one is the `set -eu` regression the if-guard exists
-for, and the one this fix could most easily have rebuilt inside itself. Guarded by a probe
-row in `probe_fleet_claude.py` whose mutation legs include a release moved ahead of
-`kill-session` and a census read through `pane_dead`.
+for. All four were re-run after the reorder and still hold, and the case that matters most
+is the fifth: `down` from the bridge pane, which now releases.
+
+Guarded by a probe row in `probe_fleet_claude.py` reading all three positions, whose
+mutation legs include the measured defect itself (the release left after `kill-session`), a
+release with the crew still alive, and a census read through `pane_dead`. The limit is
+stated there rather than implied: no static leg can see a SIGHUP. What the rows lock in is
+the order the live test proved, and the live test is the evidence.
 
 One residual named rather than guarded, in the branch's own comment: tmux restarts pane ids
 at `%0` with a new server, so a manifest row left by a fleet on an older server can collide
