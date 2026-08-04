@@ -753,8 +753,7 @@ try:
         ("an unconditional release, no --if-owner",
          _mutate_down(src, ' --if-owner "$HB_RUN"', ''),
          ["scoped"]),
-        ("the measured defect, the release left after kill-session has SIGHUPed the "
-         "caller (has_crew_kill asserted TRUE in the same row, so it cannot die there)",
+        ("the measured defect, the release left after kill-session has SIGHUPed the caller",
          _pushed_defect_shape(src),
          ["release_before_session"]),
         ("a down that never kills the session at all",

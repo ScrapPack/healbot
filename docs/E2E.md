@@ -529,11 +529,11 @@ mutation leg per entry in its `DOWN_LEGS` table, each asserting the conjuncts it
 coverage claim is not written down anywhere: a row COMPUTES it, comparing the conjuncts the
 legs assert against the conjuncts the predicate decides on, so a new conjunct with no leg
 goes red rather than passing under a sentence. The limit is stated rather than implied: no
-static leg can see a SIGHUP. What the rows lock in is the order the live test proved, and the live test is
-the evidence.
+static leg can see a SIGHUP. What the rows lock in is the order the live test proved, and
+the live test is the evidence.
 
-**The review of the repair found the repair's own guard defective, which is the third time
-in this item that a green was narrower than its label.** Both new position legs mutated by
+**The review of the repair found the repair's own guard defective, one more green narrower
+than its label.** Both new position legs mutated by
 deleting the same literal, `t kill-window`, so both died on the has-a-crew-kill conjunct
 rather than on the positions they were named for. The leg titled "the measured defect is
 caught" was not catching it by the clause written to catch it, and two conjuncts had no
@@ -542,22 +542,27 @@ ones it flips, with the defect leg additionally asserting that the crew kill SUR
 mutation so it cannot die on that instead. The defect shape is rebuilt by moving the real
 `kill-session` line rather than by deleting a literal.
 
-The review of that repair then made the same point a fourth time, one level up: the repair
-described itself as a leg per conjunct while the predicate decided on nine and the legs
-covered eight, leaving *has_session_kill*, a `down` that never kills the session at all,
-with no exercise. Then a fourth round found the replacement description wrong too: it said
-one leg flips two conjuncts and the rest are one to one, and MEASURED, the defect leg flips
-four and the crew-kill leg flips four, each while naming one. Those legs were still sound,
-because each asserts its named key directly and cannot die elsewhere, but the sentence
-about them was not.
+The review of that repair made the same point one level up: the repair described itself as
+a leg per conjunct while the predicate decided on nine and the legs covered eight, leaving
+*has_session_kill*, a `down` that never kills the session at all, with no exercise. The
+review of THAT found the replacement description wrong too. It said one leg flips two
+conjuncts and the rest are one to one; MEASURED, the defect leg flips four and the
+crew-kill leg flips four, each while naming one. Those legs were sound throughout, because
+each asserts its named key directly and cannot die elsewhere, but the sentence about them
+was not.
 
-That is where the prose stops. The coverage claim is computed by a probe row now, not
-written, because the ladder is the finding: four consecutive rounds on one item, each
-catching a label wider than the thing behind it. The fix was dead on the captain's path
-while claiming to close the strand. Then two guard legs died on a conjunct neither named.
-Then one conjunct had no leg at all, under a description saying every conjunct had one.
-Then the leg-to-conjunct ratio was wrong. Every one was found by a reader comparing a claim
-against the artifact it was made about, and none by the tests, which were green throughout.
+That is where the prose stops. The coverage claim is computed by a probe row now rather
+than written, because the ladder is the finding, and the rungs are worth naming without
+numbering them, since a tally in prose is the same rot one level up:
+
+- the fix was dead on the captain's path while claiming to close the strand,
+- two guard legs died on a conjunct neither of them named,
+- one conjunct had no leg at all, under a description saying every conjunct had one,
+- the leg-to-conjunct ratio in the replacement description was wrong,
+- and the first floor written for the computed row was one short of the real count.
+
+Every one was found by a reader comparing a claim against the artifact it was made about.
+None were found by the tests, which were green throughout.
 
 Two consequences of that round are now rules rather than observations. **Nothing follows
 `kill-session` in the branch**, because anything there is dead on the captain's path; the

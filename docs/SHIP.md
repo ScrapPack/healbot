@@ -280,7 +280,7 @@ its correction trail), because the first of the two was also split:
   ever run on. Only "the link is on disk right now" is guarded, by
   `claude-config-materialized`. Still do NOT "fix" a slot by creating the file: `gate.py:220`
   bans that name anywhere in the tracked tree, which is the whole reason for the convention.
-- **`probe_fleet_claude.py:895`** — *"skill twins: harness/skills/*.md vs
+- **`probe_fleet_claude.py:894`** — *"skill twins: harness/skills/*.md vs
   ~/.agents/skills/<name>/SKILL.md"* — guarded by `main-checkout`. Firstmate-only
   until later on 2026-08-02, when `healbot-traps.md` was found to have drifted for two days
   while the one guarded specimen held (HARNESS.md Traps has the row); now one aggregate row
