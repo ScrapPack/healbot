@@ -1,17 +1,38 @@
 """Minimal pty + terminal-emulator driver, so assertions run against the RENDERED screen
 rather than a raw ANSI byte soup that a redrawing TUI makes meaningless."""
 
-import fcntl
 import os
-import pty
 import re
 import select
 import signal
 import struct
-import termios
+import sys
 import time
 
 import pyte
+
+# fcntl/pty/termios are POSIX-only, and this driver does need them: `pty.fork()` has no native
+# Windows equivalent, and docs/WINDOWS.md records the rig as WSL2-only on a PC. The imports were
+# UNCONDITIONAL though, and rig.py imports Term at module scope (rig.py:25), so on native Windows
+# `import rig` raised ModuleNotFoundError — which took down the four TIER-1 GATE probes that
+# import rig for Env/Results/completed and never construct a Term. MEASURED 2026-08-05 on Windows
+# 11: rig-contract, citations, twin and review-parse each BLOCKED at import and gate.py exited 2,
+# while docs/WINDOWS.md's platform table, its conversion checklist, and doctor.py's gate tier all
+# reported the gate as running natively there.
+#
+# The boundary does not move: no pty is emulated, and no rig degrades to a weaker check. Only the
+# ENFORCEMENT moves, from import time to Term(), so the platform-free half of the suite imports
+# platform-free. The missing module is remembered rather than swallowed, and Term() refuses with
+# the reason in the message.
+try:
+    import fcntl
+    import pty
+    import termios
+except ImportError as exc:  # native Windows: none of the three are in the stdlib there
+    fcntl = pty = termios = None
+    NO_PTY = exc
+else:
+    NO_PTY = None
 
 
 class Screen(pyte.Screen):
@@ -45,6 +66,12 @@ class Screen(pyte.Screen):
 
 class Term:
     def __init__(self, argv, env=None, cwd=None, cols=150, rows=45):
+        if NO_PTY is not None:
+            raise RuntimeError(
+                f"Term drives a real pty and {sys.platform} has none: {NO_PTY}. Run the rig "
+                "under WSL2 on a PC (docs/WINDOWS.md). Importing this module is platform-free "
+                "on purpose: the static probes take Env/Results/completed and no pty."
+            )
         self.cols, self.rows = cols, rows
         self.screen = Screen(cols, rows)
         self.stream = pyte.ByteStream(self.screen)
