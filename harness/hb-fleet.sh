@@ -772,15 +772,20 @@ send)
   # .carryover/verified/hb/submit-verify-20260805/). The feared direction — a successful
   # submit ECHOES the text into the transcript, and a stripped window reaching past the
   # composer chrome would read the echo as "still unsubmitted" and manufacture the
-  # expensive false failure — did not survive the frames: the echo sat SIX painted lines
-  # above the pane bottom (footer, border, empty composer, border, spinner below it) at
-  # every 10Hz frame across 11s, on both a 49-row solo pane and a 17-row pane, two
-  # painted lines clear of this 3-line window. The raw tail it replaced was measured
-  # reading pure padding at its own +1s sample on the tall pane — matching nothing,
-  # printing "sent to", verifying nothing — while a stuck composer's input line sits
-  # third from the bottom (one-line footer, measured), inside THIS window: the strip
-  # buys the tall-pane detection the raw read never had. probe_fleet_claude.py now pins
-  # ZERO raw tails in the file and this case onto screen_tail.
+  # expensive false failure — did not survive the frames: the echo never sat nearer
+  # than SIX painted lines above the pane bottom (at its closest: footer, border,
+  # empty composer, border, spinner below it; seven-eight once replies painted) at
+  # any 10Hz frame across 11s on a 49-row solo pane and a 17-row pane — two-plus
+  # painted lines clear of this 3-line window throughout. The raw tail it replaced
+  # was measured reading pure padding at its own +1s sample on the tall pane —
+  # matching nothing, printing "sent to", verifying nothing — and reading chrome
+  # (border, footer, padding; its filled-pane leg design went UNMET) on the 17-row
+  # pane, where a stuck composer's input line sits third from the painted bottom
+  # (one-line footer), inside THIS window and OUTSIDE the raw one because padding
+  # trailed the footer — measured off an unplanned mid-run composer write, run
+  # notes in the archive REPORT.md: the strip buys detection on both geometries
+  # that the raw read never had. probe_fleet_claude.py now pins ZERO raw tails in
+  # the file and this case onto screen_tail.
   if [ "${#TEXT}" -le 60 ]; then
     tries=0
     while [ $tries -lt 2 ]; do

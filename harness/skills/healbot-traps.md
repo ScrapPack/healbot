@@ -120,10 +120,12 @@ you recognize the red when it fires. HARNESS.md's "Traps" section is the canonic
   solo crewmate always misread, and spawning a second one "fixed" it by halving the panes.
   Strip blanks BEFORE tailing: hb-fleet.sh's screen_tail is the one reader for every
   screen read, send's submit verify included since 2026-08-05 — a live two-submit
-  measurement (.carryover/verified/hb/submit-verify-20260805/) put the transcript's echo
-  of the sent text six painted lines above the pane bottom, two clear of the stripped
-  3-line window, on a 49-row and a 17-row pane, while the raw tail it replaced read pure
-  padding at its own verify instant. Same family as the help-card popup: a variable-size
-  render read through a fixed-size window. Guard: probe_fleet_claude.py's screen-reader
-  conjuncts (raw-tail census ZERO) plus a live tall-pane counterfactual on a scratch
-  tmux server.
+  measurement (.carryover/verified/hb/submit-verify-20260805/) kept the transcript's
+  echo of the sent text never nearer than six painted lines above the pane bottom,
+  two-plus clear of the stripped 3-line window at every frame, on a 49-row and a
+  17-row pane, while the raw tail it replaced read pure padding at its tall-pane
+  verify instant and chrome on the 17-row pane (that leg's filled-pane design went
+  UNMET; run notes in the archive REPORT.md). Same family as the help-card popup: a
+  variable-size render read through a fixed-size window. Guard:
+  probe_fleet_claude.py's screen-reader conjuncts (raw-tail census ZERO) plus a live
+  tall-pane counterfactual on a scratch tmux server.

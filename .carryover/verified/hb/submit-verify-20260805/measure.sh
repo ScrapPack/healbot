@@ -159,11 +159,27 @@ EOF
   sleep 2
   run_leg "$ARCHIVE/tall" "$PANE" "Reply with only: pong (hbverify-tall-$$)" healbot
   wait_idle 240
-  # Shrink until the render fills the pane so raw tail-3 lands on paint.
-  P="$(t capture-pane -p -t "$PANE" | grep -cv '^[[:space:]]*$' || true)"
-  target=$P; [ "$target" -lt 12 ] && target=12
-  t resize-window -t "$RUN:crew" -y "$target" 2>/dev/null || true
-  sleep 2
+  # Shrink until the render fills the pane so raw tail-3 lands on paint. One
+  # shot undershoots: the pre-resize painted count carries reflow the CLI
+  # drops when it repaints smaller (run1: 17 painted on 49 rows became 9-11
+  # painted on the 17-row pane it asked for — run notes in run1/REPORT.md), so
+  # re-measure after every resize and stop only when paint reaches the pane
+  # height or the 12-row floor. Every step is recorded, and analyze.py flags
+  # the leg UNMET from the frames if the samples still miss paint.
+  : > "$ARCHIVE/resize.txt"
+  step=0
+  while [ "$step" -lt 5 ]; do
+    P="$(t capture-pane -p -t "$PANE" | grep -cv '^[[:space:]]*$' || true)"
+    H="$(t display-message -p -t "$PANE" '#{pane_height}' 2>/dev/null || echo 0)"
+    printf 'step %s: painted %s of pane height %s\n' "$step" "$P" "$H" \
+      >> "$ARCHIVE/resize.txt"
+    [ "$P" -ge "$H" ] && break
+    target=$P; [ "$target" -lt 12 ] && target=12
+    [ "$target" -ge "$H" ] && break
+    t resize-window -t "$RUN:crew" -y "$target" 2>/dev/null || true
+    sleep 2
+    step=$((step + 1))
+  done
   run_leg "$ARCHIVE/full" "$PANE" "Reply with only: pong (hbverify-full-$$)" healbot
   wait_idle 240 || true
   trap - EXIT

@@ -1009,10 +1009,11 @@ try:
     # and these conjuncts hold every classification read onto it. The submit verify was
     # the last raw tail, kept while the echo risk (a successful submit echoes its text
     # into the transcript) was unmeasured; a live two-submit measurement (2026-08-05,
-    # .carryover/verified/hb/submit-verify-20260805/) put the echo six painted lines
-    # above the pane bottom — two clear of a stripped 3-line window — on both a 49-row
-    # and a 17-row pane, so the verify joined screen_tail and the census now pins ZERO
-    # raw tails, so one cannot grow back quietly anywhere.
+    # .carryover/verified/hb/submit-verify-20260805/) kept the echo never nearer than
+    # six painted lines above the pane bottom — two-plus clear of a stripped 3-line
+    # window at every frame — on both a 49-row and a 17-row pane, so the verify joined
+    # screen_tail and the census now pins ZERO raw tails, so one cannot grow back
+    # quietly anywhere.
     def _screen_readers(s):
         """The conjuncts, separately, so each leg names the one it flips (_down_order's
         pattern). The census reads comment-stripped code for the finding-15 reason: the
@@ -1052,8 +1053,8 @@ try:
             "(strip padding, THEN tail); the raw-tail census is ZERO",
             all(_screen_readers(src).values()),
             "MEASURED 2026-08-05 twice: state misread a 49-row solo pane off padding, "
-            "and a live submit put the echo six painted lines above the pane bottom "
-            "(submit-verify-20260805/REPORT.md), clearing the stripped window by two")
+            "and live submits kept the echo two-plus painted lines clear of the "
+            "stripped window at every frame (submit-verify-20260805/REPORT.md)")
     SCREEN_LEGS = [
         ("the pre-fix state read, a raw tail -20 of the padded capture",
          _mutate_arm(src, "state",
