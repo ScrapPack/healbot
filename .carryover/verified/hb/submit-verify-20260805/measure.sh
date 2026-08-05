@@ -165,9 +165,10 @@ EOF
   # painted on the 17-row pane it asked for — run notes in run1/REPORT.md), so
   # re-measure after every resize and stop only when paint reaches the pane
   # height or the 12-row floor. The floor can halt the chase short of paint
-  # for good (run1's reflow numbers, 9-11 painted at 12-17 rows, sit exactly
-  # there); every step is recorded either way, and analyze.py flags the leg
-  # UNMET from the frames if the samples still miss paint.
+  # for good: run1's 17-row pane painted 9-11 lines, already below the floor,
+  # and whether the render grows to fill 12 rows is unmeasured. Every step is
+  # recorded either way, and analyze.py flags the leg UNMET from the frames
+  # if the samples still miss paint.
   : > "$ARCHIVE/resize.txt"
   step=0
   while [ "$step" -lt 5 ]; do
