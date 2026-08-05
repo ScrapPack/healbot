@@ -121,7 +121,22 @@ def evaluate(fn_turn, fn_occ, messages):
         f"const ms = {json.dumps(messages)}\n"
         "console.log(JSON.stringify(ms.map((m) => [occupancyOf(m.tokens), turnFinished(m)])))"
     )
-    out = subprocess.run(["node", "-e", script], capture_output=True, text=True)
+    # `-e` puts the WHOLE corpus on the COMMAND LINE — the 925 deduped messages are json.dumps'd
+    # into `script` above. macOS ARG_MAX is ~1 MB so it fits there and the limit never appeared;
+    # Windows caps a CreateProcess command line at 32,767 characters, and this raised
+    # FileNotFoundError [WinError 206] before the first assertion that reads a result. MEASURED
+    # 2026-08-05 on Windows 11. `-` is node's documented alias for stdin, so the script travels
+    # over a pipe and no length limit applies on either platform.
+    #
+    # encoding= is explicit, not decoration: `text=True` alone encodes stdin with the LOCALE
+    # codec, which on Windows is cp1252 and cannot represent transcript text. On macOS the
+    # locale codec is already UTF-8, so naming it moves nothing there.
+    # check=False is explicit because the returncode is handled two lines down, with node's own
+    # stderr in the message. `check=True` would raise CalledProcessError and throw that away.
+    out = subprocess.run(
+        ["node", "-"], input=script, capture_output=True, text=True, encoding="utf-8",
+        check=False,
+    )
     if out.returncode != 0:
         raise RuntimeError(f"node failed: {out.stderr.strip()[:400]}")
     return json.loads(out.stdout.strip())

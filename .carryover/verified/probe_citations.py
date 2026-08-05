@@ -52,7 +52,13 @@ sys.path.insert(0, SP)
 import rig  # noqa: E402
 
 HB = rig.HEALBOT
-CHECKOUT = f"{HB}/opencode"
+# normpath, not f"{HB}/opencode": HB comes back from os.path.dirname with NATIVE separators, so on
+# Windows the interpolated form is the mixed string `C:\...\healbot/opencode` while every indexed
+# path is normpath'd to all-backslash. `p.startswith(CHECKOUT + os.sep)` — the filter that keeps a
+# citation off the CHECKOUT's copy of a colliding name (classify() and quote_verdict()) — then
+# matched nothing, and bare `PLAN.md` resolved to the checkout's v2/effect/PLAN.md. MEASURED
+# 2026-08-05 on Windows 11. On POSIX normpath here is a no-op, so this changes no Mac behavior.
+CHECKOUT = os.path.normpath(f"{HB}/opencode")
 
 # `opencode/` is DERIVED and gitignored, so a fresh clone or worktree does not have it. The
 # first thing to touch it here is `git -C` inside owned_set(), whose CalledProcessError
@@ -84,6 +90,21 @@ EXCLUDE = {".carryover/REDO-PROMPT.md"}
 # `:N` or `:N-M` after a path-ish token. The negative lookbehind keeps it from matching the tail of
 # a longer path, and the extension list keeps it off prose like "1.18.5".
 CITE = re.compile(r"(?<![\w/])([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:ts|tsx|py|sh|jsonc|txt|md)):(\d+)(?:[-–](\d+))?")
+
+
+def rel_posix(path):
+    """Repo-relative path in the DOCUMENTS' notation: forward slashes on every platform.
+
+    Every consumer of these strings speaks POSIX — EXCLUDE, the coverage legs' `docs/` and `fork/`
+    prefixes, the RESOLUTION legs' `endswith("session/prompt.ts")`, and the citations themselves.
+    `os.path.relpath` speaks os.sep, so on Windows each of those compared a backslash path against
+    a forward-slash literal and lost: REDO-PROMPT.md was SWEPT despite being excluded by name, and
+    four legs asserted a string that cannot occur. MEASURED 2026-08-05 on Windows 11 — a silently
+    WIDENED sweep, the same defect class as the narrowing the coverage legs exist to catch, and it
+    reported 10 blank-line and 2 quote findings that are the historical doc's, not the repo's.
+    `os.sep` is "/" on POSIX, so this is a no-op there and no Mac result moves.
+    """
+    return os.path.relpath(path, HB).replace(os.sep, "/")
 
 
 def git_owned(root):
@@ -157,10 +178,10 @@ def sources():
             if not fn.endswith(".md"):
                 continue
             full = os.path.normpath(os.path.join(dirpath, fn))
-            if os.path.relpath(full, HB) in EXCLUDE:
+            if rel_posix(full) in EXCLUDE:
                 continue
             if full not in owned:
-                dropped.append(os.path.relpath(full, HB))
+                dropped.append(rel_posix(full))
                 continue
             out.append(full)
     return sorted(out), sorted(dropped)
@@ -200,12 +221,12 @@ def classify(cited, lo, hi, index):
     inrange = [p for p in suffix if (L := lines_of(p)) is not None and hi <= len(L)]
     if not inrange:
         biggest = max(suffix, key=lambda p: len(lines_of(p) or []))
-        return "PAST_EOF", f"{os.path.relpath(biggest, HB)} has {len(lines_of(biggest) or [])} lines"
+        return "PAST_EOF", f"{rel_posix(biggest)} has {len(lines_of(biggest) or [])} lines"
     exact = [p for p in inrange if p.endswith(want)]
     pick = (exact or inrange)[0]
     if all(not s.strip() for s in lines_of(pick)[lo - 1 : hi]):
-        return "BLANK", os.path.relpath(pick, HB)
-    return "OK", os.path.relpath(pick, HB)
+        return "BLANK", rel_posix(pick)
+    return "OK", rel_posix(pick)
 
 
 # A citation that QUOTES its target is a stronger claim than one that merely points at it, and it
@@ -280,13 +301,13 @@ def quote_verdict(cited, lo, hi, quote, index):
     window = _norm("\n".join(L[lo - 1 : hi + 2]))
     pos = window.find(frags[0][:HEAD])
     if pos == -1 or pos >= max(len(span), 1):
-        return "QUOTE_MISMATCH", f"{os.path.relpath(pick, HB)} — wanted {frags[0][:HEAD]!r}"
+        return "QUOTE_MISMATCH", f"{rel_posix(pick)} — wanted {frags[0][:HEAD]!r}"
     for f in frags[1:]:
         nxt = window.find(f[:HEAD], pos)
         if nxt == -1:
-            return "QUOTE_MISMATCH", f"{os.path.relpath(pick, HB)} — elided part {f[:40]!r} absent"
+            return "QUOTE_MISMATCH", f"{rel_posix(pick)} — elided part {f[:40]!r} absent"
         pos = nxt
-    return "QUOTE_OK", os.path.relpath(pick, HB)
+    return "QUOTE_OK", rel_posix(pick)
 
 
 def scan_quotes(index, srcs):
@@ -304,7 +325,7 @@ def scan_quotes(index, srcs):
             lo = int(m.group(2))
             hi = int(m.group(3)) if m.group(3) else lo
             verdict, detail = quote_verdict(m.group(1), lo, hi, q.group(1), index)
-            out.append((os.path.relpath(src, HB), m.group(1), lo, hi, verdict, detail))
+            out.append((rel_posix(src), m.group(1), lo, hi, verdict, detail))
     return out
 
 
@@ -319,7 +340,7 @@ def scan(index, srcs):
             lo = int(m.group(2))
             hi = int(m.group(3)) if m.group(3) else lo
             verdict, detail = classify(m.group(1), lo, hi, index)
-            rows.append((os.path.relpath(src, HB), m.group(1), lo, hi, verdict, detail))
+            rows.append((rel_posix(src), m.group(1), lo, hi, verdict, detail))
     return rows
 
 

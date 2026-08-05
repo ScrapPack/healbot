@@ -121,6 +121,49 @@ Never set XDG_DATA_HOME: auth.json lives there and OpenAI is on oauth.
 
 ---
 
+## Open on the Mac, from the Windows bring-up (2026-08-05)
+
+Prompt item 7 ran on a Windows 11 PC. `harness/doctor.py` reports zero FAIL rows; the
+opencode and per-change-gate tiers read READY, tmux and pty read N/A by design, and the
+Claude Code tier waits only on its one interactive login. Three POSIX assumptions were
+found and fixed, each a no-op on POSIX by construction: the unconditional pty import in
+`term.py`, the separator literals and mixed-separator CHECKOUT in `probe_citations.py`,
+and the `node -e` command line in `probe_turn_growth.py`. The commit message carries each
+measurement.
+
+**The push that landed this was `--no-verify`.** The gate exited 2, BLOCKED, on two rows,
+neither of them caused by the change: `ruff` (pre-existing findings in the touched files;
+the gate lints changed files whole) and `citations` (below). Treat the merge as unverified
+until a green gate run exists for it.
+
+**One finding is deliberately unfixed and needs this machine.** `classify()` in
+`probe_citations.py` ends `pick = (exact or inrange)[0]`, so when several files share a
+basename the winner is `os.walk` order — filesystem enumeration order, not a rule. On
+Windows that resolves four correct citations to blank lines in same-named files from other
+packages: `FEATURE-PLUGINS.MAP.md` and `fork/README.md` on `builtins.ts`, `PLUGIN-API.MAP.md`
+on `tui.ts`, and `PLUGIN.MAP.md` on `api.ts`. All four are FALSE POSITIVES, confirmed by
+reading the intended siblings back — each map cites the `builtins.ts`, `tui.ts` or `api.ts`
+in its own package, and each of those lines says what the map claims.
+
+That the Mac has been green on this leg is INFERRED, never measured: it follows only from the
+gate passing there. So the first thing to run here is the citation probe unchanged, and then
+`build_index()`'s ordering for those three basenames. Two outcomes, and they need different
+fixes. If the Mac picks the right file, the tie-break is passing on APFS enumeration luck and
+a `git clone` onto another filesystem could flip it — the resolver needs a real rule, and
+proximity to the citing document is the one the four cases all point at. If the Mac picks the
+wrong file too, the leg has been red or the citations are stale, and that is a different
+finding again. Do not sort the index as a fix: it is deterministic but would pick the same
+wrong file on both platforms, turning four Windows false positives into four everywhere.
+
+Smaller, also open: the repo pins no ruff config anywhere, so the gate's lint verdict is
+whatever the installed ruff version defaults to and differs by machine. Under that
+config-less invocation ruff calls the `# noqa: E402` in `probe_citations.py` unused and
+offers to delete it — but under the ruleset `docs/PLAINCODE.md` documents, E402 fires on
+that exact line. Running `ruff --fix` there would strip a directive the documented standard
+needs.
+
+---
+
 ## For the maintainer of this file
 
 History and current-state narrative live in the phase docs (`docs/`), the commit log, and
