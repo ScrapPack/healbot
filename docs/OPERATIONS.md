@@ -17,6 +17,8 @@ on native Windows; `gate/gate.py` and the pre-push hook resolve this themselves.
 |---|---|
 | `python3 harness/doctor.py` (`python` on Windows) | What can this machine run? PASS/FAIL/WARN/SKIP rows + a tier summary. Run it first on any new machine, and after changing the toolchain. Exit: 0 every tier READY (or N/A) · 1 any FAIL · 2 no FAIL but a tier NOT YET (since 2026-08-03) |
 | `git config core.hooksPath gate/hooks` | Wire the push gate, once per clone (`gate/GATE.MAP.md`) |
+| `python3 harness/install-skills.py` | Install/refresh the skill twins onto this machine (`~/.agents` + the `~/.claude/skills` surface). Holds divergent copies rather than deciding direction; `--force` writes repo over installed. The doctor's skill-twins row verifies |
+| — | Fresh clone, agent-driven: `docs/AGENT-SETUP.md` is a paste-in prompt that walks a Claude Code session through this whole bring-up |
 
 ## opencode half
 
@@ -81,7 +83,8 @@ Exit codes are the interface: **0 pass · 2 blocked · 3 error** (`gate/GATE.MAP
 ## Skills
 
 Installed at `~/.agents/skills/<name>/` (canonical copies in `harness/skills/`); invoke as
-`/<name>` in a session.
+`/<name>` in a session. `python3 harness/install-skills.py` installs or refreshes all of
+them; the doctor's skill-twins row is the sync check.
 
 | Skill | Invoke when |
 |---|---|

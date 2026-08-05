@@ -409,10 +409,12 @@ def check_skill_twins():
     ~/.agents/skills/<name>/SKILL.md is what live sessions actually load — BOTH harnesses:
     claude via the ~/.claude/skills symlinks, opencode via its skill-manifest glob over
     ~/.agents, where the .agents copy also wins name collisions (fork SKILL.MAP.md, sources
-    1-2). Nothing syncs them: no installer script exists, env.claude.sh only cites the
-    naming convention. Measured 2026-08-02: healbot-traps.md gained two trap entries in the
-    repo while the installed copy served the stale body for two days, in green, to every
-    session on this machine. This row is the sweep that did not exist that week.
+    1-2). harness/install-skills.py syncs them since 2026-08-05; before it nothing did, and
+    env.claude.sh only cited the naming convention. Measured 2026-08-02: healbot-traps.md
+    gained two trap entries in the repo while the installed copy served the stale body for
+    two days, in green, to every session on this machine. This row is the sweep that did
+    not exist that week, and it stays the verifier: the installer holds divergent copies
+    rather than deciding direction, for the reason the next paragraph records.
 
     Three honest states, crew-constraints' shape: identical (PASS), divergent or partially
     installed (FAIL — a diff decides the direction; the doctor must not, because the
@@ -443,13 +445,13 @@ def check_skill_twins():
     elif not same and not drifted:
         row(WARN, "skill twins not installed",
             f"none of the {len(names)} twins exist under {installed_root} — live sessions "
-            "load none of them. Install: copy each harness/skills/<name>.md to "
-            "~/.agents/skills/<name>/SKILL.md")
+            "load none of them. Install: python3 harness/install-skills.py")
     else:
         parts = [f"{n} (differs)" for n in drifted] + [f"{n} (not installed)" for n in missing]
         row(FAIL, "skill twin drift", ", ".join(parts) +
-            " — live sessions load the installed half; diff to confirm direction, then copy "
-            "the newer over the older (no sync script exists)")
+            " — live sessions load the installed half; diff to confirm direction, then "
+            "harness/install-skills.py (--force writes repo over installed; installed-newer "
+            "is a hand copy back)")
 
 
 # -- platform-bound tiers -------------------------------------------------------------

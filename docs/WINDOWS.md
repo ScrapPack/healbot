@@ -64,7 +64,9 @@ Install, in any order (winget names given; any equivalent works):
 
 ## Bring-up, in order
 
-Everything below runs in **Git Bash inside Windows Terminal**, from the clone root.
+Everything below runs in **Git Bash inside Windows Terminal**, from the clone root. To
+have a Claude Code agent drive these steps instead, paste the prompt in
+`docs/AGENT-SETUP.md`.
 
 1. **Clone to a path without spaces** (the gate's command strings word-split by design):
 
@@ -110,7 +112,13 @@ Everything below runs in **Git Bash inside Windows Terminal**, from the clone ro
 
    `gate/gate.py` and the pre-push hook auto-detect the `Scripts/` layout.
 
-6. **opencode half:** `harness/fleet.sh` for the server+attach shape — first boot compiles
+6. **Install the skill twins** — `python harness/install-skills.py` copies each
+   `harness/skills/<name>.md` to `~/.agents/skills/<name>/SKILL.md` and surfaces it at
+   `~/.claude/skills/<name>` (a copy there, not a symlink, without Developer Mode — the
+   installer says which it did; re-running refreshes). The doctor's skill-twins row
+   verifies.
+
+7. **opencode half:** `harness/fleet.sh` for the server+attach shape — first boot compiles
    under bun and is slow, and the grid is `/healbot`. `. harness/env.sh && opencode` is the
    single-session form, but note what it runs: `opencode` off your `PATH`, which on a fresh
    PC is nothing at all (the prerequisites above install **bun**, not a released opencode)
@@ -118,7 +126,7 @@ Everything below runs in **Git Bash inside Windows Terminal**, from the clone ro
    still reaches it (pin, compaction off, retirement plugin), but `/healbot` is a builtin of
    the fork. `fleet.sh` prefers the checkout and warns when it falls back.
 
-7. **Claude half:** `. harness/env.claude.sh && claude` — the redirected config root needs
+8. **Claude half:** `. harness/env.claude.sh && claude` — the redirected config root needs
    its **one-time interactive login** (env.claude.sh's header explains; the Mac's
    keychain-landing finding is macOS-specific and does not transfer — on Windows the
    credential lands under the redirected root or DPAPI, and the whitelist `.gitignore`
@@ -126,7 +134,7 @@ Everything below runs in **Git Bash inside Windows Terminal**, from the clone ro
    `CLAUDE.md` materializes as a **copy** here (symlinks need Developer Mode); the script
    refreshes a drifted copy on every source, and the doctor flags stale copies.
 
-8. **WSL2, when you want the rest:** install a distro, clone the repo *inside* WSL (not on
+9. **WSL2, when you want the rest:** install a distro, clone the repo *inside* WSL (not on
    `/mnt/c` — pty and file-watcher performance), and follow the macOS/Linux quickstart
    there. tmux fleet (`hb-fleet.sh`), the rig, and Claude Code's sandboxing all work under
    WSL2. The pool stays Mac-only either way.

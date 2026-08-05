@@ -41,19 +41,19 @@ the guards it produced are executable:
 | `opencode/` | *Not in git.* The derived working checkout; `fork/README.md` rebuilds it |
 | `gate/` | The per-change gate, tier-2 runner, model review, evidence publisher |
 | `.carryover/verified/` | The measurement rig: free probes, paid rigs, and the tracked corpus of paid session DBs the thresholds are derived from |
-| `docs/` | Phase docs (the evidence record), plus `OPERATIONS.md` (command cheat sheet) and `WINDOWS.md` (PC bring-up) |
+| `docs/` | Phase docs (the evidence record), plus `OPERATIONS.md` (command cheat sheet), `WINDOWS.md` (PC bring-up), and `AGENT-SETUP.md` (paste-in prompt for agent-driven bring-up) |
 
 **Live surface vs. record**, because `docs/` holds both and the filenames do not say which:
-this README, `docs/OPERATIONS.md` and `docs/WINDOWS.md` are what you read to *use* the repo,
-together with `harness/doctor.py` — the only one that answers for **your** machine rather
-than for this one. Everything else under `docs/` is a **dated phase record**: the evidence
+this README, `docs/OPERATIONS.md`, `docs/WINDOWS.md` and `docs/AGENT-SETUP.md` are what you
+read to *use* the repo, together with `harness/doctor.py` — the only one that answers for
+**your** machine rather than for this one. Everything else under `docs/` is a **dated phase record**: the evidence
 behind a number or a decision, written at the time and corrected in place by appending,
 never rewritten. `docs/CLONE.md` is both — a Phase 9 record, and the page to read before
 trusting any suite run from a fresh environment. You do not need the records to run the
 harness; you need them before you argue with a figure. `HARNESS.md` indexes **all eighteen**
-of them newest-first and says what each settles — MEASURED 2026-08-03, and the two `docs/`
-files it does not list are `OPERATIONS.md` and `WINDOWS.md`, which are live surface, not
-record. Its own exit test — *"from this file alone you should be able to name the file that
+of them newest-first and says what each settles — MEASURED 2026-08-03, and the `docs/`
+files it does not list are `OPERATIONS.md`, `WINDOWS.md`, and (since 2026-08-05)
+`AGENT-SETUP.md`, which are live surface, not record. Its own exit test — *"from this file alone you should be able to name the file that
 owns any given behavior"* — held for fifteen of the seventeen indexed on 2026-08-02;
 `docs/AFK.md` and `docs/REFUSAL-RESCORE.md` appeared in it **zero** times. `docs/E2E.md` is
 the eighteenth, added the next day.
@@ -85,6 +85,7 @@ Build the rig venv, then run the harness:
 
 ```sh
 python3 -m venv .carryover/verified/venv && .carryover/verified/venv/bin/pip install pyte
+python3 harness/install-skills.py     # the skill twins (doctor's skill-twins row verifies)
 . harness/env.sh && opencode          # one session, harness switches applied
 harness/fleet.sh                      # or: server + control terminal, sessions survive the client
 . harness/env.claude.sh && claude     # the Claude Code half (one-time login on first use)
@@ -120,6 +121,9 @@ the bring-up guide; the short form:
 ```sh
 python harness/doctor.py     # from Git Bash in Windows Terminal; it names what is missing
 ```
+
+To have a Claude Code agent drive the whole bring-up, paste the prompt in
+`docs/AGENT-SETUP.md` into a fresh session on the clone.
 
 Local models are deliberately not part of the PC setup — that pin is Mac-side machine state,
 and the harness config in this repo never references one.

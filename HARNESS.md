@@ -529,6 +529,8 @@ not part of the PC setup** — the Mac's local-model pin is machine state outsid
 | `docs/WINDOWS.md` | PC bring-up: prerequisites, the native/WSL2 capability table, Mac-only stand-ins, and the INFERRED→TESTED conversion checklist. **Owns every platform claim** |
 | `docs/OPERATIONS.md` | The operator cheat sheet — commands only, no facts of its own, pointers win |
 | `harness/doctor.py` | Machine preflight: PASS/FAIL/WARN/SKIP rows + a tier summary of what THIS machine can carry. The feedback loop that replaces "should work on the PC" |
+| `harness/install-skills.py` | The skill-twin installer (2026-08-05): `harness/skills/` → `~/.agents/skills/` + the `~/.claude/skills` surface. Holds divergent copies rather than deciding direction; the doctor's skill-twins row verifies |
+| `docs/AGENT-SETUP.md` | Live surface (2026-08-05): the paste-in prompt that lets a Claude Code session drive a fresh clone's bring-up, doctor as referee, login and pushes reserved to the human |
 | `.gitattributes` | `eol=lf` pinned repo-wide (bash-everywhere survives any clone's autocrlf), `*.patch -text` (byte-exact overlay), `*.db binary` |
 
 What actually had to change, each measured or source-verified rather than assumed:
