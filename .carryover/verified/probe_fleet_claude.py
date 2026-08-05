@@ -95,11 +95,13 @@ CONFIG_MATERIALIZED = Env(
 # settling every slot lease the fleet still holds, in the order crew-then-leases-then-
 # session; the mutation legs in DOWN_LEGS, each asserting the conjuncts it names; a row
 # holding the defect leg's crew kill TRUE so it cannot pass on the wrong clause; and a
-# COMPUTED coverage row. Four review rounds walked this one item down a ladder, each
-# finding a claim wider than the thing behind it: the fix was dead on the captain's path,
-# then two legs died on a conjunct neither named, then one conjunct had no leg under a
-# description saying all did, then the leg-to-conjunct ratio was wrong. The coverage claim
-# is computed rather than written because of that ladder. 95.
+# COMPUTED coverage row. The review walked this one item down a ladder, every rung a claim
+# wider than the thing behind it: the fix dead on the captain's path, two legs dying on a
+# conjunct neither named, a conjunct with no leg under a description saying all had one, a
+# wrong leg-to-conjunct ratio, and a floor written one short. The coverage claim is
+# computed rather than written because of that ladder, and the rungs are not counted here
+# for the same reason docs/E2E.md stopped counting them: a tally in prose is a number with
+# nothing computing it. 95.
 r = Results(expect=95, skip_max=2)
 
 
@@ -743,9 +745,9 @@ try:
     # free to flip OTHER conjuncts as a side effect and several do — the defect shape and
     # the crew-kill leg each flip four — which is harmless for exactly that reason, and is
     # why the leg count is not a coverage claim. The coverage row below COMPUTES the claim
-    # instead of stating it: four consecutive review rounds found this description wider
-    # than the legs standing behind it (a leg per conjunct, then one to one), so it stops
-    # being a description. A conjunct added to _down_order with no leg goes red there.
+    # instead of stating it: successive review rounds found this description wider than the
+    # legs standing behind it (a leg per conjunct, then one to one), so it stops being a
+    # description. A conjunct added to _down_order with no leg goes red there.
     DOWN_LEGS = [
         ("a down that never calls release",
          _mutate_down(src, 'pool.py" release', 'pool.py" status'),
