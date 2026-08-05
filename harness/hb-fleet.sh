@@ -293,6 +293,21 @@ pane_exists() {  # 0 = the pane id is still listed in the crew window, ALIVE OR 
   t list-panes -t "$HB_RUN:crew" -F '#{pane_id}' 2>/dev/null | awk -v p="$1" '$1==p{f=1} END{exit !f}'
 }
 
+# ONE bounded screen reader for every classification read and human peek. capture-pane -p
+# pads its output to the pane HEIGHT and the CLI paints top-down, so on a tall, mostly
+# empty pane a bare `tail -N` returns N rows of padding and none of the render. MEASURED
+# 2026-08-05 on a solo crewmate holding the crew window alone: at 49 rows the ready marker
+# sat on line 17 and `state` classified unreadable off twenty blank lines; the same pane
+# at 23 rows read idle, same marker line. The E2E walk ran two crewmates, which halves the
+# panes, and never saw it. Blanks are stripped BEFORE the tail, so the window is the last
+# N PAINTED lines, which is what every marker match in this file means by "on screen".
+# Same defect family as the help-card popup: a variable-size render read through a
+# fixed-size window. probe_fleet_claude.py pins the strip-then-tail order and every call
+# site, and runs the tall-pane counterfactual against a live scratch pane.
+screen_tail() {  # screen_tail <pane> [lines]
+  t capture-pane -p -t "$1" | grep -v '^[[:space:]]*$' | tail -"${2:-25}"
+}
+
 # The range is the header's command list PLUS the selector paragraph, and it is a LINE range
 # into this file: inserting a command line above shifts the paragraph and silently truncates
 # the last line of it. Bumped 22 -> 23 for `preflight`, 23 -> 25 for `start`/`help`.
@@ -653,7 +668,7 @@ PY
     esac
     if pane_dead "$PANE"; then
       echo "hb-fleet: $NAME's pane died during boot — the corpse:" >&2
-      t capture-pane -p -t "$PANE" | tail -15 >&2
+      screen_tail "$PANE" 15 >&2
       release_slot_on_failure
       exit 1
     fi
@@ -718,7 +733,7 @@ print(d["event"], str(int(time.time()) - d["at"]) + "s ago")
 PY
 )"
     fi
-    SCREEN="$(t capture-pane -p -t "$P" 2>/dev/null | tail -20 || true)"
+    SCREEN="$(screen_tail "$P" 20 2>/dev/null || true)"
     case "$SCREEN" in
       *"$HB_BUSY_MARKER"*)  SCR="busy";;
       *"$HB_TRUST_MARKER"*) SCR="trust-dialog";;
@@ -739,7 +754,7 @@ send)
   P="$(resolve_pane "$NAME")"
   pane_dead "$P" && { echo "hb-fleet: $NAME's pane is dead — respawn with 'spawn' or read the corpse with 'peek'" >&2; exit 2; }
   if [ "$FORCE" != 1 ]; then
-    SCREEN="$(t capture-pane -p -t "$P" | tail -20)"
+    SCREEN="$(screen_tail "$P" 20)"
     case "$SCREEN" in *"$HB_BUSY_MARKER"*)
       echo "hb-fleet: $NAME looks busy ('$HB_BUSY_MARKER' on screen). --force to interrupt-and-queue anyway." >&2
       exit 2;;
@@ -752,6 +767,15 @@ send)
   # Submit verification is honest about its limit: capture-pane returns RENDERED lines, so
   # text longer than the pane width wraps and can never match a substring check (review
   # finding). Short sends are verified; long ones say so instead of claiming success.
+  # This case is also the ONE reader kept on a raw tail rather than screen_tail: its match
+  # target is the typed text itself, and a successful submit ECHOES that text into the
+  # transcript, so a stripped window that reaches past the composer chrome could read the
+  # echo as "still unsubmitted" and manufacture a false failure, the expensive direction
+  # (a captain sent to peek a crewmate that is fine). The cost is that on a tall, mostly
+  # empty pane the raw tail -3 is padding and this check verifies nothing, the same
+  # blindness the long-text arm admits openly below. Repairing it takes a measured live
+  # submit, not reasoning about the render; until then probe_fleet_claude.py holds this
+  # site as the single raw tail in the file.
   if [ "${#TEXT}" -le 60 ]; then
     tries=0
     while [ $tries -lt 2 ]; do
@@ -788,7 +812,7 @@ brief)
 peek)
   NAME="${1:-}"; [ -n "$NAME" ] || usage
   P="$(resolve_pane "$NAME")"
-  t capture-pane -p -t "$P" | grep -v '^[[:space:]]*$' | tail -"${2:-25}"
+  screen_tail "$P" "${2:-25}"
   ;;
 
 occupancy)

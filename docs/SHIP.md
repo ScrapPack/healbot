@@ -264,11 +264,12 @@ detector gained the CLI settings-migration containment and its mutation leg, →
 → 68 at the 2026-08-03 operator walk (docs/E2E.md §6), → 79 at the same day's open-items
 close (docs/E2E.md §7, items C and E plus the two defects the close's own test measured),
 → 81 and → 83 at the item-B and item-A closes, → 84 when the close's push review hardened
-two of its own predicates; `skip_max=2` throughout — the floor at
-`Results(expect=` in the probe is the only owner of the current number, and this chain is
-its correction trail), because the first of the two was also split:
+two of its own predicates; `skip_max=2` through that whole chain (5 once the 2026-08-05
+tall-pane rows added tmux-gated live legs) — the floor at
+`Results(expect=` in the probe is the only owner of the current number, and the ledger
+comment above it is the trail's continuation), because the first of the two was also split:
 
-- **`probe_fleet_claude.py:226`** — *"the banned-filename convention: safe name tracked,
+- **`probe_fleet_claude.py:236`** — *"the banned-filename convention: safe name tracked,
   real name materialized"* — the CLAUDE.md symlink, now four rows, of which only the
   last is environment-bound. The symlink is untracked and ignored by the whitelist's catch-all
   `*` (`harness/claude/.gitignore:15`), so `git worktree add` never populates it; it is
@@ -280,7 +281,7 @@ its correction trail), because the first of the two was also split:
   ever run on. Only "the link is on disk right now" is guarded, by
   `claude-config-materialized`. Still do NOT "fix" a slot by creating the file: `gate.py:220`
   bans that name anywhere in the tracked tree, which is the whole reason for the convention.
-- **`probe_fleet_claude.py:896`** — *"skill twins: harness/skills/*.md vs
+- **`probe_fleet_claude.py:906`** — *"skill twins: harness/skills/*.md vs
   ~/.agents/skills/<name>/SKILL.md"* — guarded by `main-checkout`. Firstmate-only
   until later on 2026-08-02, when `healbot-traps.md` was found to have drifted for two days
   while the one guarded specimen held (HARNESS.md Traps has the row); now one aggregate row

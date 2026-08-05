@@ -19,9 +19,11 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 from rig import MAIN_CHECKOUT, Env, Results
 
@@ -101,8 +103,16 @@ CONFIG_MATERIALIZED = Env(
 # wrong leg-to-conjunct ratio, and a floor written one short. The coverage claim is
 # computed rather than written because of that ladder, and the rungs are not counted here
 # for the same reason docs/E2E.md stopped counting them: a tally in prose is a number with
-# nothing computing it. 95.
-r = Results(expect=95, skip_max=2)
+# nothing computing it. 95. The 2026-08-05 tall-pane finding (capture-pane pads to the pane
+# HEIGHT and the CLI paints top-down, so `state`'s raw `tail -20` classified a solo
+# crewmate unreadable at 49 rows and idle at 23, same marker line, while peek stripped
+# blanks the whole time) adds eleven: the shared-reader conjuncts with six legs and a
+# computed coverage row, plus three rows run LIVE against a scratch tmux pane: the
+# fixture, the shipped reader's extracted body seeing the sentinel through the padding,
+# and the recovered pre-fix read missing it. The live pair exists because the trap is
+# tmux's own padding, which no source read can prove; tmux joins the environment
+# requirements, so skip_max rises 2 -> 5. 106.
+r = Results(expect=106, skip_max=5)
 
 
 def sh_n(path):
@@ -986,6 +996,163 @@ try:
     r.check("MUTATION: an exit that bypasses the tier verdicts is caught",
             not exit_reads_the_tiers(doc.replace(
                 "any(state is False for state in tier_states)", "False", 1)))
+
+    # -- the screen reader: strip the padding, THEN tail (2026-08-05) --------------
+    # capture-pane -p pads its output to the pane HEIGHT and the CLI paints top-down,
+    # so a bare `tail -N` on a tall, mostly empty pane returns padding and none of the
+    # render. MEASURED 2026-08-05 on a solo crewmate holding the crew window alone: at
+    # 49 rows the ready marker sat on line 17 and `state` classified unreadable off
+    # twenty blank lines; the same pane at 23 rows read idle, same marker line. peek
+    # stripped blanks before tailing the whole time; state diverged by omitting the
+    # strip. Same defect family as the help-card popup rows above: a variable-size
+    # render read through a fixed-size window. The repair is ONE reader, screen_tail,
+    # and these conjuncts hold every classification read onto it. The submit verify
+    # keeps its raw tail DELIBERATELY (its match target is text a successful submit
+    # echoes into the transcript, so a stripped window could manufacture the expensive
+    # false failure); the census conjunct pins it as the single exception so a second
+    # raw tail cannot grow back quietly.
+    def _screen_readers(s):
+        """The conjuncts, separately, so each leg names the one it flips (_down_order's
+        pattern). The census reads comment-stripped code for the finding-15 reason: the
+        submit-verify comment narrates the raw tail it keeps."""
+        body = fn_body(s, "screen_tail")
+        code = "\n".join(ln for ln in s.split("\n") if not ln.lstrip().startswith("#"))
+        state_b = code.partition("\nstate)")[2].partition("\nsend)")[0]
+        send_b = code.partition("\nsend)")[2].partition("\nbrief)")[0]
+        peek_b = code.partition("\npeek)")[2].partition("\noccupancy)")[0]
+        raw_tails = [ln for ln in code.split("\n")
+                     if "capture-pane" in ln and "| tail" in ln and "grep -v" not in ln]
+        return {
+            "helper_strips_then_tails": bool(re.search(
+                r"capture-pane[^\n|]*\|\s*grep -v '\^\[\[:space:\]\]\*\$'\s*\|\s*tail",
+                body)),
+            "state_classifies_screen_tail":
+                'SCREEN="$(screen_tail "$P" 20' in state_b,
+            "send_gate_reads_screen_tail":
+                'SCREEN="$(screen_tail "$P" 20)"' in send_b,
+            "peek_reads_screen_tail": 'screen_tail "$P"' in peek_b,
+            "corpse_dump_reads_screen_tail":
+                'screen_tail "$PANE" 15' in spawn_block(s),
+            "submit_verify_is_the_one_raw_tail":
+                len(raw_tails) == 1 and "tail -3" in raw_tails[0],
+        }
+
+    def _mutate_arm(s, arm, old, new):
+        # Scoped like _mutate_spawn and _mutate_down: state's and send's screen_tail
+        # calls begin identically, so an unscoped first-occurrence replace mutates
+        # whichever arm comes first and leaves the named one intact, a leg that passes
+        # against correct code.
+        head, sep, tail = s.partition("\n%s)" % arm)
+        return head + sep + tail.replace(old, new, 1)
+
+    r.check("every screen classification reads screen_tail (strip padding, THEN tail); "
+            "the submit verify is the one raw tail left, deliberate and documented",
+            all(_screen_readers(src).values()),
+            "MEASURED 2026-08-05: a solo crewmate at 49 rows classified unreadable off "
+            "twenty rows of padding while peek showed the marker as its last line")
+    SCREEN_LEGS = [
+        ("the pre-fix state read, a raw tail -20 of the padded capture",
+         _mutate_arm(src, "state",
+                     'SCREEN="$(screen_tail "$P" 20 2>/dev/null || true)"',
+                     'SCREEN="$(t capture-pane -p -t "$P" 2>/dev/null | tail -20 '
+                     '|| true)"'),
+         ["state_classifies_screen_tail", "submit_verify_is_the_one_raw_tail"]),
+        ("a send busy gate reverted to its raw tail",
+         _mutate_arm(src, "send",
+                     'SCREEN="$(screen_tail "$P" 20)"',
+                     'SCREEN="$(t capture-pane -p -t "$P" | tail -20)"'),
+         ["send_gate_reads_screen_tail", "submit_verify_is_the_one_raw_tail"]),
+        ("a peek grown back its own inline pipeline, correct today and free to diverge",
+         _mutate_arm(src, "peek",
+                     'screen_tail "$P" "${2:-25}"',
+                     "t capture-pane -p -t \"$P\" | grep -v '^[[:space:]]*$' "
+                     "| tail -\"${2:-25}\""),
+         ["peek_reads_screen_tail"]),
+        ("a boot-corpse dump back on the raw tail that prints fifteen blanks",
+         _mutate_arm(src, "spawn",
+                     'screen_tail "$PANE" 15 >&2',
+                     't capture-pane -p -t "$PANE" | tail -15 >&2'),
+         ["corpse_dump_reads_screen_tail", "submit_verify_is_the_one_raw_tail"]),
+        ("a helper that tails the padded capture BEFORE stripping, the pre-fix window "
+         "wearing the strip as decoration",
+         src.replace("| grep -v '^[[:space:]]*$' | tail -\"${2:-25}\"",
+                     "| tail -\"${2:-25}\" | grep -v '^[[:space:]]*$'", 1),
+         ["helper_strips_then_tails"]),
+        ("a helper with the strip deleted outright",
+         src.replace(" | grep -v '^[[:space:]]*$'", "", 1),
+         ["helper_strips_then_tails"]),
+    ]
+    for _label, _mutant, _keys in SCREEN_LEGS:
+        _v = _screen_readers(_mutant)
+        r.check("MUTATION: %s is caught (%s)" % (_label, ", ".join(_keys)),
+                all(not _v[k] for k in _keys))
+    r.check("every conjunct _screen_readers decides on has a leg asserting it",
+            {k for _, _, ks in SCREEN_LEGS for k in ks} == set(_screen_readers(src)),
+            "COMPUTED, not written (the down rows' precedent)")
+
+    # The counterfactual, run LIVE: the trap is tmux's own padding, which a source read
+    # can pin but never prove. A scratch server on a private socket hosts one 80x49
+    # pane whose process paints sixteen filler lines and a sentinel, the measured
+    # solo-crewmate geometry (sentinel on row 17, everything below it padding). The
+    # shipped reader is executed from its EXTRACTED body, not a retyped copy, so what
+    # runs is what ships; the pre-fix read is the recovered pre-fix line verbatim.
+    # Zero credits: the pane runs sh, and the server dies in the finally. TESTED
+    # 2026-08-05 by hand first: the padded capture is 49 lines, the raw tail-20 holds
+    # zero sentinel hits, the stripped read ends on the sentinel, and the state verb
+    # reads idle at 49 and at 23 rows against a live scratch manifest.
+    TMUX_BIN = Env(
+        "tmux-available",
+        "a tmux binary is on PATH, so a scratch server can host the tall-pane fixture "
+        "(strictly weaker than the checks: they need the capture to actually pad)",
+        lambda: shutil.which("tmux") is not None,
+    )
+    SENTINEL = "HB-PROBE-TALL-PANE-SENTINEL"
+    _fx = {}
+
+    def _tmx(*args):
+        return subprocess.run(["tmux", "-L", _fx["sock"], *args],
+                              capture_output=True, text=True)
+
+    def _screen_fixture():
+        if "raw" in _fx:
+            return _fx
+        _fx["sock"] = "hb-probe-%d" % os.getpid()
+        paint = ('i=1; while [ $i -le 16 ]; do echo "filler $i"; i=$((i+1)); done; '
+                 'echo "%s"; sleep 120' % SENTINEL)
+        _tmx("new-session", "-d", "-s", "fix", "-x", "80", "-y", "49", paint)
+        _fx["pane"] = _tmx("list-panes", "-t", "fix", "-F", "#{pane_id}").stdout.strip()
+        for _ in range(50):
+            _fx["full"] = _tmx("capture-pane", "-p", "-t", _fx["pane"]).stdout
+            if SENTINEL in _fx["full"]:
+                break
+            time.sleep(0.1)
+        stub = 't() { tmux -L \'%s\' "$@"; }\n' % _fx["sock"]
+        shipped = (stub + fn_body(src, "screen_tail")
+                   + "\nscreen_tail '%s' 20\n" % _fx["pane"])
+        _fx["shipped"] = subprocess.run(["sh", "-c", shipped],
+                                        capture_output=True, text=True).stdout
+        prefix = (stub + "P='%s'\n" % _fx["pane"]
+                  + 'SCREEN="$(t capture-pane -p -t "$P" 2>/dev/null | tail -20 '
+                    '|| true)"\nprintf %s "$SCREEN"\n')
+        _fx["raw"] = subprocess.run(["sh", "-c", prefix],
+                                    capture_output=True, text=True).stdout
+        return _fx
+
+    # No try/finally around the cleanup: probe_rig_contract requires every `finally` in
+    # a rig to end on the verdict exit, so an auxiliary cleanup finally is banned shape.
+    # A crash between these rows leaks the scratch server for at most the fixture's own
+    # sleep: when it ends, the last session dies and the server exits with it.
+    r.check("live fixture: the tall pane paints the sentinel at all (guards the "
+            "absence claim below against an empty capture)",
+            lambda: SENTINEL in _screen_fixture()["full"], needs=TMUX_BIN)
+    r.check("live: the SHIPPED reader, body extracted from source, sees the "
+            "sentinel through the padding",
+            lambda: SENTINEL in _screen_fixture()["shipped"], needs=TMUX_BIN)
+    r.check("live MUTATION, the tall-pane case: the recovered pre-fix raw tail -20 "
+            "misses the same sentinel on the same pane",
+            lambda: SENTINEL not in _screen_fixture()["raw"], needs=TMUX_BIN)
+    if "sock" in _fx:
+        _tmx("kill-server")
 except SystemExit:
     raise
 except Exception:

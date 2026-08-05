@@ -113,3 +113,14 @@ you recognize the red when it fires. HARNESS.md's "Traps" section is the canonic
   fleet contains it at hb_auth_state, which stamps the root before every spawn and
   preflight. Residual: a hand-run interactive `claude` in an unstamped root still fires
   once; repair unchanged.
+- **tmux `capture-pane -p` pads to the pane HEIGHT and the CLI paints top-down**, so a
+  fixed `tail -N` of a capture reads pure padding on a tall, mostly empty pane. MEASURED
+  2026-08-05 on a solo crewmate holding the crew window alone: at 49 rows the ready marker
+  sat on line 17 and `state` said unreadable; at 23 rows the same marker line read idle. A
+  solo crewmate always misread, and spawning a second one "fixed" it by halving the panes.
+  Strip blanks BEFORE tailing: hb-fleet.sh's screen_tail is the one reader for state,
+  send's busy gate, peek, and the boot-corpse dump; send's submit verify stays raw
+  deliberately (its target text is echoed into the transcript on success) and is pinned as
+  the single exception. Same family as the help-card popup: a variable-size render read
+  through a fixed-size window. Guard: probe_fleet_claude.py's screen-reader conjuncts plus
+  a live tall-pane counterfactual on a scratch tmux server.
