@@ -55,7 +55,8 @@ HB = rig.HEALBOT
 # normpath, not f"{HB}/opencode": HB comes back from os.path.dirname with NATIVE separators, so on
 # Windows the interpolated form is the mixed string `C:\...\healbot/opencode` while every indexed
 # path is normpath'd to all-backslash. `p.startswith(CHECKOUT + os.sep)` — the filter that keeps a
-# citation off the CHECKOUT's copy of a colliding name (classify() and quote_verdict()) — then
+# citation off the CHECKOUT's copy of a colliding name (resolve(), shared by classify() and
+# the quote leg) — then
 # matched nothing, and bare `PLAN.md` resolved to the checkout's v2/effect/PLAN.md. MEASURED
 # 2026-08-05 on Windows 11. On POSIX normpath here is a no-op, so this changes no Mac behavior.
 CHECKOUT = os.path.normpath(f"{HB}/opencode")
@@ -199,12 +200,51 @@ def lines_of(path):
     return _cache[path]
 
 
-def classify(cited, lo, hi, index):
-    """-> (verdict, detail). Verdicts: OK | BLANK | PAST_EOF | NOFILE.
+def _tree_rel(path):
+    """-> (tree, directory components) with the tree root stripped. fork/ mirrors the
+    checkout's layout, so proximity must compare LAYOUT positions, not raw prefixes: a
+    map under fork/packages/plugin/src is nearest the checkout's packages/plugin/src,
+    which a raw-prefix rule would score identically to every other checkout file."""
+    for tree, root in (("checkout", CHECKOUT), ("fork", os.path.join(HB, "fork"))):
+        if path.startswith(root + os.sep):
+            rel = path[len(root) + 1:]
+            return tree, [c for c in os.path.dirname(rel).split(os.sep) if c]
+    rel = path[len(HB) + 1:] if path.startswith(HB + os.sep) else path
+    return "repo", [c for c in os.path.dirname(rel).split(os.sep) if c]
 
-    A candidate must CONTAIN the cited line to be considered. That single rule is what separates a
-    real finding from the 155 this probe's first draft invented.
-    """
+
+def nearest_to(src, cands):
+    """The tie-break is a rule, not enumeration order. `(exact or inrange)[0]` was
+    os.walk order: on Windows it resolved four basename-only citations to other
+    packages' same-named files (blank at the cited lines), and on this Mac it sent
+    FEATURE-PLUGINS.MAP.md's and fork/README.md's bare `builtins.ts` to
+    core/src/tool's — the wrong file, silently OK off its non-blank lines (MEASURED
+    2026-08-05, both platforms; NEXT.md "Open on the Mac"). Nearest wins: longest
+    shared root-stripped directory prefix with the citing document, then the
+    document's own tree, then posix-lexicographic, so every filesystem picks the
+    same file for a reason."""
+    if src is None or len(cands) < 2:
+        return cands[0]
+    stree, sdir = _tree_rel(src)
+
+    def key(p):
+        ptree, pdir = _tree_rel(p)
+        shared = 0
+        for a, b in zip(sdir, pdir):
+            if a != b:
+                break
+            shared += 1
+        return (-shared, 0 if ptree == stree else 1, rel_posix(p))
+
+    return min(cands, key=key)
+
+
+def resolve(cited, hi, index, src=None):
+    """-> (suffix, pick). The ONE resolution path — classify() and the quote leg used to
+    carry byte-copies of this block, and the Windows sweep had to fix the separator bug
+    in both. `suffix` is the candidate set after the suffix and .md scoping (empty means
+    NOFILE); `pick` is None when no candidate contains the cited line (PAST_EOF /
+    unresolved), else nearest_to()'s choice."""
     cands = index.get(os.path.basename(cited), [])
     # Citations write "/" but the index holds normpath'd paths, which walk os.sep — on
     # Windows a "/"-needle never matches and the fallback silently widens to every basename
@@ -212,7 +252,7 @@ def classify(cited, lo, hi, index):
     want = os.sep + cited.replace("/", os.sep)
     suffix = [p for p in cands if p.endswith(want)] or cands
     if not suffix:
-        return "NOFILE", cited
+        return [], None
     # `.md` citations mean this repo's docs, not the checkout's copy of some upstream doc — both
     # trees ship a PLAN.md, and only one of them is the one being cited.
     if cited.endswith(".md"):
@@ -220,10 +260,24 @@ def classify(cited, lo, hi, index):
         suffix = own or suffix
     inrange = [p for p in suffix if (L := lines_of(p)) is not None and hi <= len(L)]
     if not inrange:
+        return suffix, None
+    exact = [p for p in inrange if p.endswith(want)]
+    return suffix, nearest_to(src, exact or inrange)
+
+
+def classify(cited, lo, hi, index, src=None):
+    """-> (verdict, detail). Verdicts: OK | BLANK | PAST_EOF | NOFILE.
+
+    A candidate must CONTAIN the cited line to be considered. That single rule is what separates a
+    real finding from the 155 this probe's first draft invented. Among surviving candidates,
+    `src` (the citing document) breaks basename ties via nearest_to().
+    """
+    suffix, pick = resolve(cited, hi, index, src)
+    if not suffix:
+        return "NOFILE", cited
+    if pick is None:
         biggest = max(suffix, key=lambda p: len(lines_of(p) or []))
         return "PAST_EOF", f"{rel_posix(biggest)} has {len(lines_of(biggest) or [])} lines"
-    exact = [p for p in inrange if p.endswith(want)]
-    pick = (exact or inrange)[0]
     if all(not s.strip() for s in lines_of(pick)[lo - 1 : hi]):
         return "BLANK", rel_posix(pick)
     return "OK", rel_posix(pick)
@@ -267,8 +321,9 @@ def quote_frags(q):
     return [f for f in (_norm(p) for p in re.split(r"…|\.\.\.", q)) if len(f) >= 12]
 
 
-def quote_verdict(cited, lo, hi, quote, index):
+def quote_verdict(pick, lo, hi, quote):
     """-> (verdict, detail). Verdicts: QUOTE_OK | QUOTE_MISMATCH | QUOTE_UNRESOLVED.
+    `pick` is resolve()'s choice; the caller maps a None pick to QUOTE_UNRESOLVED.
 
     The HEAD of the quote locates it, and the head is the whole assertion. Equality does not
     survive contact with honest quoting: `docs/AFK.md` ends one quote at "it hangs indefinitely."
@@ -282,17 +337,6 @@ def quote_verdict(cited, lo, hi, quote, index):
     `HARNESS.md:346` case sat five lines above its text and every character of the quote was
     present in the file, just not where the citation said.
     """
-    cands = index.get(os.path.basename(cited), [])
-    want = os.sep + cited.replace("/", os.sep)
-    suffix = [p for p in cands if p.endswith(want)] or cands
-    if cited.endswith(".md"):
-        own = [p for p in suffix if not p.startswith(CHECKOUT + os.sep)]
-        suffix = own or suffix
-    inrange = [p for p in suffix if (L := lines_of(p)) is not None and hi <= len(L)]
-    if not inrange:
-        return "QUOTE_UNRESOLVED", cited
-    exact = [p for p in inrange if p.endswith(want)]
-    pick = (exact or inrange)[0]
     L = lines_of(pick)
     frags = quote_frags(quote)
     if not frags:
@@ -324,7 +368,9 @@ def scan_quotes(index, srcs):
                 continue
             lo = int(m.group(2))
             hi = int(m.group(3)) if m.group(3) else lo
-            verdict, detail = quote_verdict(m.group(1), lo, hi, q.group(1), index)
+            _, pick = resolve(m.group(1), hi, index, src)
+            verdict, detail = (quote_verdict(pick, lo, hi, q.group(1)) if pick
+                               else ("QUOTE_UNRESOLVED", m.group(1)))
             out.append((rel_posix(src), m.group(1), lo, hi, verdict, detail))
     return out
 
@@ -339,12 +385,12 @@ def scan(index, srcs):
         for m in CITE.finditer(text):
             lo = int(m.group(2))
             hi = int(m.group(3)) if m.group(3) else lo
-            verdict, detail = classify(m.group(1), lo, hi, index)
+            verdict, detail = classify(m.group(1), lo, hi, index, src)
             rows.append((rel_posix(src), m.group(1), lo, hi, verdict, detail))
     return rows
 
 
-r = rig.Results(expect=20)
+r = rig.Results(expect=21)
 
 try:
     index, idx_dropped = build_index()
@@ -460,10 +506,10 @@ try:
     )
     r.check(
         "MUTATION: an unresolvable quote candidate counts against the floor, not toward it",
-        quote_verdict("no/such/file.py", 1, 1,
-                      "a fragment long enough to be checkable", index)[0] == "QUOTE_UNRESOLVED",
+        resolve("no/such/file.py", 1, index)[1] is None,
         "the regression class the floor above guards: a candidate the resolver cannot walk "
-        "must land in UNRESOLVED (draining the verified floor) rather than in OK",
+        "returns no pick, which scan_quotes files as QUOTE_UNRESOLVED (draining the verified "
+        "floor) rather than as OK",
     )
 
     # --- mutation checks ------------------------------------------------------------------
@@ -502,20 +548,23 @@ try:
     # would pass just as happily if the matcher were broken shut.
     r.check(
         "MUTATION: a verbatim quote moved off its line IS caught — prompt.ts:1295 quoted at :1296",
-        quote_verdict(real, 1296, 1296, src_lines[1294].strip()[:80], index)[0] == "QUOTE_MISMATCH",
+        quote_verdict(resolve(real, 1296, index)[1], 1296, 1296,
+                      src_lines[1294].strip()[:80])[0] == "QUOTE_MISMATCH",
         "the real line 1295 quoted against line 1296 — one line off, the exact size of the Phase 6 "
         "shift that rotted docs/HEADLESS.md. If the window slack ever widens to swallow an "
         "off-by-one this goes red, which is the point",
     )
     r.check(
         "NEGATIVE CONTROL: a correct verbatim quote is NOT flagged — prompt.ts:1295",
-        quote_verdict(real, 1295, 1295, src_lines[1294].strip()[:80], index)[0] == "QUOTE_OK",
+        quote_verdict(resolve(real, 1295, index)[1], 1295, 1295,
+                      src_lines[1294].strip()[:80])[0] == "QUOTE_OK",
         "same line, quoted at its own number. Without this the leg above passes by matching "
         "nothing at all",
     )
     r.check(
         "NEGATIVE CONTROL: a TRUNCATED quote is still correct — quoting is not transcription",
-        quote_verdict(real, 1295, 1295, src_lines[1294].strip()[:28], index)[0] == "QUOTE_OK",
+        quote_verdict(resolve(real, 1295, index)[1], 1295, 1295,
+                      src_lines[1294].strip()[:28])[0] == "QUOTE_OK",
         "docs/AFK.md ends a HARNESS.md quote at 'it hangs indefinitely.' where the source runs on "
         "', but it does not stall other sessions'. That is honest quoting, and an equality check "
         "would have called it rot — which is why the match is a PREFIX",
@@ -545,6 +594,18 @@ try:
         "…and that pin really is on line 16",
         "openai/gpt-5.6-sol" in lines_of(f"{HB}/harness/config/opencode/opencode.jsonc")[15],
         "the one citation in this repo that another probe's assertion depends on",
+    )
+    fp_map = os.path.join(HB, "fork", "packages", "tui", "src", "feature-plugins",
+                          "FEATURE-PLUGINS.MAP.md")
+    r.check(
+        "RESOLUTION: a bare `builtins.ts` from FEATURE-PLUGINS.MAP.md resolves to the map's own "
+        "sibling, by rule",
+        classify("builtins.ts", 1, 1, index, src=fp_map)[1]
+        == "fork/packages/tui/src/feature-plugins/builtins.ts",
+        "four files are named builtins.ts and `(exact or inrange)[0]` was os.walk order: Windows "
+        "sent this to another package's copy (blank at the cited lines) and this Mac to "
+        "core/src/tool's, silently OK off its non-blank lines — MEASURED 2026-08-05 on both. "
+        "nearest_to()'s root-stripped proximity is the rule; enumeration order was never one",
     )
 
 except SystemExit:

@@ -44,25 +44,27 @@ THE PROCEDURE. Run the doctor between steps; it tells you what the last step cha
 1. Run `python3 harness/doctor.py` (`python` on Windows). Rows print with a tier
    summary, and exit 2 mid-bring-up means a tier is NOT YET: the checklist working.
 2. Run `git config core.hooksPath gate/hooks`. Pushes now gate themselves.
-3. Reconstitute the opencode checkout with the reconstitution block in README.md
+3. Run `git config user.email 202169887+ScrapPack@users.noreply.github.com`. Commits
+   from this clone now carry the noreply identity, not a real email.
+4. Reconstitute the opencode checkout with the reconstitution block in README.md
    "Quickstart — macOS / Linux" (same commands on a PC). The doctor's `fork overlay`
    row turns PASS.
-4. Build the rig venv per the same quickstart. On Windows the layout is
+5. Build the rig venv per the same quickstart. On Windows the layout is
    `venv/Scripts/python.exe`, and the gate resolves both.
-5. Run `python3 harness/install-skills.py`. On a DRIFT or CONFLICT row, stop with
+6. Run `python3 harness/install-skills.py`. On a DRIFT or CONFLICT row, stop with
    the output in your report. A clean run prints only installed, in-sync, linked,
    link ok, or copy dir rows.
-6. Hand the login to the human: `. harness/env.claude.sh && claude`, sign in, quit.
+7. Hand the login to the human: `. harness/env.claude.sh && claude`, sign in, quit.
    Afterward the doctor's auth row turns PASS.
-7. Run `python3 harness/doctor.py` once more. The exit is 0, or 2 with only named
+8. Run `python3 harness/doctor.py` once more. The exit is 0, or 2 with only named
    pending tiers.
-8. Run the gate command from docs/OPERATIONS.md "The gate". The verdict line prints
+9. Run the gate command from docs/OPERATIONS.md "The gate". The verdict line prints
    `== PASS ==`.
-9. On a machine with the rig, run the free-suite one-liner from docs/OPERATIONS.md
-   "Rig and corpus". Every probe exits 0.
+10. On a machine with the rig, run the free-suite one-liner from docs/OPERATIONS.md
+    "Rig and corpus". Every probe exits 0.
 
 REPORT: one table, a row per doctor tier, columns state / evidence / classification,
-plus the verbatim output of steps 7 through 9. Anything that failed is a finding about
+plus the verbatim output of steps 8 through 10. Anything that failed is a finding about
 this machine or about the docs. Record it either way, with the exact output. Do not
 summarize a failure into a pass.
 ```

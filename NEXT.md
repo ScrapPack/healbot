@@ -155,6 +155,26 @@ wrong file too, the leg has been red or the citations are stale, and that is a d
 finding again. Do not sort the index as a fix: it is deterministic but would pick the same
 wrong file on both platforms, turning four Windows false positives into four everywhere.
 
+**Resolved on the Mac, 2026-08-05, the same day (the commit carrying this paragraph):**
+running the probe unchanged measured a case the handoff did not name: the Mac also picked
+wrong files and stayed green off their non-blank lines (FEATURE-PLUGINS.MAP.md's and
+fork/README.md's bare `builtins.ts` resolved to core/src/tool's copy). The tie-break is
+now a rule, `nearest_to()` in probe_citations.py: longest shared root-stripped directory
+prefix with the citing document, then the document's own tree, then posix-lexicographic.
+fork/ is root-stripped so a map sits nearest its checkout twin, which keeps
+PLUGIN-API.MAP.md's `tui.ts` where plain source-prefix proximity would have lost it.
+84 of 1028 resolutions moved, every verdict unchanged; the map families now land in
+their own packages, and seven citations whose intent no tie-break could carry were
+path-sharpened at the source instead (identifier.ts, httpapi/server.ts,
+session/session.ts, protocol/src/api.ts, and a 2026-08-01 handoff's citation of line 88
+of term.py, which the pick diff exposed as genuinely rotted by this very branch's
+term.py edit — its os.write moved to line 114, and the handoff now cites that
+line). A new probe leg pins the FEATURE-PLUGINS case with the pre-rule pick
+as its negative control; floor 20 → 21. The merge itself is verified after the fact:
+gate PASS over fda7d64..d9fa44e on this machine (gate/runs/20260805-162257.json),
+advisory review one info finding (the self-declared unverified state), and the evidence
+published onto the merge commit.
+
 Smaller, also open: the repo pins no ruff config anywhere, so the gate's lint verdict is
 whatever the installed ruff version defaults to and differs by machine. Under that
 config-less invocation ruff calls the `# noqa: E402` in `probe_citations.py` unused and

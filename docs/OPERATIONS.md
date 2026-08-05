@@ -19,6 +19,7 @@ on native Windows; `gate/gate.py` and the pre-push hook resolve this themselves.
 | `git config core.hooksPath gate/hooks` | Wire the push gate, once per clone (`gate/GATE.MAP.md`) |
 | `python3 harness/install-skills.py` | Install/refresh the skill twins onto this machine (`~/.agents` + the `~/.claude/skills` surface). Holds divergent copies rather than deciding direction; `--force` writes repo over installed. The doctor's skill-twins row verifies the installed `~/.agents` halves; the `~/.claude` surface is the installer's own to re-check |
 | — | Fresh clone, agent-driven: `docs/AGENT-SETUP.md` is a paste-in prompt that walks a Claude Code session through this whole bring-up |
+| after every `git pull`: `python3 harness/doctor.py` | The two-machine parity ritual (adopted 2026-08-05): fix what the doctor names. A `fork/` change needs the checkout re-copied (`fork/README.md`'s closing step); a `harness/skills/` change needs `install-skills.py --force` — a just-pulled twin drift is repo-newer by construction |
 
 ## opencode half
 

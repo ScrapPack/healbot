@@ -388,7 +388,7 @@ code and stand on their own.
 | `history.ts:36-38` = post-compaction tail | correct in substance; the full predicate is `:36-42`, and a second baseline filter follows at `:44-46` |
 | `core/src/session/info.ts:29-37` = token read | off by one — actual `:28-36` (`tokens` block `:29-37` if `cost` excluded) |
 | `opencode/src/session/session.ts:97-106` = token read | off by one — actual `:97-105` |
-| `api.ts:78-83` = one port mounts both | block starts at `:79`; substance correct |
+| `protocol/src/api.ts:78-83` = one port mounts both | block starts at `:79`; substance correct |
 | `session/compaction.ts:328` (agent) and `:508` (`session.compacted`) | these are **`packages/opencode/src/session/compaction.ts`**, not this file (241 LOC) |
 | §1 "unresolved — which engine runs" | **settled: both, see §6** |
 | §2 "Both API families read the same DB columns — they report the same number" | true for **reads**; **materially incomplete** — only the v1 engine *writes* those columns. See §2.4 |

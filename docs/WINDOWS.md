@@ -75,7 +75,14 @@ have a Claude Code agent drive these steps instead, paste the prompt in
    ```
 
    Line endings are pinned by `.gitattributes` (`eol=lf`), so a default Windows git cannot
-   CRLF-break the scripts. The doctor verifies the working tree anyway.
+   CRLF-break the scripts. The doctor verifies the working tree anyway. Then pin the
+   repo-local committer email to the noreply address, once per clone — a push from this
+   machine otherwise publishes the account's real email in public commit metadata
+   (MEASURED: the first PC push did exactly that, 2026-08-05):
+
+   ```sh
+   git config user.email 202169887+ScrapPack@users.noreply.github.com
+   ```
 
 2. **Run the doctor, first thing and after every step:**
 

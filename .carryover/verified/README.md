@@ -794,7 +794,7 @@ invisible to the diff machinery — silently, with no error. That cost a 350K ru
 `0 sessions`, because you and it are looking at different instances.
 
 Session ids are **descending** identifiers (`schema/src/session-id.ts:8` →
-`identifier.ts:22`), so ascending sort is already newest-first. The grid used to sort
+`schema/src/identifier.ts:22`), so ascending sort is already newest-first. The grid used to sort
 `b.localeCompare(a)` under a comment claiming the opposite and rendered oldest-first; both the
 grid and these rigs were corrected together, so the interesting session is now created **first**
 to land in the last cell. Fixing only one side would have made three assertions pass for the

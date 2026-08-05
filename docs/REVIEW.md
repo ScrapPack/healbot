@@ -158,7 +158,7 @@ Two corrections to `HARNESS.md` follow:
   different model. The negative was model-specific, not structural.
 - `docs/SCAN.md:79-81`'s "v2 is reachable only via the separate `lildax` bin" is **refuted**.
   The `opencode` binary wires the v2 handlers (`server.ts:102`, `:177-181`) with an in-process
-  execution backend (`server.ts:299-302` → `core/src/session/execution/local.ts:16-28`).
+  execution backend (`httpapi/server.ts:299-302` → `core/src/session/execution/local.ts:16-28`).
 
 So v2 is live on the shipped binary, reachable on the same port, and any client that uses it
 gets a session the retirement trigger cannot see. "Drive v1" is not a hedge against an unknown —
@@ -256,7 +256,7 @@ never matched STRIP's 18.
 ### `PATCH time.archived` does not remove a session from anything
 
 The DELETE half is right (`session.ts:608-626` recurses over children). But archiving filters
-**nothing** the grid would read: `ListInput` (`session.ts:302-311`) has no `archived` field;
+**nothing** the grid would read: `ListInput` (`session/session.ts:302-311`) has no `archived` field;
 `listByProject` (`:957-1009`, the query behind `GET /session`) has no `time_archived` predicate;
 the only filter is `listGlobal` (`:564`), reachable solely via `GET /experimental/session`; the
 v2 list does not filter; `grep -rn archived packages/tui/src` → zero hits.

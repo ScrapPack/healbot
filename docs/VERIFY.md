@@ -252,7 +252,7 @@ setRoster([...list].sort((a, b) => b.id.localeCompare(a.id)))
 ```
 
 Both halves are wrong. Session ids are **descending** identifiers
-(`schema/src/session-id.ts:8` → `identifier.ts:22`: `const value = descending ? ~current :
+(`schema/src/session-id.ts:8` → `schema/src/identifier.ts:22`: `const value = descending ? ~current :
 current`), so a later creation time yields a *lexicographically smaller* id and descending ids
 already sort newest-first ascending. `b.localeCompare(a)` therefore renders **oldest first** —
 the opposite of the comment's stated goal. Confirmed empirically: a blocker created first landed
