@@ -44,13 +44,14 @@ THE PROCEDURE. Run the doctor between steps; it tells you what the last step cha
 1. Run `python3 harness/doctor.py` (`python` on Windows). Rows print with a tier
    summary, and exit 2 mid-bring-up means a tier is NOT YET: the checklist working.
 2. Run `git config core.hooksPath gate/hooks`. Pushes now gate themselves.
-3. Reconstitute the opencode checkout with the five commands in README.md
+3. Reconstitute the opencode checkout with the reconstitution block in README.md
    "Quickstart — macOS / Linux" (same commands on a PC). The doctor's `fork overlay`
    row turns PASS.
 4. Build the rig venv per the same quickstart. On Windows the layout is
    `venv/Scripts/python.exe`, and the gate resolves both.
-5. Run `python3 harness/install-skills.py`. Every row prints installed or in-sync.
-   On a DRIFT row, stop with the diff in your report.
+5. Run `python3 harness/install-skills.py`. On a DRIFT or CONFLICT row, stop with
+   the output in your report. A clean run prints only installed, in-sync, linked,
+   link ok, or copy dir rows.
 6. Hand the login to the human: `. harness/env.claude.sh && claude`, sign in, quit.
    Afterward the doctor's auth row turns PASS.
 7. Run `python3 harness/doctor.py` once more. The exit is 0, or 2 with only named

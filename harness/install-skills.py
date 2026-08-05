@@ -65,7 +65,9 @@ def put(src, dst, force):
 def surface(name):
     """The ~/.claude/skills/<name> surface. Returns (state, copy_dir): copy_dir is a
     real directory the caller must fill when a symlink cannot exist or already does
-    not (a prior fallback), None when the symlink carries the surface."""
+    not (a prior fallback), None when the symlink carries the surface. The per-file
+    rows that follow a copy dir are where refresh-vs-DRIFT is decided; this state
+    only names the surface kind."""
     target = os.path.join(AGENTS, name)
     link = os.path.join(CLAUDE, name)
     if os.path.islink(link):
@@ -73,10 +75,15 @@ def surface(name):
             return "link ok", None
         return "CONFLICT: links to %s, left alone" % os.path.realpath(link), None
     if os.path.isdir(link):
-        return "copy dir refreshed", link
+        return "copy dir", link
+    if os.path.lexists(link):
+        return "CONFLICT: exists and is not a directory or symlink, left alone", None
     os.makedirs(CLAUDE, exist_ok=True)
     try:
-        os.symlink(target, link)
+        # target_is_directory: without it, Windows with Developer Mode creates a FILE
+        # symlink at a directory target — unusable, reported "linked" (review finding,
+        # c3dc440 push). POSIX ignores the flag.
+        os.symlink(target, link, target_is_directory=True)
         return "linked", None
     except OSError:
         os.makedirs(link, exist_ok=True)

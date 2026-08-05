@@ -115,8 +115,10 @@ have a Claude Code agent drive these steps instead, paste the prompt in
 6. **Install the skill twins** — `python harness/install-skills.py` copies each
    `harness/skills/<name>.md` to `~/.agents/skills/<name>/SKILL.md` and surfaces it at
    `~/.claude/skills/<name>` (a copy there, not a symlink, without Developer Mode — the
-   installer says which it did; re-running refreshes). The doctor's skill-twins row
-   verifies.
+   installer says which it did). The doctor's skill-twins row verifies the installed
+   `~/.agents` halves; the copy surface is the installer's own to re-check — a re-run
+   refreshes an in-sync copy and HOLDS a divergent one at exit 1 (`--force` overwrites,
+   the drift-direction rule in the script's header).
 
 7. **opencode half:** `harness/fleet.sh` for the server+attach shape — first boot compiles
    under bun and is slow, and the grid is `/healbot`. `. harness/env.sh && opencode` is the

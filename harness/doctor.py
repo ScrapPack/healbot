@@ -431,21 +431,31 @@ def check_skill_twins():
     if not names:
         row(FAIL, "skill twins", f"no *.md under {canon_dir} — not a healbot checkout shape")
         return
-    drifted, missing, same = [], [], []
+    # Every installed half, not only SKILL.md: the checker twins
+    # (harness/skills/<name>-check.py -> <name>/check.py) were installed unguarded until
+    # the c3dc440 push review named the gap — the same stale-body mode this row exists for.
+    pairs = []
     for n in names:
-        inst = os.path.join(installed_root, n, "SKILL.md")
+        pairs.append((f"{n}/SKILL.md", os.path.join(canon_dir, n + ".md"),
+                      os.path.join(installed_root, n, "SKILL.md")))
+        chk = os.path.join(canon_dir, n + "-check.py")
+        if os.path.isfile(chk):
+            pairs.append((f"{n}/check.py", chk,
+                          os.path.join(installed_root, n, "check.py")))
+    drifted, missing, same = [], [], []
+    for label, canon, inst in pairs:
         if not os.path.isfile(inst):
-            missing.append(n)
+            missing.append(label)
             continue
-        with open(os.path.join(canon_dir, n + ".md"), "rb") as a, open(inst, "rb") as b:
-            (same if a.read() == b.read() else drifted).append(n)
+        with open(canon, "rb") as a, open(inst, "rb") as b:
+            (same if a.read() == b.read() else drifted).append(label)
     if not drifted and not missing:
-        row(PASS, "skill twins", f"{len(same)}/{len(names)} installed copies byte-identical "
-                                 f"under {installed_root}")
+        row(PASS, "skill twins", f"{len(same)}/{len(pairs)} installed files byte-identical "
+                                 f"under {installed_root} ({len(names)} skills)")
     elif not same and not drifted:
         row(WARN, "skill twins not installed",
-            f"none of the {len(names)} twins exist under {installed_root} — live sessions "
-            "load none of them. Install: python3 harness/install-skills.py")
+            f"none of the {len(pairs)} twin files exist under {installed_root} — live "
+            "sessions load none of them. Install: python3 harness/install-skills.py")
     else:
         parts = [f"{n} (differs)" for n in drifted] + [f"{n} (not installed)" for n in missing]
         row(FAIL, "skill twin drift", ", ".join(parts) +
