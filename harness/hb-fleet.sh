@@ -771,9 +771,11 @@ send)
   # target is the typed text itself, and a successful submit ECHOES that text into the
   # transcript, so a stripped window that reaches past the composer chrome could read the
   # echo as "still unsubmitted" and manufacture a false failure, the expensive direction
-  # (a captain sent to peek a crewmate that is fine). The cost is that on a tall, mostly
-  # empty pane the raw tail -3 is padding and this check verifies nothing, the same
-  # blindness the long-text arm admits openly below. Repairing it takes a measured live
+  # (a captain sent to peek a crewmate that is fine). The cost is WORSE than the
+  # long-text arm's admitted blindness (the bfa0f6e push's review): on a tall, mostly
+  # empty pane the raw tail -3 is padding, the case never matches, the loop breaks at
+  # tries=0, and the happy-path "sent to" line below still prints, claiming a
+  # verification that never saw the composer. Repairing it takes a measured live
   # submit, not reasoning about the render; until then probe_fleet_claude.py holds this
   # site as the single raw tail in the file.
   if [ "${#TEXT}" -le 60 ]; then
