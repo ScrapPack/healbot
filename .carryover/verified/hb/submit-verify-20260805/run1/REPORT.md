@@ -331,11 +331,10 @@ these frames:
 - Classification is unaffected: the stray string contains neither leg's nonce,
   so no column in the tables above ever read it.
 - hb-fleet.sh's send comment cites "a stuck composer's input line sits third
-  from the bottom (one-line footer, measured)". The measurement is these
-  frames: a composer genuinely holding unsubmitted text in a live claude pane,
-  its input line third from the painted bottom (input, border, one-line
-  footer). Real render, accidental provenance — recorded here so the cite
-  carries it.
+  from the painted bottom (one-line footer)". The measurement is these frames:
+  a composer genuinely holding unsubmitted text in a live claude pane, its
+  input line third from the painted bottom (input, border, one-line footer).
+  Real render, accidental provenance — recorded here so the cite carries it.
 - The same frames measure the two windows against a held composer on this
   geometry: in frame-053 the input line (row 13 of 17, painted rows 13-15 =
   input, border, footer, then two padding rows) sits INSIDE the stripped

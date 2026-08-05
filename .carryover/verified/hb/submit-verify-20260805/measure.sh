@@ -164,15 +164,23 @@ EOF
   # drops when it repaints smaller (run1: 17 painted on 49 rows became 9-11
   # painted on the 17-row pane it asked for — run notes in run1/REPORT.md), so
   # re-measure after every resize and stop only when paint reaches the pane
-  # height or the 12-row floor. Every step is recorded, and analyze.py flags
-  # the leg UNMET from the frames if the samples still miss paint.
+  # height or the 12-row floor. The floor can halt the chase short of paint
+  # for good (run1's reflow numbers, 9-11 painted at 12-17 rows, sit exactly
+  # there); every step is recorded either way, and analyze.py flags the leg
+  # UNMET from the frames if the samples still miss paint.
   : > "$ARCHIVE/resize.txt"
   step=0
   while [ "$step" -lt 5 ]; do
     P="$(t capture-pane -p -t "$PANE" | grep -cv '^[[:space:]]*$' || true)"
-    H="$(t display-message -p -t "$PANE" '#{pane_height}' 2>/dev/null || echo 0)"
+    H="$(t display-message -p -t "$PANE" '#{pane_height}' 2>/dev/null || true)"
     printf 'step %s: painted %s of pane height %s\n' "$step" "$P" "$H" \
       >> "$ARCHIVE/resize.txt"
+    case "$H" in ''|*[!0-9]*|0)
+      # A dead height query must not degrade into "break at step 0 and run the
+      # leg on the tall pane" (the geometry this loop exists to leave): refuse.
+      echo "measure: pane height query failed mid-shrink — see $ARCHIVE/resize.txt" >&2
+      exit 2;;
+    esac
     [ "$P" -ge "$H" ] && break
     target=$P; [ "$target" -lt 12 ] && target=12
     [ "$target" -ge "$H" ] && break
