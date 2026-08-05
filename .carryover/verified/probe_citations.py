@@ -323,7 +323,8 @@ def quote_frags(q):
 
 def quote_verdict(pick, lo, hi, quote):
     """-> (verdict, detail). Verdicts: QUOTE_OK | QUOTE_MISMATCH | QUOTE_UNRESOLVED.
-    `pick` is resolve()'s choice; the caller maps a None pick to QUOTE_UNRESOLVED.
+    `pick` is resolve()'s choice; None (nothing contains the cited span) files as
+    QUOTE_UNRESOLVED here, so the floor leg exercises the same path scan_quotes runs.
 
     The HEAD of the quote locates it, and the head is the whole assertion. Equality does not
     survive contact with honest quoting: `docs/AFK.md` ends one quote at "it hangs indefinitely."
@@ -337,6 +338,8 @@ def quote_verdict(pick, lo, hi, quote):
     `HARNESS.md:346` case sat five lines above its text and every character of the quote was
     present in the file, just not where the citation said.
     """
+    if pick is None:
+        return "QUOTE_UNRESOLVED", "no candidate contains the cited span"
     L = lines_of(pick)
     frags = quote_frags(quote)
     if not frags:
@@ -369,8 +372,7 @@ def scan_quotes(index, srcs):
             lo = int(m.group(2))
             hi = int(m.group(3)) if m.group(3) else lo
             _, pick = resolve(m.group(1), hi, index, src)
-            verdict, detail = (quote_verdict(pick, lo, hi, q.group(1)) if pick
-                               else ("QUOTE_UNRESOLVED", m.group(1)))
+            verdict, detail = quote_verdict(pick, lo, hi, q.group(1))
             out.append((rel_posix(src), m.group(1), lo, hi, verdict, detail))
     return out
 
@@ -506,10 +508,10 @@ try:
     )
     r.check(
         "MUTATION: an unresolvable quote candidate counts against the floor, not toward it",
-        resolve("no/such/file.py", 1, index)[1] is None,
+        quote_verdict(resolve("no/such/file.py", 1, index)[1], 1, 1,
+                      "a fragment long enough to be checkable")[0] == "QUOTE_UNRESOLVED",
         "the regression class the floor above guards: a candidate the resolver cannot walk "
-        "returns no pick, which scan_quotes files as QUOTE_UNRESOLVED (draining the verified "
-        "floor) rather than as OK",
+        "must land in UNRESOLVED (draining the verified floor) rather than in OK",
     )
 
     # --- mutation checks ------------------------------------------------------------------
