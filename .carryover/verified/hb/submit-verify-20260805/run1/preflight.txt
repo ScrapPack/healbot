@@ -1,0 +1,7 @@
+hb-fleet preflight — fleet 'hb-measure' on socket 'healbot'
+  [OK   ] claude authed at ~/Desktop/healbot/harness/claude (credential present; liveness unproven)
+  [OK   ] tmux 3.7 (display-popup available, so the help overlay works)
+  [OK   ] nvim present — the editor pane can be built
+  [OK   ] opencode checkout + bun — the grid pane can be built
+  [OK   ] rig venv present — 'spawn --slot' can lease a pool worktree
+hb-fleet: preflight clear.

@@ -1,0 +1,4 @@
+#!/bin/zsh -f
+zmodload zsh/datetime
+print -r -- "$EPOCHREALTIME $*" >> "$HB_SHIM_LOG"
+exec "$HB_REAL_TMUX" "$@"

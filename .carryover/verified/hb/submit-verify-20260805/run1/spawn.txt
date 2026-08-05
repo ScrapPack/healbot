@@ -1,0 +1,2 @@
+  leased to hb-measure (crew probe-echo), lease_id 91bb7c88e3a2
+hb-fleet: probe-echo ready at %2 (sid b481b5ae-22a3-41d9-b9f1-2efef164e323)

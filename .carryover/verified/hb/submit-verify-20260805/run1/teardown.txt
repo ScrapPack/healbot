@@ -1,0 +1,6 @@
+hb-fleet: killed probe-echo (%2). Its transcript survives; resume from an env.claude.sh shell: claude --resume b481b5ae-22a3-41d9-b9f1-2efef164e323
+slot-1: reset to 99add3e3ea24
+slot-1: restored, payload kept, lease dropped
+hb-fleet: released probe-echo's pool slot; it is leasable again.
+hb-fleet: taking hb-measure down. kill-session is SIGHUP — in-flight turns aborted, transcripts intact.
+hb-fleet: resume any crewmate from an env.claude.sh shell: claude --resume <sid> (see ~/Desktop/healbot/.fleet/hb-measure/manifest.jsonl)

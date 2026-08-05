@@ -118,9 +118,12 @@ you recognize the red when it fires. HARNESS.md's "Traps" section is the canonic
   2026-08-05 on a solo crewmate holding the crew window alone: at 49 rows the ready marker
   sat on line 17 and `state` said unreadable; at 23 rows the same marker line read idle. A
   solo crewmate always misread, and spawning a second one "fixed" it by halving the panes.
-  Strip blanks BEFORE tailing: hb-fleet.sh's screen_tail is the one reader for state,
-  send's busy gate, peek, and the boot-corpse dump; send's submit verify stays raw
-  deliberately (its target text is echoed into the transcript on success) and is pinned as
-  the single exception. Same family as the help-card popup: a variable-size render read
-  through a fixed-size window. Guard: probe_fleet_claude.py's screen-reader conjuncts plus
-  a live tall-pane counterfactual on a scratch tmux server.
+  Strip blanks BEFORE tailing: hb-fleet.sh's screen_tail is the one reader for every
+  screen read, send's submit verify included since 2026-08-05 — a live two-submit
+  measurement (.carryover/verified/hb/submit-verify-20260805/) put the transcript's echo
+  of the sent text six painted lines above the pane bottom, two clear of the stripped
+  3-line window, on a 49-row and a 17-row pane, while the raw tail it replaced read pure
+  padding at its own verify instant. Same family as the help-card popup: a variable-size
+  render read through a fixed-size window. Guard: probe_fleet_claude.py's screen-reader
+  conjuncts (raw-tail census ZERO) plus a live tall-pane counterfactual on a scratch
+  tmux server.

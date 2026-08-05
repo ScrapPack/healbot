@@ -1,0 +1,5 @@
+1785913571.4872860909 -L healbot list-panes -t hb-measure:crew -F #{pane_id} #{pane_dead}
+1785913571.4965279102 -L healbot capture-pane -p -t %2
+1785913571.5046720505 -L healbot send-keys -t %2 -l -- Reply with only: pong (hbverify-full-98693)
+1785913571.5118501186 -L healbot send-keys -t %2 Enter
+1785913572.5288898945 -L healbot capture-pane -p -t %2

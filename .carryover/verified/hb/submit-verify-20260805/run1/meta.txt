@@ -1,0 +1,4 @@
+Wed Aug  5 03:05:53 EDT 2026
+tmux 3.7b
+2.1.220 (Claude Code)
+1cc069b review finding from the bfa0f6e push: the exempted reader's comment understated it

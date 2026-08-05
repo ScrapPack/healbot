@@ -70,6 +70,7 @@ gate/runs/
 !.carryover/verified/hb/study-refusal-tdd-pilot-1-plus-tdd.db
 !.carryover/verified/hb/study-refusal-tdd-full-1-base.db
 !.carryover/verified/hb/study-refusal-tdd-full-1-plus-tdd.db
+!.carryover/verified/hb/submit-verify-20260805/
 .carryover/verified/venv/
 __pycache__/
 

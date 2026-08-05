@@ -767,22 +767,25 @@ send)
   # Submit verification is honest about its limit: capture-pane returns RENDERED lines, so
   # text longer than the pane width wraps and can never match a substring check (review
   # finding). Short sends are verified; long ones say so instead of claiming success.
-  # This case is also the ONE reader kept on a raw tail rather than screen_tail: its match
-  # target is the typed text itself, and a successful submit ECHOES that text into the
-  # transcript, so a stripped window that reaches past the composer chrome could read the
-  # echo as "still unsubmitted" and manufacture a false failure, the expensive direction
-  # (a captain sent to peek a crewmate that is fine). The cost is WORSE than the
-  # long-text arm's admitted blindness (the bfa0f6e push's review): on a tall, mostly
-  # empty pane the raw tail -3 is padding, the case never matches, the loop breaks at
-  # tries=0, and the happy-path "sent to" line below still prints, claiming a
-  # verification that never saw the composer. Repairing it takes a measured live
-  # submit, not reasoning about the render; until then probe_fleet_claude.py holds this
-  # site as the single raw tail in the file.
+  # The window is screen_tail like every other reader, and the switch was MEASURED, not
+  # reasoned (2026-08-05, two live submits; rig, frames, and REPORT.md in
+  # .carryover/verified/hb/submit-verify-20260805/). The feared direction — a successful
+  # submit ECHOES the text into the transcript, and a stripped window reaching past the
+  # composer chrome would read the echo as "still unsubmitted" and manufacture the
+  # expensive false failure — did not survive the frames: the echo sat SIX painted lines
+  # above the pane bottom (footer, border, empty composer, border, spinner below it) at
+  # every 10Hz frame across 11s, on both a 49-row solo pane and a 17-row pane, two
+  # painted lines clear of this 3-line window. The raw tail it replaced was measured
+  # reading pure padding at its own +1s sample on the tall pane — matching nothing,
+  # printing "sent to", verifying nothing — while a stuck composer's input line sits
+  # third from the bottom (one-line footer, measured), inside THIS window: the strip
+  # buys the tall-pane detection the raw read never had. probe_fleet_claude.py now pins
+  # ZERO raw tails in the file and this case onto screen_tail.
   if [ "${#TEXT}" -le 60 ]; then
     tries=0
     while [ $tries -lt 2 ]; do
       sleep 1
-      case "$(t capture-pane -p -t "$P" | tail -3)" in
+      case "$(screen_tail "$P" 3)" in
         *"$TEXT"*) t send-keys -t "$P" Enter; tries=$((tries + 1));;
         *) break;;
       esac

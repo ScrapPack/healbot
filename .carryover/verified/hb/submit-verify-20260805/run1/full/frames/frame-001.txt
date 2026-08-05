@@ -1,0 +1,17 @@
+│      Opus 5 with xhigh effort · Claude Max ·       │ Added `sandbox.network.strictAllowlist` setting to deny non-allowlisted hosts for sandboxed commands without prompting │
+│      bjwerdell658@mail.cfcc.edu's Organization     │ /release-notes for more                                                                                                │
+│         ~/Desktop/healbot-pool/slots/slot-1        │                                                                                                                        │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+❯ Reply with only: pong (hbverify-tall-98693)
+
+⏺ pong (hbverify-tall-98693)
+
+✻ Churned for 1s
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── probe-echo ──
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents
+

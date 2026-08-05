@@ -112,7 +112,7 @@ CONFIG_MATERIALIZED = Env(
 # and the recovered pre-fix read missing it. The live pair exists because the trap is
 # tmux's own padding, which no source read can prove; tmux joins the environment
 # requirements, so skip_max rises 2 -> 5. 106.
-r = Results(expect=106, skip_max=5)
+r = Results(expect=107, skip_max=5)
 
 
 def sh_n(path):
@@ -1006,15 +1006,17 @@ try:
     # stripped blanks before tailing the whole time; state diverged by omitting the
     # strip. Same defect family as the help-card popup rows above: a variable-size
     # render read through a fixed-size window. The repair is ONE reader, screen_tail,
-    # and these conjuncts hold every classification read onto it. The submit verify
-    # keeps its raw tail DELIBERATELY (its match target is text a successful submit
-    # echoes into the transcript, so a stripped window could manufacture the expensive
-    # false failure); the census conjunct pins it as the single exception so a second
-    # raw tail cannot grow back quietly.
+    # and these conjuncts hold every classification read onto it. The submit verify was
+    # the last raw tail, kept while the echo risk (a successful submit echoes its text
+    # into the transcript) was unmeasured; a live two-submit measurement (2026-08-05,
+    # .carryover/verified/hb/submit-verify-20260805/) put the echo six painted lines
+    # above the pane bottom — two clear of a stripped 3-line window — on both a 49-row
+    # and a 17-row pane, so the verify joined screen_tail and the census now pins ZERO
+    # raw tails, so one cannot grow back quietly anywhere.
     def _screen_readers(s):
         """The conjuncts, separately, so each leg names the one it flips (_down_order's
         pattern). The census reads comment-stripped code for the finding-15 reason: the
-        submit-verify comment narrates the raw tail it keeps."""
+        submit-verify comment narrates the raw tail it replaced."""
         body = fn_body(s, "screen_tail")
         code = "\n".join(ln for ln in s.split("\n") if not ln.lstrip().startswith("#"))
         state_b = code.partition("\nstate)")[2].partition("\nsend)")[0]
@@ -1033,8 +1035,9 @@ try:
             "peek_reads_screen_tail": 'screen_tail "$P"' in peek_b,
             "corpse_dump_reads_screen_tail":
                 'screen_tail "$PANE" 15' in spawn_block(s),
-            "submit_verify_is_the_one_raw_tail":
-                len(raw_tails) == 1 and "tail -3" in raw_tails[0],
+            "submit_verify_reads_screen_tail":
+                'case "$(screen_tail "$P" 3)"' in send_b,
+            "no_raw_tails": len(raw_tails) == 0,
         }
 
     def _mutate_arm(s, arm, old, new):
@@ -1045,23 +1048,24 @@ try:
         head, sep, tail = s.partition("\n%s)" % arm)
         return head + sep + tail.replace(old, new, 1)
 
-    r.check("every screen classification reads screen_tail (strip padding, THEN tail); "
-            "the submit verify is the one raw tail left, deliberate and documented",
+    r.check("every screen read including the submit verify goes through screen_tail "
+            "(strip padding, THEN tail); the raw-tail census is ZERO",
             all(_screen_readers(src).values()),
-            "MEASURED 2026-08-05: a solo crewmate at 49 rows classified unreadable off "
-            "twenty rows of padding while peek showed the marker as its last line")
+            "MEASURED 2026-08-05 twice: state misread a 49-row solo pane off padding, "
+            "and a live submit put the echo six painted lines above the pane bottom "
+            "(submit-verify-20260805/REPORT.md), clearing the stripped window by two")
     SCREEN_LEGS = [
         ("the pre-fix state read, a raw tail -20 of the padded capture",
          _mutate_arm(src, "state",
                      'SCREEN="$(screen_tail "$P" 20 2>/dev/null || true)"',
                      'SCREEN="$(t capture-pane -p -t "$P" 2>/dev/null | tail -20 '
                      '|| true)"'),
-         ["state_classifies_screen_tail", "submit_verify_is_the_one_raw_tail"]),
+         ["state_classifies_screen_tail", "no_raw_tails"]),
         ("a send busy gate reverted to its raw tail",
          _mutate_arm(src, "send",
                      'SCREEN="$(screen_tail "$P" 20)"',
                      'SCREEN="$(t capture-pane -p -t "$P" | tail -20)"'),
-         ["send_gate_reads_screen_tail", "submit_verify_is_the_one_raw_tail"]),
+         ["send_gate_reads_screen_tail", "no_raw_tails"]),
         ("a peek grown back its own inline pipeline, correct today and free to diverge",
          _mutate_arm(src, "peek",
                      'screen_tail "$P" "${2:-25}"',
@@ -1072,7 +1076,13 @@ try:
          _mutate_arm(src, "spawn",
                      'screen_tail "$PANE" 15 >&2',
                      't capture-pane -p -t "$PANE" | tail -15 >&2'),
-         ["corpse_dump_reads_screen_tail", "submit_verify_is_the_one_raw_tail"]),
+         ["corpse_dump_reads_screen_tail", "no_raw_tails"]),
+        ("the submit verify back on its pre-routing raw tail, the line the 2026-08-05 "
+         "live measurement retired",
+         _mutate_arm(src, "send",
+                     'case "$(screen_tail "$P" 3)" in',
+                     'case "$(t capture-pane -p -t "$P" | tail -3)" in'),
+         ["submit_verify_reads_screen_tail", "no_raw_tails"]),
         ("a helper that tails the padded capture BEFORE stripping, the pre-fix window "
          "wearing the strip as decoration",
          src.replace("| grep -v '^[[:space:]]*$' | tail -\"${2:-25}\"",

@@ -1,0 +1,2 @@
+hb-fleet: up. This is fleet 'hb-measure' — every later command needs the selector:
+hb-fleet:   HB_RUN=hb-measure ~/Desktop/healbot/harness/hb-fleet.sh attach     (state dir: ~/Desktop/healbot/.fleet/hb-measure)
