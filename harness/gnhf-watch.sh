@@ -32,17 +32,42 @@
 # what it was doing when it hung is worth more than a clean tree.
 set -u
 
-PID="${1:?usage: gnhf-watch.sh <gnhf-pid>   (STALL_MIN, MAX_HOURS, BILL_MAX via env)}"
+PID="${1:?usage: gnhf-watch.sh <gnhf-pid>   (STALL_MIN, MAX_HOURS, COST_MAX via env)}"
 STALL_MIN="${STALL_MIN:-25}"
 MAX_HOURS="${MAX_HOURS:-8}"
-BILL_MAX="${BILL_MAX:-0}"          # 0 disables the billable cap
+COST_MAX="${COST_MAX:-0}"          # US dollars, decimal ok. 0 disables the spend cap.
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "gnhf-watch: not a git repo" >&2; exit 1; }
 RUNS="$ROOT/.gnhf/runs"
+RUN_DIR=""                         # resolved lazily from PID; see the scoping note below
 T0=$(date +%s)
 say() { echo "gnhf-watch: $*" >&2; }
 
-say "watching pid $PID (stall ${STALL_MIN}m, wall ${MAX_HOURS}h, runs $RUNS)"
+# ARGUMENT VALIDATION, AND WHY IT IS FATAL. The argument is a PID, but every launch recipe in
+# docs/AFK.md passes gnhf's own flags here instead. With `--agent` as $1, `kill -0 --agent`
+# fails, the while loop never runs, and the script falls through to "exited on its own" and
+# exits 0 -- a no-op that is INDISTINGUISHABLE from a successful watch. That is the worst
+# possible failure for a watchdog, so it dies loudly instead.
+case "$PID" in
+  ''|*[!0-9]*) say "FATAL: '$PID' is not a pid. Start gnhf first, then pass its pid."
+               say "  gnhf ... & ; STALL_MIN=25 harness/gnhf-watch.sh \$!"
+               exit 1 ;;
+esac
+kill -0 "$PID" 2>/dev/null || { say "FATAL: no live process with pid $PID"; exit 1; }
+
+# BILL_MAX was tokens and over-counted ~2.8x. Refuse it rather than reinterpret a stale number
+# as dollars, which would silently turn a 3000000-token cap into a $3M one.
+[ -z "${BILL_MAX:-}" ] || { say "FATAL: BILL_MAX is gone; it over-counted ~2.8x. Use COST_MAX (US dollars)."; exit 1; }
+
+# A missing helper must not fail open. `|| echo "0 0"` at the call site would report zero spend
+# forever, which reads as "well under budget" and silently disables the cap.
+SPEND="$ROOT/harness/gnhf-spend.py"
+if [ "$(awk -v c="$COST_MAX" 'BEGIN{print (c>0)?1:0}')" = 1 ] && [ ! -f "$SPEND" ]; then
+  say "FATAL: COST_MAX is set but $SPEND is missing; the cap would silently never fire."
+  exit 1
+fi
+
+say "watching pid $PID (stall ${STALL_MIN}m, wall ${MAX_HOURS}h, cap \$${COST_MAX}, runs $RUNS)"
 
 reason=""
 while kill -0 "$PID" 2>/dev/null; do
@@ -54,40 +79,65 @@ while kill -0 "$PID" 2>/dev/null; do
     break
   fi
 
-  # .gnhf/runs/**/iteration-*.jsonl is the agent's live output stream (docs/AFK.md 1.4), so its
-  # mtime is the only free liveness signal gnhf offers. Two finds rather than a stat, because
-  # stat's mtime flag is not portable and -newermt is: if iteration files EXIST but none is
-  # fresh, the run is stalled. An empty runs directory is a run that has not started writing
-  # yet and must NOT fire -- that case is the one a naive check gets wrong.
-  any=$(find "$RUNS" -name 'iteration-*.jsonl' -type f 2>/dev/null | head -1)
+  # SCOPE TO THIS RUN, NOT TO EVERY RUN EVER. .gnhf/runs is never pruned, so a glob over all of
+  # it charges this run for every prior run's tokens and lets a PRIOR run's files answer the
+  # "has anything been written yet" question -- which would fire the stall detector during this
+  # run's bootstrap. gnhf's run:start line carries both its pid and its runDir, so the mapping
+  # is exact. Resolved inside the loop because gnhf has not written the log yet at second 0.
+  if [ -z "$RUN_DIR" ]; then
+    RUN_DIR=$(python3 - "$RUNS" "$PID" <<'PY' 2>/dev/null || true
+import json, sys, glob, os
+# Parse rather than string-match the line. A prefilter like `'"event":"run:start"' in line`
+# silently misses the moment gnhf emits JSON with spaces after its colons, and the failure mode
+# is the watchdog never resolving a run dir and never checking spend at all.
+runs, pid = sys.argv[1], int(sys.argv[2])
+for lg in glob.glob(os.path.join(runs, "*", "gnhf.log")):
+    for line in open(lg, errors="replace"):
+        try: d = json.loads(line)
+        except Exception: continue
+        if d.get("event") == "run:start" and d.get("pid") == pid:
+            print(os.path.dirname(lg)); sys.exit(0)
+PY
+)
+    [ -n "$RUN_DIR" ] && say "run dir: $RUN_DIR"
+  fi
+  [ -n "$RUN_DIR" ] || continue    # gnhf has not started writing; nothing to judge yet
+
+  # iteration-*.jsonl is the agent's live output stream (docs/AFK.md 1.4), so its mtime is the
+  # only free liveness signal gnhf offers. Two finds rather than a stat, because stat's mtime
+  # flag is not portable and -newermt is: if iteration files EXIST but none is fresh, the run is
+  # stalled. No iteration file yet is a run still starting up and must NOT fire.
+  any=$(find "$RUN_DIR" -name 'iteration-*.jsonl' -type f 2>/dev/null | head -1)
   [ -n "$any" ] || continue
-  fresh=$(find "$RUNS" -name 'iteration-*.jsonl' -type f -newermt "-${STALL_MIN} minutes" 2>/dev/null | head -1)
+  fresh=$(find "$RUN_DIR" -name 'iteration-*.jsonl' -type f -newermt "-${STALL_MIN} minutes" 2>/dev/null | head -1)
   if [ -z "$fresh" ]; then
     reason="stalled: no iteration write in ${STALL_MIN}m"
     break
   fi
 
-  # BILLABLE CAP. gnhf's own --max-tokens counts cache reads at FULL weight (docs/AFK.md 1.6),
-  # and MEASURED on this repo 2026-08-05 that runs 10.2x ahead of billable usage: one iteration
-  # reported 3,281,270 counted against 256,693 billable. So gnhf's cap cannot express "spend at
-  # most N". This does. Billable is fresh input + cache WRITE + output; cache reads are what you
-  # already paid to write, so they are excluded.
-  if [ "$BILL_MAX" -gt 0 ]; then
-    bill=$(python3 - "$RUNS" <<'PY' 2>/dev/null || echo 0
-import json, sys, glob, os
-t = 0
-for f in glob.glob(os.path.join(sys.argv[1], "**", "iteration-*.jsonl"), recursive=True):
-    for l in open(f, errors="replace"):
-        try: d = json.loads(l)
-        except Exception: continue
-        u = (d.get("message") or {}).get("usage") or d.get("usage")
-        if not u: continue
-        t += u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0) + u.get("output_tokens", 0)
-print(t)
-PY
-)
-    if [ "${bill:-0}" -ge "$BILL_MAX" ]; then
-      reason="billable cap: ${bill} >= ${BILL_MAX} tokens (fresh input + cache write + output)"
+  # SPEND CAP, IN DOLLARS. gnhf's own --max-tokens counts cache reads at FULL weight
+  # (docs/AFK.md 1.6), so it cannot express "spend at most N". The previous version of this
+  # block tried to, in tokens, and was wrong four ways. All four are MEASURED against
+  # .gnhf/runs/you-are-an-unattende-e196d4 on 2026-08-06, where it reported 2,717,201 against a
+  # true $29.92:
+  #
+  #   1. It summed `assistant` EVENTS. Claude Code emits one per content block, all carrying the
+  #      same message id and a byte-identical usage object (50 of 74 ids in iteration 1 repeat,
+  #      one 3x). Raw 1,732,432 vs deduped 742,405 = 2.33x.
+  #   2. It then ALSO summed `result` events, which are each iteration's cumulative total. The
+  #      two together double-count. 1+2 compound to 2.76x.
+  #   3. It globbed every run dir ever created, so a prior run's tokens were charged to this one.
+  #   4. Its formula excluded cache reads on the theory that they were "already paid to write".
+  #      They are not: they bill at 0.1x input, and on this run they were 55% of the real cost
+  #      ($16.32 of $29.92). A cost metric that omits the largest cost component is not one.
+  #
+  # So: take gnhf's own total_cost_usd per finished iteration, which is exact and needs no price
+  # table, and add a floor for the iteration still running. TESTED both directions.
+  if [ "$(awk -v c="$COST_MAX" 'BEGIN{print (c>0)?1:0}')" = 1 ]; then
+    read -r spent_exact spent_floor <<<"$(python3 "$SPEND" "$RUN_DIR" || echo "0 0")"
+    if [ "$(awk -v a="${spent_exact:-0}" -v b="${spent_floor:-0}" -v c="$COST_MAX" 'BEGIN{print (a+b>=c)?1:0}')" = 1 ]; then
+      reason=$(printf 'spend cap: $%.2f (>= $%s) -- $%.2f billed over finished iterations, $%.2f floor for the one in flight' \
+               "$(awk -v a="$spent_exact" -v b="$spent_floor" 'BEGIN{print a+b}')" "$COST_MAX" "$spent_exact" "$spent_floor")
       break
     fi
   fi
