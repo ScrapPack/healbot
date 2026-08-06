@@ -72,6 +72,15 @@ Domain, and the standing preferences every session on this map must consult:
   handoff to the captain.
 - **Firstmate drives the cockpit.** The captain learns how to talk to firstmate and nothing else.
   Ticket 11.
+- **Overnight AFK running is permitted, under stated bounds.** Captain's decision 2026-08-05,
+  overriding the Out-of-scope entry on fleet autonomy, which is annotated rather than deleted
+  because its reasoning still governs the rest. The bounds, all of them load-bearing: `gnhf`
+  drives it (`docs/AFK.md` is the measured spec); **AFK `task` tickets only**, never a `grilling`
+  or HITL one; **never `--push`**, so the loop commits to its own branch and every push waits for
+  a human, which also keeps the advisory review's fix-chains out of the night; a token cap for
+  **loop containment and not as a spend figure**, because `--max-tokens` counts cache reads at
+  full weight and climbs far faster than the bill; and `harness/gnhf-watch.sh` is MANDATORY,
+  because gnhf ships no clock at all and a parked iteration defeats both its caps at once.
 - **The two harnesses may load skills differently; they must carry the same skills.** Captain's
   direction 2026-08-05. The skill SET is the invariant across Claude Code and opencode, the loading
   mechanism is not, and whether the two are equally capable is settled by A/B measurement rather
@@ -162,6 +171,11 @@ Ruled beyond this destination. These do not graduate.
 - **Making the fleet autonomous.** A map makes the queue durable and the captain's decisions
   explicit. Only research and AFK task tickets are spawnable, because a HITL ticket resolves only
   through live exchange. Autonomy is a different destination and would be a fresh effort.
+  **PARTIALLY OVERRIDDEN by the captain 2026-08-05**, and deliberately not deleted, because the
+  reasoning above still governs everything the override does not name. See the Decisions entry on
+  the overnight AFK loop: unattended running is now permitted for AFK `task` tickets only, and the
+  HITL rule that this paragraph exists to protect is unchanged and is enforced in the loop's own
+  objective. A loop that resolves a `grilling` ticket has broken it, exactly as a crewmate would.
 - **The PC, and everything downstream of a second machine.**
   [PC: Claude Code login and the conversion checklist](tickets/06-pc-login-and-checklist.md) is
   CLOSED out of scope: the captain is retiring that machine for a RAM fault, so there is nothing to
