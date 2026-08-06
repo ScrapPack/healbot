@@ -11,9 +11,10 @@ touched: the citations this report QUOTES rather than points at were rewritten o
 `/citation-hygiene`'s first rule, and the same trap `docs/CITE.md`'s first draft hit nine times.
 The rule applied here: Section 3's "Cited" column and the finding summaries quote what a finding
 cited and carry no live form; the Evidence column and Sections 4 to 7 point at current code and
-do. `NEXT.md` appears three times and never in live `file:line` form. Those three are specimens, so
-what licenses their written-out shape is rule 1, NOT rule 2: rule 2 asks for section names and
-governs a document that points INTO a living file, which this report never does.
+do. `NEXT.md` is CITED BY LINE three times, never in live `file:line` form, and named without a
+line several times besides. Those three citations are specimens, so what licenses their written-out
+shape is rule 1, NOT rule 2: rule 2 asks for section names and governs a document that points INTO
+a living file, which this report never does.
 
 **The lesson is the method, not the count.** Every sweep over these citations was done by writing a
 pattern and trusting it, and every pattern was narrower than the population it claimed to cover:
