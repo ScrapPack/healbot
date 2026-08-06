@@ -11,23 +11,30 @@ touched: the citations this report QUOTES rather than points at were rewritten o
 `/citation-hygiene`'s first rule, and the same trap `docs/CITE.md`'s first draft hit nine times.
 The rule applied here: Section 3's "Cited" column and the finding summaries quote what a finding
 cited and carry no live form; the Evidence column and Sections 4 to 7 point at current code and
-do. `NEXT.md` is not cited by line anywhere, per the same skill's second rule about living
-documents.
+do. No `NEXT.md` citation here is in live `file:line` form, per the same skill's second rule about
+living documents. The report does cite it, three times, by line in prose form.
 
 **It took three passes, and that, rather than the result, is the lesson.** Pass one fixed the
 eleven `probe_citations.py` went red on and stopped, because green looked like done. Pass two,
 prompted by a review finding, enumerated on a pattern requiring a known file extension and a
 numeric line, fixed 27 more, and claimed to be exhaustive. Pass three, prompted by the next review
-finding, fixed what that claim had missed: an extensionless path (`gate/hooks/pre-push`), a `.db`
-path whose line was recorded as `None`, and two citations sitting un-backticked inside summary
-cells. Every pass was confident and two of them were wrong, each time because the method was
-narrower than the population and nobody checked which.
+finding, fixed the six that claim had missed: an extensionless path (`gate/hooks/pre-push`), a
+`.db` path whose line was recorded as `None`, THREE citations sitting un-backticked inside summary
+cells, and a backticked placeholder in a fourth summary. Every pass was confident and two of them
+were wrong, each time because the method was narrower than the population and nobody checked which.
+
+Pass four corrected this paragraph, which had described pass three as fixing "two" un-backticked
+summary citations when its own diff shows three plus a fourth it did not mention. The account of
+the error contained the error. Counting from the diff rather than from memory is the whole
+remedy, and it was not applied to the sentence doing the counting.
 
 So this paragraph makes no completeness claim. What it offers instead is the rule above, and the
-reason no probe enforces it: `probe_citations.py` checks POSITIONAL rot only, which its own third
-row says out loud. A green citations probe is evidence that a document's citations are not
-positionally broken. It is not evidence that they are sound, and it is no evidence at all about
-specimens, which are wrong precisely when they still resolve.
+reason no probe enforces it: `probe_citations.py` checks POSITIONAL rot only. That is
+`/citation-hygiene`'s THIRD rule stating it of the probe, not something the probe says of itself,
+and an earlier draft of this sentence credited it to the probe's own third row, which is the
+sweep-coverage row and says nothing of the kind. A green citations probe is evidence that a
+document's citations are not positionally broken. It is not evidence that they are sound, and it
+is no evidence at all about specimens, which are wrong precisely when they still resolve.
 
 Verified before acceptance, per the first mate's third hard rule that a claim of done is a claim:
 the corpus count, the counts table, and the full 27-row table were read; one classification was
