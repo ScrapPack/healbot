@@ -529,10 +529,9 @@ immediate force stop (§1.5 #6). Then `SIGKILL` after 10 s, and report any survi
 process, since gnhf spawns it `detached: true`. A forced stop exits 2; gnhf finishing on its own
 exits 0.
 
-That last report is a `pgrep` on `--output-format stream-json`, and **read it before acting on
-it.** MEASURED 2026-08-06 during the §5 stall test: the pattern also matches interactive Claude
-Code sessions on the same machine, which are not gnhf's and must not be killed. The report is
-report-only by design, and this is why.
+That last report is a `pgrep` on `--output-format stream-json`. **Read it before acting on it:**
+MEASURED 2026-08-06 on this machine, with no gnhf agent running, every process it matched was an
+interactive Claude Code session. It is a list to check by hand, never a list to kill.
 
 The existence test is a separate leg from the freshness test, and it is not a detail: a run that
 has not written its first iteration file yet is **starting up**, not stalled, so the stall leg
@@ -676,8 +675,8 @@ started; no model turn was spent by any command below.
 | mutual exclusion | `--worktree --current-branch` | exit 1, "Cannot combine" |
 | **all three §2 invocations** | extracted from this file by script, retargeted at a **dirty** scratch repo | all three **parsed their full flag set** and then halted at the clean-tree guard, exit 1 — the intended outcome, and 0 credits. **Recorded 2026-07-31 against the single-command form**, which 2026-08-06 replaced with the two-step form (§3.6). The replacement was parse-checked, not re-executed |
 | §2 invocation portability | `bash -n` under `/bin/bash` 3.2.57 **and** `zsh -n` | re-run 2026-08-06 over every block in this file carrying `GNHF=$!`, extracted by script: **4 of 4** (the three §2 recipes and the §3.6 snippet) OK under **both** |
-| `gnhf-watch.sh` syntax | `bash -n` | OK. **Re-run 2026-08-06 against the tracked script**; the 2026-07-31 result was measured against the scratchpad version this replaced |
-| `gnhf-watch.sh` stall detector **and its pid scoping** | **2026-08-06.** Two fake runs side by side under one `.gnhf/runs/`: `stall-case`, holding a `run:start` line for pid A and an `iteration-*.jsonl` aged 157 minutes; `bootstrap-case`, holding a `run:start` line for pid B and no iteration file at all. A watchdog started on each pid | A resolved `stall-case`, stopped on *"stalled: no iteration write in 25m"*, killed pid A and exited **2**. B resolved `bootstrap-case`, kept polling and left pid B alone: correctly silent on a run that has written nothing yet, **and** on A's stale file, which is the pid scoping doing its job. The 2026-07-31 row measured the same two legs against the scratchpad script, before run directories were pid-scoped, so this supersedes it rather than repeating it |
+| `gnhf-watch.sh` syntax | `bash -n` | OK. **Re-run 2026-08-06 against `harness/gnhf-watch.sh` as tracked on `wayfinder-adoption`**; the 2026-07-31 result was measured against the scratchpad version this replaced |
+| `gnhf-watch.sh` stall detector **and its pid scoping** | **2026-08-06, against the same `wayfinder-adoption` copy.** Two fake runs side by side under one `.gnhf/runs/`: `stall-case`, holding a `run:start` line for pid A and an `iteration-*.jsonl` aged 157 minutes; `bootstrap-case`, holding a `run:start` line for pid B and no iteration file at all. A watchdog started on each pid | A resolved `stall-case`, stopped on *"stalled: no iteration write in 25m"*, killed pid A and exited **2**. B resolved `bootstrap-case`, kept polling and left pid B alone: correctly silent on a run that has written nothing yet, **and** on A's stale file, which is the pid scoping doing its job. The 2026-07-31 row measured the same two legs against the scratchpad script, before run directories were pid-scoped, so this supersedes it rather than repeating it |
 | `gnhf-watch.sh` refuses a non-pid | 2026-08-06, three invocations by hand against the tracked script | flags as `$1`, a dead pid, and `BILL_MAX` set each exited **1** with a `FATAL:` line. Transcribed into §3.6 |
 
 The parse check earned its place: it caught the bash 3.2 heredoc defect described in the §2
