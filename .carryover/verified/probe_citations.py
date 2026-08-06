@@ -90,6 +90,17 @@ EXCLUDE = {".carryover/REDO-PROMPT.md"}
 
 # `:N` or `:N-M` after a path-ish token. The negative lookbehind keeps it from matching the tail of
 # a longer path, and the extension list keeps it off prose like "1.18.5".
+#
+# EXTENSIONLESS DOTFILES ARE OUT OF REACH, and citations into them must not use `file:line`.
+# Two clauses exclude them independently: the extension list has no entry for a bare dotfile,
+# and the first character class `[A-Za-z0-9_]` rejects the leading dot. So a citation written as
+# line 13 of `.gitignore` is not one this probe can see (spelled out, not in live form, per the
+# citation-hygiene skill's first rule). TESTED 2026-08-06 against the regex directly, after three
+# documents were found pointing there for the `hb/*` rule, which has never been on line 13
+# — rot this sweep ran green over every time, because it never matched the string. Widening the
+# pattern is the wrong repair: `.gitignore` has no stable line numbering to cite (one comment
+# added in 43d90b9 moved its `hb/*` rule from 48 to 58), so cite the RULE TEXT instead, the way
+# HARNESS.md, docs/CLONE.md and this directory's README.md now do.
 CITE = re.compile(r"(?<![\w/])([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:ts|tsx|py|sh|jsonc|txt|md)):(\d+)(?:[-–](\d+))?")
 
 

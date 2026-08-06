@@ -139,7 +139,7 @@ retire_at < CEILING - worst_sol          # "the gate's own ceiling is 184,852"
 **Both get easier as `worst_sol` gets smaller, and nothing put a floor under `worst_sol`.**
 
 `worst_turn = 175,148` — the number `docs/GROWTH.md` §1, `HARNESS.md` and `docs/RELAY.md` §5 all
-derive the 184,852 bound from — exists **only** in `hb/*.db`, which `.gitignore:13` excludes. A
+derive the 184,852 bound from — exists **only** in `hb/*.db`, which `.gitignore`'s `hb/*` rule excludes. A
 fresh clone has no rig corpus at all, so the pinned-model population collapses to the real corpus's
 short `gpt-5.6-sol` sessions, whose worst turn is **6,643**.
 

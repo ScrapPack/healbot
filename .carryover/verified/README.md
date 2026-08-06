@@ -616,7 +616,7 @@ books pointed at predicates.
 **WHEN A PREDICATE'S INPUTS COME FROM A CORPUS, THE CORPUS NEEDS A FIXTURE CHECK AS MUCH AS THE
 PREDICATE NEEDS A MUTATION CHECK.** `probe_turn_growth.py`'s two load-bearing assertions are both
 `retire_at + worst_sol < CEILING` in some form, so they get **easier as `worst_sol` gets smaller** —
-and `worst_turn = 175,148` exists only in `hb/*.db`, which `.gitignore:13` excludes. MEASURED on a
+and `worst_turn = 175,148` exists only in `hb/*.db`, which `.gitignore`'s `hb/*` rule excludes. MEASURED on a
 fresh clone: the pinned population collapses to 6,643 and the probe reports the gate clearing its
 ceiling by **173,357 tokens, 48.2%**, and the bound as **353,357** — against the true 4,852 / 1.3% /
 184,852 — **in green**, with its own detail string still quoting 175,148. Losing the evidence and

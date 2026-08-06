@@ -195,7 +195,7 @@ All three assume:
 
 - **No `--worktree`.** `gate/GATE.MAP.md` ("No worktree, and that is deliberate") records that
   this repo gitignores `/opencode/`, `node_modules/` and `.carryover/verified/venv/`
-  (`.gitignore:5,7,33`), so a healbot worktree "contains no checkout, no deps and no venv — it
+  (each named in `.gitignore`), so a healbot worktree "contains no checkout, no deps and no venv — it
   cannot resolve one `file:line` citation or run one probe." A gnhf worktree run would go red on
   Tier 1 in its first iteration and stay red.
 - **No `--push`.** The remote is `ScrapPack/healbot`. Publishing is a decision, not a side effect.
