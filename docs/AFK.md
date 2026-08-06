@@ -2,16 +2,24 @@
 
 **Written** 2026-07-31 · **gnhf** 0.1.43 · **repo** `~/Desktop/healbot` @ `76b23cc` (branch `main`)
 
+**Revised 2026-08-06.** The watchdog moved into the repo, every launch recipe here was rewritten to
+the two-step form it always required, and its token cap became a dollar cap. §3.6 carries the
+watchdog's contract; the rows in §5 say which claims were re-checked on that date and which still
+date from 2026-07-31.
+
 Every claim below is tiered per this project's method: **TESTED** (I ran it) / **VERIFIED** (I read
 the code, cited) / **INFERRED** (stated link is not measured) / **SUSPECTED**. No loop was run —
-nothing in this document cost a model turn beyond the session that wrote it. **Nothing in
-`~/Desktop/healbot` was modified.**
+nothing in this document cost a model turn beyond the sessions that wrote it. **No healbot file was
+modified by the checks behind it.**
 
-Companion artifacts, all in the session scratchpad directory (below, `$SCRATCH`):
+Companion artifacts. **The watchdog is no longer a scratchpad file.** It is tracked at
+`harness/gnhf-watch.sh`, because the first copy was written into a session scratchpad on
+2026-07-31, never committed, and had to be written again from this spec once that scratchpad was
+collected. Its header carries that reasoning and the sizing rules. The three prompt files went into
+that same scratchpad and are tracked nowhere, so `$SCRATCH` below names wherever you write them:
 
 | File | What it is |
 |---|---|
-| `gnhf-watch.sh` | the stall + wall-clock watchdog gnhf does not ship (§3.6) |
 | `prompt-free-probes.md` | the objective for run (a) |
 | `prompt-vacuous-hunt.md` | the objective for run (b) |
 | `prompt-paid-handoff.md` | the objective for run (c) |
@@ -192,7 +200,9 @@ All three assume:
   Tier 1 in its first iteration and stay red.
 - **No `--push`.** The remote is `ScrapPack/healbot`. Publishing is a decision, not a side effect.
 - **`--prevent-sleep on`.** Otherwise the Mac sleeps and the "overnight" run is a 20-minute run.
-- **Launched through `gnhf-watch.sh`** (§3.6), which supplies the stop condition gnhf lacks.
+- **Launched with `harness/gnhf-watch.sh` watching gnhf's pid** (§3.6), which supplies the stop
+  condition gnhf lacks. The watchdog is a *second* process, not a wrapper: gnhf goes to the
+  background, and its pid is the watchdog's only argument.
 - **`GNHF_TELEMETRY=0`.**
 
 Two budgets, and conflating them is the expensive mistake: **gnhf spends Claude Code tokens**
@@ -224,20 +234,29 @@ went stale (NEXT.md is frozen to task + pointers and no longer carries them).
 
 ```sh
 cd ~/Desktop/healbot
-GNHF_TELEMETRY=0 REPO=~/Desktop/healbot STALL_MIN=25 MAX_HOURS=8 \
-"$SCRATCH"/gnhf-watch.sh \
+GNHF_TELEMETRY=0 gnhf \
   --agent claude \
   --max-iterations 12 \
   --max-tokens 4000000 \
   --prevent-sleep on \
   --stop-when "gate/gate.py --base main exits 0 AND every probe_*.py in .carryover/verified exits 0" \
-  "$(cat "$SCRATCH"/prompt-free-probes.md)"
+  "$(cat "$SCRATCH"/prompt-free-probes.md)" &
+GNHF=$!
+STALL_MIN=25 MAX_HOURS=8 COST_MAX=60 harness/gnhf-watch.sh "$GNHF"
 ```
+
+Two commands, and the split is load-bearing. `GNHF_TELEMETRY=0` is gnhf's variable; `STALL_MIN`,
+`MAX_HOURS` and `COST_MAX` are the watchdog's, and the watchdog reads nothing else from the
+command line but the pid (§3.6). Keep the pair in one `tmux` window, or under `nohup`, so closing
+the terminal cannot take gnhf down while the watchdog is still counting (INFERRED, not measured
+here).
 
 Why these numbers: iterations sized at one per probe (count probe_*.py at launch; the sweep
 in probe_rig_contract.py discovers them the same way). 4M tokens is roughly 330K counted tokens per
 iteration, which is generous for read-heavy work in a repo with a 78 KB index — and remember
-§1.6, cache reads count in full.
+§1.6, cache reads count in full. `COST_MAX=60` is a dollar ceiling rather than an estimate: the
+token counter cannot express one (§1.6), so the watchdog reads gnhf's own per-iteration
+`total_cost_usd` instead (§3.6).
 
 **Caveat (INFERRED, high confidence):** `probe_turn_growth.py` is documented RED at 13/16 in
 `.carryover/verified/README.md`, while its own floor (`Results(expect=19)`) reflects Phase 12's
@@ -258,20 +277,21 @@ completion predicate in the suite in 9 ms.
 
 ```sh
 cd ~/Desktop/healbot
-GNHF_TELEMETRY=0 REPO=~/Desktop/healbot STALL_MIN=20 MAX_HOURS=6 \
-"$SCRATCH"/gnhf-watch.sh \
+GNHF_TELEMETRY=0 gnhf \
   --agent claude \
   --max-iterations 8 \
   --max-tokens 3000000 \
   --prevent-sleep on \
   --stop-when "three distinct vacuous assertions have been hardened, each with a mutation whose RED was observed and recorded, and probe_rig_contract.py is green at 29/29 or higher" \
-  "$(cat "$SCRATCH"/prompt-vacuous-hunt.md)"
+  "$(cat "$SCRATCH"/prompt-vacuous-hunt.md)" &
+GNHF=$!
+STALL_MIN=20 MAX_HOURS=6 COST_MAX=40 harness/gnhf-watch.sh "$GNHF"
 ```
 
 Note the deliberate asymmetry with (a): a shorter stall window (20 min — this work is
-read-and-edit, not server-booting) and a lower iteration cap, because a vacuous-assertion hunt
-that finds nothing should stop rather than invent something. NEXT.md's task section is
-explicit: *"Do not invent something to build."*
+read-and-edit, not server-booting), a lower iteration cap and a lower spend ceiling, because a
+vacuous-assertion hunt that finds nothing should stop rather than invent something. NEXT.md's task
+section is explicit: *"Do not invent something to build."*
 
 ---
 
@@ -290,14 +310,15 @@ three ~130 KB ledgers read in full plus file creation.
 # PRE-CONDITION: the owner has said yes, in this session, to spending credits on
 # verify_handoff.py and on nothing else.
 cd ~/Desktop/healbot
-GNHF_TELEMETRY=0 REPO=~/Desktop/healbot STALL_MIN=20 MAX_HOURS=2 \
-"$SCRATCH"/gnhf-watch.sh \
+GNHF_TELEMETRY=0 gnhf \
   --agent claude \
   --max-iterations 3 \
   --max-tokens 1500000 \
   --prevent-sleep on \
   --stop-when "verify_handoff.py has been executed exactly once, its real exit code and score are recorded, and every document quoting 21/21 has been corrected to the measured value" \
-  "$(cat "$SCRATCH"/prompt-paid-handoff.md)"
+  "$(cat "$SCRATCH"/prompt-paid-handoff.md)" &
+GNHF=$!
+STALL_MIN=20 MAX_HOURS=2 COST_MAX=15 harness/gnhf-watch.sh "$GNHF"
 ```
 
 Caps rationale: `--max-iterations 3` bounds *iterations*, not dollars — the spend is one rig
@@ -305,6 +326,10 @@ invocation, and the prompt is what bounds that. Three leaves room for pre-flight
 document corrections. `MAX_HOURS=2` is the real money guard, sized against the ~6–11 minute wall
 clock recorded for a comparable rig in `.carryover/verified/README.md`, the paragraph opening
 "Costing, REDONE for the 180,000 target".
+
+**`COST_MAX=15` does not cap this run's healbot credits, and reading it that way is the expensive
+mistake the preamble names.** It caps gnhf's own Claude Code spend. `verify_handoff.py` bills a
+different account, and nothing on either of these two command lines bounds it: the prompt does.
 
 ---
 
@@ -438,19 +463,70 @@ exactly the process that would do this. Ban deletion, allow archival-with-rename
 
 ### 3.6 The blocked-on-ask watchdog is the primary stop condition
 
-Because §1.5 establishes that gnhf ships no clock, the AFK loop must be wrapped. Written and
-TESTED (`bash -n` clean; the stall detector correctly fires on a 157-minute-old iteration file and
-correctly does **not** fire on an empty runs directory):
+Because §1.5 establishes that gnhf ships no clock, the AFK loop must be wrapped. The watchdog is
+tracked at `harness/gnhf-watch.sh`, and it is **a second process, not a wrapper**. It takes one
+argument, and that argument is gnhf's pid. Start gnhf in the background, capture `$!`, hand that
+over:
 
-```
-"$SCRATCH"/gnhf-watch.sh
+```sh
+GNHF_TELEMETRY=0 gnhf --agent claude --max-iterations 12 ... "$(cat "$SCRATCH"/prompt.md)" &
+GNHF=$!
+STALL_MIN=25 MAX_HOURS=8 COST_MAX=60 harness/gnhf-watch.sh "$GNHF"
 ```
 
-Mechanism: poll every 60 s; find the newest mtime across `.gnhf/runs/**/iteration-*.jsonl`
+**Passing gnhf's own flags to the watchdog is the mistake every recipe in this document used to
+teach.** It is now fatal instead of silent. TESTED 2026-08-06:
+
+| Invocation | Result |
+|---|---|
+| `harness/gnhf-watch.sh --agent claude --max-iterations 12` | `FATAL: '--agent' is not a pid. Start gnhf first, then pass its pid.` · exit 1 |
+| `harness/gnhf-watch.sh 999999`, no such process | `FATAL: no live process with pid 999999` · exit 1 |
+| `BILL_MAX=3000000 harness/gnhf-watch.sh <live pid>` | `FATAL: BILL_MAX is gone; it over-counted ~2.8x. Use COST_MAX (US dollars).` · exit 1 |
+
+Why it had to become fatal rather than a usage warning: with `--agent` as `$1`, `kill -0 --agent`
+fails, so the poll loop never ran once, and the script fell through to its own *"exited on its
+own; nothing to stop"* line and exited **0**. A watchdog that exits 0 having watched nothing is
+indistinguishable from one that watched a clean run: this repo's characteristic failure
+(`docs/VERDICT.md`, `docs/CLONE.md`, `docs/OUTCOME.md`), landing on the one component whose entire
+job is to be the thing you did not have to check.
+
+**Environment.** Nothing else is read from the command line.
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `STALL_MIN` | minutes without an `iteration-*.jsonl` write before the run is called stalled | `25` |
+| `MAX_HOURS` | wall-clock ceiling | `8` |
+| `COST_MAX` | **US dollars**, decimal accepted. `0` disables the spend cap | `0` |
+| `BILL_MAX` | **refused with a fatal error.** It counted tokens, not dollars | gone |
+
+`BILL_MAX` is rejected rather than reinterpreted because the two units are not comparable: a
+number meant as a token cap, read as dollars, turns a 3,000,000-token ceiling into a $3M one,
+which is no ceiling at all. Its over-counting and the four separate ways it was wrong are recorded
+in the watchdog's own header, next to the code that replaced it.
+
+There is no `REPO` variable. Earlier revisions of the recipes above set one and nothing ever read
+it; the watchdog takes the repo root from `git rev-parse --show-toplevel`.
+
+Two consequences of the cap being real money rather than a token count. gnhf's `--max-tokens`
+cannot express a dollar ceiling at all (§1.6: cache reads count at full weight), so the watchdog
+reads gnhf's own per-iteration `total_cost_usd` and adds a floor for the iteration still in
+flight. And if `COST_MAX` is above zero while `harness/gnhf-spend.py` is missing, the watchdog
+refuses to start, because a cap that cannot be computed is a cap that silently never fires.
+
+`COST_MAX` bounds **gnhf's Claude Code spend only.** It is blind to healbot's own API credits,
+which the rigs bill to a different account entirely (§2 preamble). A paid rig running inside the
+loop is not capped by it.
+
+Mechanism: poll every 60 s. Resolve **this run's** directory from the `run:start` line in
+`.gnhf/runs/*/gnhf.log` carrying the pid you passed, which is the second reason the argument is a
+pid and not a flag: a glob over every run directory would charge this run for every earlier one,
+and would let an earlier run's files answer the "has anything been written yet" question and fire
+the stall detector during bootstrap. Then watch that one directory's `iteration-*.jsonl`
 (§1.4 — that file is the agent's live output stream, so its mtime is the only free liveness signal
-gnhf offers); if it has not advanced in `STALL_MIN` minutes, or `MAX_HOURS` have elapsed, send
-`SIGTERM` — which gnhf treats as an immediate force stop (§1.5 #6). Then `SIGKILL` after 10 s, and
-report any surviving `claude` process, since gnhf spawns it `detached: true`.
+gnhf offers). If no iteration file has been written in `STALL_MIN` minutes, or `MAX_HOURS` have
+elapsed, or spend has reached `COST_MAX`, send `SIGTERM` — which gnhf treats as an immediate force
+stop (§1.5 #6). Then `SIGKILL` after 10 s, and report any surviving `claude` process, since gnhf
+spawns it `detached: true`. A forced stop exits 2; gnhf finishing on its own exits 0.
 
 Defaults: `STALL_MIN=25`, `MAX_HOURS=8`. Tune the stall window **above** the slowest legitimate
 single operation. Two documented ones to size against: `verify_question.py` polls three framings at
@@ -537,7 +613,10 @@ If any refusal DB is being written, **do not launch.** Wait for the run to finis
 - [ ] `--stop-when` set, and understood as agent-self-reported, not enforced (§1.5 #3)
 - [ ] `--prevent-sleep on`
 - [ ] no `--worktree`, no `--push`
-- [ ] launched through `gnhf-watch.sh` with `STALL_MIN` above the slowest legitimate operation
+- [ ] gnhf started in the background and `harness/gnhf-watch.sh` handed its `$!`, never gnhf's own
+      flags (§3.6). It refuses a non-pid, so a mistake here stops you rather than watching nothing
+- [ ] `STALL_MIN` above the slowest legitimate operation, and `COST_MAX` set in **dollars** if this
+      run should stop on spend (`BILL_MAX` is refused)
 - [ ] `GNHF_TELEMETRY=0`
 - [ ] the prompt names its forbidden list explicitly — installs, the four filenames, the A/B
       paths, `hb/*.db` deletion, every paid rig
@@ -584,10 +663,11 @@ started; no model turn was spent by any command below.
 | clean-tree guard | ran in a scratch repo with one modified file | exit 1, "Working tree is not clean" |
 | flag validation | `--meteor-frequency 9` | exit 1, "must be between 0 and 5" |
 | mutual exclusion | `--worktree --current-branch` | exit 1, "Cannot combine" |
-| **all three §2 invocations** | extracted from this file by script, retargeted at a **dirty** scratch repo | all three **parsed their full flag set** and then halted at the clean-tree guard, exit 1 — the intended outcome, and 0 credits |
-| §2 invocation portability | `bash -n` under `/bin/bash` 3.2.57 **and** `zsh -n` | all three OK under **both** |
+| **all three §2 invocations** | extracted from this file by script, retargeted at a **dirty** scratch repo | all three **parsed their full flag set** and then halted at the clean-tree guard, exit 1 — the intended outcome, and 0 credits. **Recorded 2026-07-31 against the single-command form**, which 2026-08-06 replaced with the two-step form (§3.6). The replacement was parse-checked, not re-executed |
+| §2 invocation portability | `bash -n` under `/bin/bash` 3.2.57 **and** `zsh -n` | re-run 2026-08-06 over every block in this file carrying `GNHF=$!`, extracted by script: **4 of 4** (the three §2 recipes and the §3.6 snippet) OK under **both** |
 | `gnhf-watch.sh` syntax | `bash -n` | OK |
 | `gnhf-watch.sh` stall detector | fed a fake `.gnhf/runs/` tree | correctly fired on a 157-minute-old `iteration-*.jsonl`; correctly did **not** fire on an empty runs directory (the bootstrap case) |
+| `gnhf-watch.sh` refuses a non-pid | 2026-08-06, three invocations by hand against the tracked script | flags as `$1`, a dead pid, and `BILL_MAX` set each exited **1** with a `FATAL:` line. Transcribed into §3.6 |
 
 The parse check earned its place: it caught the bash 3.2 heredoc defect described in the §2
 preamble, which changed the design from inline prompts to prompt files. A spec whose commands were
@@ -602,8 +682,9 @@ only eyeballed would have shipped that.
 - **INFERRED:** that `SIGTERM` to gnhf always reaps the detached `claude` tree. `terminateClaudeProcess`
   exists and is called, but I did not run a loop to observe it, which is why `gnhf-watch.sh` ends
   with a `pgrep` check and step 8 repeats it.
-- **NOT MEASURED:** the actual token cost of any of the three runs in §2. The caps are containment
-  ceilings chosen from repo-documented workloads, not predictions.
+- **NOT MEASURED:** the actual token cost or dollar cost of any of the three runs in §2. Both the
+  `--max-tokens` figures and the `COST_MAX` figures are containment ceilings chosen from
+  repo-documented workloads, not predictions.
 - **NOT MEASURED:** whether `--agent opencode` against this repo interacts badly with the A/B
   study's `opencode serve` processes. Both bind local ports and both write session DBs. Until
   someone measures it, **use `--agent claude` and do not run gnhf with the opencode backend while
