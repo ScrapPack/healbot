@@ -1,6 +1,6 @@
 ---
 name: citation-hygiene
-description: Citation and prose-fact hygiene for healbot's documents. Invoke BEFORE editing any .md that contains file:line citations, before inserting or deleting lines in a file other documents cite into, and before quoting a recorded score or figure in prose. Earned in Phase 11 (930 citations swept, eight stale) and re-earned every phase since.
+description: Citation and prose-fact hygiene for healbot's documents. Invoke BEFORE editing any .md that contains file:line citations, before inserting or deleting lines in a file other documents cite into, and before quoting a recorded score or figure in prose. Earned in Phase 11, when the first mechanical sweep found eight stale citations, and re-earned every phase since.
 ---
 
 # Citation hygiene

@@ -132,8 +132,8 @@ This overlay is a snapshot pinned to `7534d23`. Two ways it goes stale:
    ([../docs/REVIEW.md](../docs/REVIEW.md)) found citation drift of one or two lines already.
 
    **This warning stood for eleven phases with nothing behind it, which is why every instance was
-   found by hand.** Since Phase 11 it has a check: `probe_citations.py` resolves ~930 citations
-   across 25 documents and asserts the file exists, the line exists, and it is not blank. It found
+   found by hand.** Since Phase 11 it has a check: `probe_citations.py` resolves every citation
+   the prose carries and asserts the file exists, the line exists, and it is not blank. It found
    eight stale — three pointing past the end of `healbot.tsx` by ~140 lines, five landing on blank
    lines, **three of those created by Phases 9 and 10** editing documents that other documents cite
    into. It catches POSITIONAL rot only; a citation landing on a real line that says something else

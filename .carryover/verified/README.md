@@ -41,8 +41,8 @@ venv/bin/python probe_pool.py        # 24/24 does harness/pool.py's lease/guard 
 venv/bin/python probe_arm_factory.py # 19/19 does a synthesized arm hold EXACTLY its declared
                                      #       delta? (arms.py: freeze/materialize/tamper-refuse,
                                      #       then boots BOTH arms and diffs GET /skill)
-venv/bin/python probe_citations.py   # 20/20 do this repo's file:line citations still point at
-                                     #       code? Resolves ~1,024 citations across 45 documents and
+venv/bin/python probe_citations.py   # 21/21 do this repo's file:line citations still point at
+                                     #       code? Resolves every citation the prose carries and
                                      #       asserts the file exists, the line exists, and it is not
                                      #       blank. fork/README.md's "drift mode 2", which was named
                                      #       as a risk for eleven phases with no check behind it
@@ -587,8 +587,8 @@ Three rules fall out, all of them earned within the phase:
   every phase, so every `HARNESS.md:NNN` is guaranteed to rot — demonstrated an hour after the fix,
   when this phase's own index row re-broke the citation it had just corrected. Cite the section.
 - **Positional rot is checkable; semantic rot is not, and the probe does not claim it.** A citation
-  landing on a real, non-blank line that says something else entirely passes. 930 citations now
-  resolve; how many describe what they claim to is not a question a probe can answer.
+  landing on a real, non-blank line that says something else entirely passes. Every citation in the
+  corpus resolves; how many describe what they claim to is not a question a probe can answer.
 
 **A GREEN RUN IS NOT EVIDENCE THAT THE RUN HAPPENED — and every rule in this section was about
 predicates, not about execution.** `Results.summary()` returned `not failed` over whatever rows

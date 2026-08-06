@@ -28,7 +28,8 @@ the guards it produced are executable:
   (`.carryover/verified/`),
 - a per-change gate wired into `git push` (`gate/` — Tier 1 static checks, an advisory model
   review, and an evidence publisher that comments the run records onto the pushed commit),
-- ~930 `file:line` citations across the docs, mechanically resolved on every gate run.
+- every `file:line` citation in the docs, mechanically resolved on every gate run —
+  `probe_citations.py` prints the size of the corpus it swept.
 
 ## Repository map
 
