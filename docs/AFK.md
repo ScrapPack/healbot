@@ -497,7 +497,7 @@ job is to be the thing you did not have to check.
 | `STALL_MIN` | minutes without an `iteration-*.jsonl` write before the run is called stalled | `25` |
 | `MAX_HOURS` | wall-clock ceiling | `8` |
 | `COST_MAX` | **US dollars**, decimal accepted. `0` disables the spend cap | `0` |
-| `SPEND_FAIL_MAX` | consecutive spend-accounting failures tolerated before the run is stopped | `3` |
+| `SPEND_FAIL_MAX` | **which** consecutive spend-accounting failure stops the run; the ones before it are tolerated. Dead unless `COST_MAX` is above zero | `3` |
 | `BILL_MAX` | **refused with a fatal error.** It counted tokens, not dollars | gone |
 
 `BILL_MAX` is rejected rather than reinterpreted because the two units are not comparable: a
@@ -517,9 +517,13 @@ refuses to start, because a cap that cannot be computed is a cap that silently n
 That refusal has a running twin, and it is a **fourth stop reason**. A helper that is present but
 fails, or prints something that is not two numbers, would report zero spend for the rest of the
 night, which reads as comfortably under budget. So the watchdog counts consecutive accounting
-failures and stops the run at `SPEND_FAIL_MAX` of them, on the reasoning that being unable to
-measure spend and continuing anyway is spending blind. A few are tolerated first so one transient
-blip does not kill an eight-hour run.
+failures and stops on the `SPEND_FAIL_MAX`th of them, on the reasoning that being unable to measure
+spend and continuing anyway is spending blind. The failures before it are tolerated so that one
+transient blip does not kill an eight-hour run.
+
+**The whole leg lives inside the `COST_MAX` test**, counter included. At the default `COST_MAX=0`
+there is no accounting to fail and this stop cannot fire, which is the intended shape: it guards a
+cap you asked for, never a run you never capped.
 
 `COST_MAX` bounds **gnhf's Claude Code spend only.** It is blind to healbot's own API credits,
 which the rigs bill to a different account entirely (§2 preamble). A paid rig running inside the
@@ -533,7 +537,8 @@ the stall detector during bootstrap. Then watch that one directory's `iteration-
 (§1.4 — that file is the agent's live output stream, so its mtime is the only free liveness signal
 gnhf offers). If iteration files **exist** and none of them is fresher than `STALL_MIN` minutes, or
 `MAX_HOURS` have elapsed, or spend has reached `COST_MAX`, or spend accounting has failed
-`SPEND_FAIL_MAX` times running, send `SIGTERM` — which gnhf treats as an immediate force stop
+`SPEND_FAIL_MAX` times running (those last two only when `COST_MAX` is above zero, which is not the
+default), send `SIGTERM` — which gnhf treats as an immediate force stop
 (§1.5 #6). Then `SIGKILL` after 10 s, and report any surviving `claude` process, since gnhf spawns
 it `detached: true`. A forced stop exits 2; gnhf finishing on its own exits 0.
 
