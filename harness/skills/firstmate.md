@@ -123,6 +123,34 @@ running, and verifying stays on the default. Per-spawn models are recorded in th
 manifest by `spawn` — that record is the audit trail, so choose deliberately and say in your
 report which crewmates you escalated and why.
 
+## Claims about your own work
+
+Two rules, both mechanical. Earned 2026-08-05, when four consecutive pushes spent $3.28 of
+advisory review and every finding in all four was about the first mate's account of its own
+repairs rather than about any work.
+
+1. **Batch the push.** The gate's advisory review runs on every push and spends real
+   subscription usage, roughly a dollar a run. Fix, push, finding, fix is a loop that buys a
+   fresh review of a one-line change, and it was self-sustaining for four rounds. Collect the
+   work and push once. A finding small enough to fix in a line is small enough to wait for
+   company. The three single-file pushes in that sequence also starved the reviewer of anywhere
+   else to look, which is part of why it kept landing on the same paragraph.
+
+2. **Derive any claim about your own work from the artifact, never from memory.** "I fixed them
+   all", "it took three passes", "this appears three times": each was checkable, each was written
+   from recollection, and each was wrong. Count from the diff (`git show <sha> -- <path>`), from
+   a grep, from the file. Across that whole sequence the ONE self-referential claim that survived
+   review was the one counted from a diff.
+
+   Corollary: the repair history belongs in the COMMIT MESSAGE, not in the artifact. A document
+   that narrates its own corrections grows a fresh checkable claim with every correction, and the
+   claim surface outgrows the repair rate.
+
+The general form, and the reason these sit in a skill rather than in a retrospective: applying a
+method is not the same as the property holding, and only the second is checkable. "I swept it",
+"that is exhaustive" and "I already checked that" are all the same shape, and the same day
+produced one of each.
+
 ## Context budget and handoff
 
 Watch `occupancy` per crewmate. Auto-compaction is OFF in the harness config, so the
