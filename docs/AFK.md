@@ -497,6 +497,7 @@ job is to be the thing you did not have to check.
 | `STALL_MIN` | minutes without an `iteration-*.jsonl` write before the run is called stalled | `25` |
 | `MAX_HOURS` | wall-clock ceiling | `8` |
 | `COST_MAX` | **US dollars**, decimal accepted. `0` disables the spend cap | `0` |
+| `SPEND_FAIL_MAX` | consecutive spend-accounting failures tolerated before the run is stopped | `3` |
 | `BILL_MAX` | **refused with a fatal error.** It counted tokens, not dollars | gone |
 
 `BILL_MAX` is rejected rather than reinterpreted because the two units are not comparable: a
@@ -513,6 +514,13 @@ reads gnhf's own per-iteration `total_cost_usd` and adds a floor for the iterati
 flight. And if `COST_MAX` is above zero while `harness/gnhf-spend.py` is missing, the watchdog
 refuses to start, because a cap that cannot be computed is a cap that silently never fires.
 
+That refusal has a running twin, and it is a **fourth stop reason**. A helper that is present but
+fails, or prints something that is not two numbers, would report zero spend for the rest of the
+night, which reads as comfortably under budget. So the watchdog counts consecutive accounting
+failures and stops the run at `SPEND_FAIL_MAX` of them, on the reasoning that being unable to
+measure spend and continuing anyway is spending blind. A few are tolerated first so one transient
+blip does not kill an eight-hour run.
+
 `COST_MAX` bounds **gnhf's Claude Code spend only.** It is blind to healbot's own API credits,
 which the rigs bill to a different account entirely (§2 preamble). A paid rig running inside the
 loop is not capped by it.
@@ -524,14 +532,26 @@ and would let an earlier run's files answer the "has anything been written yet" 
 the stall detector during bootstrap. Then watch that one directory's `iteration-*.jsonl`
 (§1.4 — that file is the agent's live output stream, so its mtime is the only free liveness signal
 gnhf offers). If iteration files **exist** and none of them is fresher than `STALL_MIN` minutes, or
-`MAX_HOURS` have elapsed, or spend has reached `COST_MAX`, send `SIGTERM` — which gnhf treats as an
-immediate force stop (§1.5 #6). Then `SIGKILL` after 10 s, and report any surviving `claude`
-process, since gnhf spawns it `detached: true`. A forced stop exits 2; gnhf finishing on its own
-exits 0.
+`MAX_HOURS` have elapsed, or spend has reached `COST_MAX`, or spend accounting has failed
+`SPEND_FAIL_MAX` times running, send `SIGTERM` — which gnhf treats as an immediate force stop
+(§1.5 #6). Then `SIGKILL` after 10 s, and report any surviving `claude` process, since gnhf spawns
+it `detached: true`. A forced stop exits 2; gnhf finishing on its own exits 0.
+
+**The two pids are the same pid, and everything above rests on it.** VERIFIED 2026-08-06 in gnhf
+0.1.43: the log writer's `formatLine` stamps every line it emits with `pid: process.pid`, so
+`run:start` carries gnhf's own pid; and `/opt/homebrew/bin/gnhf` is a direct symlink to
+`dist/cli.mjs` whose shebang is `#!/usr/bin/env node`, so `env` execs node in place and the shell's
+`$!` is that same process, and the real runs left under `.gnhf/runs/` carry the field. Were it *not*
+the same pid, `RUN_DIR` would never resolve, the stall and spend legs would never run at all, and
+`MAX_HOURS` would be the only bound left on the night.
 
 That last report is a `pgrep` on `--output-format stream-json`. **Read it before acting on it:**
 MEASURED 2026-08-06 on this machine, with no gnhf agent running, every process it matched was an
-interactive Claude Code session. It is a list to check by hand, never a list to kill.
+interactive Claude Code session. It is a list to check by hand, never a list to kill. The comment
+beside that `pgrep` in the script still says no interactive session passes the pattern; measured,
+they do. The comment's discriminator is gnhf pairing that flag with `--json-schema`, and only the
+first half of the pair is in the pattern, so the narrowing is real but unfinished. Where the two
+disagree, the measurement is the one that was run.
 
 The existence test is a separate leg from the freshness test, and it is not a detail: a run that
 has not written its first iteration file yet is **starting up**, not stalled, so the stall leg
@@ -695,6 +715,10 @@ only eyeballed would have shipped that.
 - **NOT MEASURED:** the actual token cost or dollar cost of any of the three runs in §2. Both the
   `--max-tokens` figures and the `COST_MAX` figures are containment ceilings chosen from
   repo-documented workloads, not predictions.
+- **NOT MEASURED:** the `COST_MAX` cap actually firing, or the `SPEND_FAIL_MAX` stop. §5 dates a
+  measurement for the stall leg, the pid scoping and the argument refusals; the spend legs have
+  none, and no run in this document has been stopped by either. Their arithmetic belongs to
+  `harness/gnhf-spend.py`, which carries its own probe in the rig.
 - **NOT MEASURED:** whether `--agent opencode` against this repo interacts badly with the A/B
   study's `opencode serve` processes. Both bind local ports and both write session DBs. Until
   someone measures it, **use `--agent claude` and do not run gnhf with the opencode backend while
