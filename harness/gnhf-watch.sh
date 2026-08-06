@@ -59,9 +59,14 @@ kill -0 "$PID" 2>/dev/null || { say "FATAL: no live process with pid $PID"; exit
 # as dollars, which would silently turn a 3000000-token cap into a $3M one.
 [ -z "${BILL_MAX:-}" ] || { say "FATAL: BILL_MAX is gone; it over-counted ~2.8x. Use COST_MAX (US dollars)."; exit 1; }
 
-# A missing helper must not fail open. `|| echo "0 0"` at the call site would report zero spend
-# forever, which reads as "well under budget" and silently disables the cap.
+# The accountant must not fail open, in EITHER direction. A missing file is caught here; a
+# helper that is present but exits non-zero is caught at the call site. The first version of
+# this guarded only the missing file and left `|| echo "0 0"` at the call site, which reports
+# zero spend on any runtime failure and reads as "well under budget" for the rest of the night.
+# TESTED: a helper stubbed to exit 3 yielded exact=0, so COST_MAX could never fire.
 SPEND="$ROOT/harness/gnhf-spend.py"
+SPEND_FAIL_MAX="${SPEND_FAIL_MAX:-3}"   # consecutive failures tolerated before stopping
+spend_fails=0
 if [ "$(awk -v c="$COST_MAX" 'BEGIN{print (c>0)?1:0}')" = 1 ] && [ ! -f "$SPEND" ]; then
   say "FATAL: COST_MAX is set but $SPEND is missing; the cap would silently never fire."
   exit 1
@@ -134,7 +139,24 @@ PY
   # So: take gnhf's own total_cost_usd per finished iteration, which is exact and needs no price
   # table, and add a floor for the iteration still running. TESTED both directions.
   if [ "$(awk -v c="$COST_MAX" 'BEGIN{print (c>0)?1:0}')" = 1 ]; then
-    read -r spent_exact spent_floor <<<"$(python3 "$SPEND" "$RUN_DIR" || echo "0 0")"
+    # Fail CLOSED. If spend cannot be measured, the cap is not being enforced, and continuing
+    # is spending blind. A few consecutive failures are tolerated so a transient blip does not
+    # kill an 8-hour run; at the measured burn of ~$29/hr, three minutes of blindness is ~$1.50.
+    # Garbage output counts as a failure too: a non-numeric field would reach awk as 0 and read
+    # as zero spend, which is the same fail-open one layer down.
+    if spend_out=$(python3 "$SPEND" "$RUN_DIR" 2>&1) \
+       && [ "$(awk '{print (NF==2 && $1+0==$1 && $2+0==$2) ? 1 : 0}' <<<"$spend_out")" = 1 ]; then
+      spend_fails=0
+      read -r spent_exact spent_floor <<<"$spend_out"
+    else
+      spend_fails=$((spend_fails + 1))
+      say "spend accounting failed ${spend_fails}/${SPEND_FAIL_MAX}: ${spend_out}"
+      if [ "$spend_fails" -ge "$SPEND_FAIL_MAX" ]; then
+        reason="spend accounting failed ${spend_fails}x running; cannot measure spend, so stopping rather than spending blind"
+        break
+      fi
+      continue
+    fi
     if [ "$(awk -v a="${spent_exact:-0}" -v b="${spent_floor:-0}" -v c="$COST_MAX" 'BEGIN{print (a+b>=c)?1:0}')" = 1 ]; then
       reason=$(printf 'spend cap: $%.2f (>= $%s) -- $%.2f billed over finished iterations, $%.2f floor for the one in flight' \
                "$(awk -v a="$spent_exact" -v b="$spent_floor" 'BEGIN{print a+b}')" "$COST_MAX" "$spent_exact" "$spent_floor")
