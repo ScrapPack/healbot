@@ -45,6 +45,27 @@ finding existed in seven files; per-probe expected scores went stale in five). T
 - Before adding a standing paragraph to a living document, check whether a probe, the gate,
   or a skill already owns the fact. One owner, pointers everywhere else.
 
+### Any number in prose with nothing computing it
+
+The rules above are scoped to citations and recorded scores, and that scoping is why they get
+retrieved while editing citations and missed while writing a paragraph about what you just
+fixed. They generalise: **a number in prose that nothing computes is rot by construction.**
+Counts, coverage claims, scope claims, and above all a document's tally of its own edit
+history.
+
+The failure is not that such a number goes stale. It is that CORRECTING it produces a new
+number that the next edit invalidates, which is what sustains this repo's review-fix chains.
+MEASURED 2026-08-05 over the whole history: 17 chains, median 3 fix-rounds, max 8, several
+sustained entirely by one sentence being re-corrected.
+
+**So delete the sentence, or replace it with something that computes the number. Never correct
+it.** Three sessions found this independently before it reached a skill: `7f5fd69` swapped a
+prose coverage claim for a table a probe computes, after the sentence had been wrong "for the
+fourth consecutive round on this one item"; `4bffec4` removed a self-contradicting round-count
+rather than fixing it, coining "a tally in prose is a number with nothing computing it"; and
+`a68ea71` then found the same tally surviving in a second copy, which is this section's opening
+rule demonstrated on the person writing it.
+
 ## Verify
 
 ```
