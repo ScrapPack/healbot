@@ -72,7 +72,19 @@ $H ls | state [name] | peek <name>      census, per-crew state, screen tail
 $H send <name> <text> | brief <name> <file>
 $H occupancy <name>                     live context occupancy from the transcript
 $H kill <name> | down                   remove one crewmate / the whole session
+$H focus <name|nvim|grid> [--no-zoom]   put one pane in front of the captain (idempotent)
+$H diff [--dir D] <git-diff-args...>    open a diff in the cockpit's nvim pane, in a NEW tab
 ```
+
+`focus` and `diff` are the two verbs you drive ON THE CAPTAIN'S BEHALF, and they are the
+reason the captain does not have to know tmux. When the captain says "show me crewmate 3",
+that is `focus`; when a diff needs human eyes, that is `diff` then `focus nvim`. Both are
+deliberately absent from the `C-b ?` command card, because the card is the captain's and
+these are yours. Three properties worth relying on: `focus` resolves crew names through the
+manifest first and refuses an unknown one rather than guessing a pane; it focuses a dead
+crewmate's corpse but says that it is dead; and `diff` always opens a NEW tab and never
+touches the buffer the captain was in. `diff` exits 3 when this cockpit has no nvim pane,
+which is a named skip and not a failure, and it prints the plain `git diff` to run instead.
 
 Spawn discipline: one objective per crewmate; write the brief to a file first (objective,
 constraints, what done looks like, how to report) and pass `--brief`. A spawned crewmate

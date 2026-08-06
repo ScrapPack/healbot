@@ -70,6 +70,12 @@ Domain, and the standing preferences every session on this map must consult:
   the trigger point and the spend bound; ticket 13 owns the missing handoff to the captain.
 - **Firstmate drives the cockpit.** The captain learns how to talk to firstmate and nothing else.
   Ticket 11.
+- **[Firstmate drives the cockpit](tickets/11-firstmate-drives-the-cockpit.md)** — `focus` and
+  `diff` shipped and TESTED live, both idempotent, both off the captain's command card because they
+  are firstmate's tools. Side-by-side was NOT built: it needs `join-pane`, and seven call sites
+  enumerate the `crew` window by name, so a joined crewmate would read as dead or missing in `ls`,
+  `state`, `send`, `brief`, `kill` and `down`. That needs its own ticket with the census as its
+  subject.
 - **[Ratify the wayfinder and firstmate contract](tickets/03-wayfinder-firstmate-contract.md)** —
   all four ratified, and the contract now lives in `harness/skills/firstmate.md` where sessions
   actually read it. The first mate is the only tracker writer, which the grilling found is close to
@@ -95,8 +101,13 @@ In scope, not yet sharp enough to ticket.
   deliberately: `claude plugin` owns that state and a hand copy would fork it, and most of the
   captain's plugins currently read `disabled` anyway. Sharpens when a plugin is actually wanted in
   a harness session.
-- **What the cockpit looks like once firstmate drives it.** Fewer panes, fewer verbs on the command
-  card, possibly a different default layout. Downstream of ticket 11.
+- **Side-by-side panes, and what that costs the census.** Ticket 11 shipped `focus` and `diff` but
+  refused `join-pane` on evidence: seven call sites enumerate the `crew` window by name, so a joined
+  crewmate reads as dead or missing everywhere. Whether the census should address crew panes by
+  marker rather than by window is the real question underneath, and it is not sharp yet.
+- **What else the cockpit sheds once firstmate drives it.** Fewer panes, fewer verbs on the command
+  card, possibly a different default layout. The card did not shrink in ticket 11 because nothing on
+  it became redundant; that changes as more captain actions become firstmate verbs.
 - **Whether `NEXT.md` shrinks once the map holds.** It is the hand-rolled ancestor of this map, it is
   cited by other documents, and it is read by every fresh session. A real decision, not a cleanup.
   Do not touch it before ticket 02 resolves.
