@@ -3,7 +3,9 @@
   venv/bin/python probe_refusal_driver.py
 """
 
+import contextlib
 import copy
+import io
 import json
 import os
 import sys
@@ -28,7 +30,7 @@ def message(model="gpt-5.6-sol", provider="openai", finish="stop"):
     }]
 
 
-r = Results(expect=24)
+r = Results(expect=30)
 study = ab.load_study("refusal", "set_a")
 errors = run_refusal.validate_study(study)
 r.check("the frozen Set A corpus passes every structural and artifact control", not errors, "; ".join(errors))
@@ -125,5 +127,48 @@ r.check("saved raw evidence can be re-scored without another model turn",
         changed_count == 1 and blocked_row["outcome"] == ab.REFUSE_PROVIDER and blocked_row["score_history"])
 r.check("re-scoring is idempotent once persisted labels match their raw evidence",
         run_refusal.rescore_rows([blocked_row], [{"id": "blocked"}]) == 0)
+
+
+def guarded_main(argv, runs):
+    """main() with the paid path POISONED. `ab.run_dir` is the first statement past the tripwire and
+    the only one that creates the run directory, so a guard that fails to fire raises here instead
+    of spending: every row below is red on a reached poison, never on a missing model call. Returns
+    (exit code or REACHED, stderr)."""
+    def poisoned(*args, **kwargs):
+        raise AssertionError("REACHED")
+
+    saved_runs, saved_run_dir = ab.RUNS, ab.run_dir
+    ab.RUNS, ab.run_dir = runs, poisoned
+    err = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            outcome = run_refusal.main(argv)
+    except AssertionError as exc:
+        outcome = str(exc)
+    # no `finally`: contract 5 requires every `finally` in a rig to end on the verdict exit, and an
+    # unexpected exception here must reach the module level and take the probe red anyway.
+    ab.RUNS, ab.run_dir = saved_runs, saved_run_dir
+    return outcome, err.getvalue()
+
+
+with tempfile.TemporaryDirectory() as runs:
+    code, stderr = guarded_main(["--pilot"], runs)
+    r.check("a run tag with no meta.json refuses instead of starting a paid run at row zero",
+            code == 2, f"exit={code}")
+    r.check("the refusal lands BEFORE the run directory is created, so it leaves nothing to resume",
+            os.listdir(runs) == [], str(os.listdir(runs)))
+    r.check("the refusal names the missing meta, the turns it would pay for, and the remedy",
+            "meta.json does not exist" in stderr and "all 10 turns" in stderr and "--start-new" in stderr,
+            stderr)
+    os.mkdir(os.path.join(runs, "refusal-pilot-archived-20260731"))
+    _, archived_stderr = guarded_main(["--pilot"], runs)
+    r.check("an archived sibling is named, which is the exact shape that made this guard necessary",
+            "is present: refusal-pilot-archived-20260731" in archived_stderr, archived_stderr)
+    r.check("NEGATIVE CONTROL: --start-new gets PAST the guard, so the refusals above are the guard",
+            guarded_main(["--pilot", "--start-new"], runs)[0] == "REACHED")
+    os.mkdir(os.path.join(runs, "refusal-pilot"))
+    run_refusal.atomic_json(os.path.join(runs, "refusal-pilot", "meta.json"), expected)
+    r.check("NEGATIVE CONTROL: a tag whose meta.json exists is handed to the resume path untouched",
+            guarded_main(["--pilot"], runs)[0] == "REACHED")
 
 sys.exit(0 if r.summary() else 1)

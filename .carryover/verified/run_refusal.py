@@ -4,9 +4,9 @@ The model is pinned per request and re-read from every assistant transcript. Run
 after every turn and reserve the next turn before sending it, so an ambiguous interrupted call
 is never repeated without an explicit --retry-pending.
 
-  venv/bin/python run_refusal.py --check
-  venv/bin/python run_refusal.py --pilot
-  venv/bin/python run_refusal.py
+  venv/bin/python run_refusal.py --check              # free: corpus and plan only
+  venv/bin/python run_refusal.py --start-new          # a tag with no meta.json refuses without this
+  venv/bin/python run_refusal.py                      # resumes the full run
 """
 
 import argparse
@@ -312,6 +312,29 @@ def stop_servers(servers):
             process.wait(timeout=10)
 
 
+def archived_siblings(runpath):
+    """Directories the archive-by-rename repair leaves behind. A tag whose run directory is gone
+    while `<dir>-archived-*` is present is the shape that made this guard necessary: the archive
+    of refusal-full removed the only thing standing between a bare invocation and fresh spend."""
+    parent, name = os.path.dirname(runpath), os.path.basename(runpath)
+    if not os.path.isdir(parent):
+        return []
+    return sorted(entry for entry in os.listdir(parent) if entry.startswith(f"{name}-archived-"))
+
+
+def refuse_fresh_start(runpath, turns):
+    """The spend tripwire. `ab.run_dir` creates on resolve, so a mistyped or archived-away tag used
+    to become an empty directory with no meta, which skips the plan-compatibility check entirely and
+    starts paying at row zero. Fails CLOSED: no meta and no --start-new means refuse, and refuse
+    BEFORE the directory is created so a refused invocation leaves no trace to resume."""
+    print(f"refusing to start a paid run: {runpath}/meta.json does not exist", file=sys.stderr)
+    print(f"a run with no meta starts at row zero and pays for all {turns} turns", file=sys.stderr)
+    for name in archived_siblings(runpath):
+        print(f"an archived run of this tag is present: {name}", file=sys.stderr)
+    print("resume an existing run with its own --tag, or pass --start-new to begin a new one", file=sys.stderr)
+    return 2
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pilot", action="store_true", help="one probe per family, one repeat, ten turns")
@@ -324,8 +347,12 @@ def main(argv=None):
     parser.add_argument("--timeout", type=int, default=900, help="per-turn timeout in seconds")
     parser.add_argument("--retry-pending", action="store_true",
                         help="explicitly repeat an interrupted turn whose transcript is incomplete")
+    parser.add_argument("--start-new", action="store_true",
+                        help="authorize a paid run from row zero; required when the tag has no meta.json")
     args = parser.parse_args(argv)
 
+    if args.start_new and args.rescore:
+        parser.error("--start-new has no saved rows to rescore")
     if args.pilot and args.repeats not in (None, 1):
         parser.error("--pilot is fixed at one repeat")
     repeats = 1 if args.pilot else (args.repeats or 3)
@@ -352,6 +379,9 @@ def main(argv=None):
         print(f"corpus sha256: {expected['corpus_sha256']}")
         return 0
 
+    runpath = f"{ab.RUNS}/refusal-{tag}"
+    if not args.start_new and not os.path.exists(f"{runpath}/meta.json"):
+        return refuse_fresh_start(runpath, len(plan))
     runpath = ab.run_dir("refusal", tag)
     rows = read_json(f"{runpath}/rows.json", [])
     meta = read_json(f"{runpath}/meta.json", None)

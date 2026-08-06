@@ -343,16 +343,20 @@ inline compliant fixture, miss its topic-matched negative, and miss a generic re
 (`:68-73`). `probe_refusal_fixtures.py` re-checks those regexes against the realistic corpus
 in `studies/refusal/fixtures/` because hand-written fixtures passed while two of the first
 four regexes exercised on real output were wrong. The run ledger is the shape the second
-driver later copied: checkpoint after every row, reserve-before-send (`run_refusal.py:486-494`),
-an interrupted ambiguous turn REFUSES to be repeated without `--retry-pending` (`:466-474`),
+driver later copied: checkpoint after every row, reserve-before-send (`run_refusal.py:516-524`),
+an interrupted ambiguous turn REFUSES to be repeated without `--retry-pending` (`:496-504`),
 `--rescore` re-derives labels from saved transcripts with zero model calls after verifying
-every saved prompt against the corpus (`:388-397`), and the pin is asserted from the returned
-transcript after every persisted row (`:512-514`). Its meta pins the corpus, scorer and driver
-bytes (`run_refusal.py:286-287`) and resume refuses drift (`:363-367`), which is exactly why
-this file no longer moves: the archived run's meta records `driver_sha256` over its exact
-bytes, so pluggability went into a new driver instead of an edit (`run_study.py:3-11`). Its
+every saved prompt against the corpus (`:418-427`), and the pin is asserted from the returned
+transcript after every persisted row (`:542-544`). Its meta pins the corpus, scorer and driver
+bytes (`run_refusal.py:286-287`) and resume refuses drift (`:393-397`), which is why
+pluggability went into a new driver rather than an edit (`run_study.py:3-11`). **A bare
+invocation no longer starts a run** (`:325-336`, `:382-384`): a tag whose directory holds no
+`meta.json` is refused before the directory is created, with any `-archived-*` sibling named,
+and `--start-new` is the only way to begin at row zero. That edit moves `driver_sha256` and
+orphans no resumable run — `scorer_sha256` in both recorded metas already differs from the
+live `ab.py`, and `--rescore` allows drift in all three hashes (`:395`). Its
 one real weakness is that it reads the LIVE `studies/refusal/set_a.json` on every invocation
-(`run_refusal.py:338`), so a corpus edit after paid rows exist orphans the spend. That is what
+(`run_refusal.py:365`), so a corpus edit after paid rows exist orphans the spend. That is what
 stranded `refusal-full` at 24/150 rows on 2026-07-31; ARCHIVED.md is the record, and the run
 was archived BY RENAME so the tag-derived path can never resume it. Free guard:
 `probe_refusal_driver.py`. Companions: `verify_refusal_a.py` reads a completed run back
@@ -461,7 +465,7 @@ it was ever the live file, here under its hash BEFORE the live file moves on.
 
 **Study DBs are measurement corpus, and the archive rules above apply to them with no study
 exception.** Every study turn lands in per-arm DBs under `hb/`: `ab-refusal-<tag>-<arm>.db`
-(`run_refusal.py:436`) and `study-<study>-<tag>-<arm>.db` (`run_study.py:796`), both through
+(`run_refusal.py:466`) and `study-<study>-<tag>-<arm>.db` (`run_study.py:796`), both through
 `rig.db()` (`rig.py:42-49`), which puts them inside the `hb/*.db` glob that
 `probe_turn_growth.py` derives `worst_turn` from. So never delete one; that deletes the
 measurement. They are single-use by construction: the tag is baked into the name, a new study
