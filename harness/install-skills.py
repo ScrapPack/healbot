@@ -32,6 +32,12 @@ import os
 import shutil
 import sys
 
+# One definition of "does this path resolve inside that root", shared with the doctor row
+# that reports the same property, rather than two copies free to drift. Both files live in
+# harness/, so sys.path[0] carries this import for any invocation of this script, and
+# doctor.py imports nothing outside the stdlib and executes nothing at import time.
+from doctor import resolves_under
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CANON = os.path.join(REPO, "harness", "skills")
 AGENTS = os.path.expanduser(os.path.join("~", ".agents", "skills"))
@@ -115,14 +121,32 @@ def mirror_harness_root():
 
     harness/claude/.gitignore ignores that whole root, so the SKILL.md filenames this
     writes never reach gate.py's BANNED check. VERIFIED with git check-ignore before the
-    first write; re-check it if that .gitignore ever narrows."""
+    first write; re-check it if that .gitignore ever narrows.
+
+    The source is that root's ENTRIES, and their bodies must live outside both roots. A
+    skill installed only under ~/.claude has nowhere else to point, and mirroring it wrote a
+    link from the harness root into the DEFAULT root -- which is the arrangement ticket 10
+    recorded as rejected, and which context-handoff held from this function's first run
+    until 2026-08-05 (ticket 18). This refuses to write one, and reports one already on
+    disk, rather than deleting it: dropping the entry would make the two roots carry
+    different skill SETS, which the captain's 2026-08-05 direction rules out just as
+    firmly. Both faults leave the repair to a human promoting the body to ~/.agents."""
     if not os.path.isdir(CLAUDE):
         print("  %-32s %s" % ("harness/claude/skills", "SKIPPED: no " + CLAUDE))
         return 0
+    default_root = os.path.dirname(CLAUDE)
     bad = 0
     for name in sorted(os.listdir(CLAUDE)):
         src = os.path.join(CLAUDE, name)
         if not os.path.isdir(src):
+            continue
+        if resolves_under(src, default_root):
+            bad += 1
+            print("  %-32s %s" % ("harness/claude/skills/" + name,
+                                  "REFUSED: its body is inside %s, so mirroring it would "
+                                  "link this root into the default one. Move the body to "
+                                  "%s/%s/ and re-point %s/%s at it, then re-run"
+                                  % (default_root, AGENTS, name, CLAUDE, name)))
             continue
         state, copy_dir = surface(name, HBCLAUDE, os.path.realpath(src))
         bad += "CONFLICT" in state
