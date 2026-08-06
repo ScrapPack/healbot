@@ -45,6 +45,16 @@ gate/runs/
 # re-checkpoint before committing a corpus update. Also tracked: ab-runs/ (paid A/B study
 # rows, meta, server logs) and corpus-backups/ (the frozen-corpus safety net).
 # A NEW PAID DB NEEDS ITS OWN NEGATION LINE HERE, or it is silently unprotected.
+#
+# The inverse also has a case, measured 2026-08-06: errorstate.db and focus.db were negated
+# here until that date and did NOT belong. Neither is paid (probe_error_state.py's docstring:
+# "Zero model turns, zero API credits") and neither is authored: both are
+# `shutil.copyfile(db("retire350"), ...)`, probe_error_state.py:43 and probe_focus.py:59, so
+# every probe run overwrote the tracked file with a fresh copy of retire350.db and dirtied the
+# tree. The whole recurring diff was one cell, `project.time_updated`; no session, message or
+# measurement row ever differed. retire350.db stays tracked and rebuilds both on demand, and
+# probe_turn_growth.py dedupes its corpus (probe_turn_growth.py:305), so their absence changes
+# no derivation. Do not re-add negation lines for them.
 .carryover/verified/hb/*
 !.carryover/verified/hb/ab-runs/
 !.carryover/verified/hb/corpus-backups/
@@ -56,8 +66,6 @@ gate/runs/
 !.carryover/verified/hb/headless.db
 !.carryover/verified/hb/autoretire.db
 !.carryover/verified/hb/cold.db
-!.carryover/verified/hb/errorstate.db
-!.carryover/verified/hb/focus.db
 !.carryover/verified/hb/focusexplore.db
 !.carryover/verified/hb/smoke.db
 !.carryover/verified/hb/ab-refusal-full-stock.db

@@ -611,12 +611,24 @@ readlink -f "$(command -v gnhf)"
 ```sh
 git status --porcelain     # must be EMPTY
 ```
-Today it is not — TESTED, 12 entries: 2 modified (`.carryover/verified/probe_twin.py`,
+On 2026-07-31 it was not: TESTED, 12 entries, 2 modified (`.carryover/verified/probe_twin.py`,
 `.gitignore`) and 10 untracked, including all of `gate/` and the entire A/B study
 (`ab.py`, `run_refusal.py`, `probe_refusal_*.py`, `verify_refusal_*.py`, `studies/`,
 `AB-HANDOFF.md`, `docs/REFUSAL-BASELINE.md`). **Commit them; do not stash.** Stashing pulls the live
 study's files out from under it, and `git stash -u` on an in-flight run is how you lose a
 measurement.
+
+**Re-run this check after step 4, not only before it.** Steps 3 and 4 contradicted each other
+until 2026-08-06. `probe_error_state.py` and `probe_focus.py` both open with
+`shutil.copyfile(db("retire350"), ...)` (probe_error_state.py:43, probe_focus.py:59) onto
+`hb/errorstate.db` and `hb/focus.db`, two files that were then TRACKED, so walking the checklist
+in its own documented order dirtied the tree at the last moment and gnhf refused with "Working
+tree is not clean" (TESTED 2026-08-05, on the first launch attempt). The recurring diff was one
+cell, `project.time_updated`; no session, message or measurement row ever moved. Both files are
+now untracked (`.gitignore`), and every other name step 4 writes (`probe_on_grid`,
+`controlwiring`, `armdefault`, `armoff`, `armon`, `reqchan`) is ignored as well, so step 4 leaves
+the tree clean. Keep the re-check anyway: it is what catches the next probe that writes to a file
+still in the corpus.
 
 **4 — the free baseline is real, measured now, not quoted**
 ```sh

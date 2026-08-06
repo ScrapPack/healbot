@@ -23,7 +23,7 @@ THE FILENAME-BAN COLLISION, resolved by construction. Run dirs are TRACKED
 in-tree (gate.py `BANNED`) because a body containing !`cmd` shell-executes on slash-invoke
 with no permission check (harness/env.sh:63-68, session/prompt.ts:1397-1408 at the pin).
 So the SNAPSHOT stores the delta body under a safe name (`files/_delta_skill.md`) and only
-`materialize()` writes a literal SKILL.md — into `hb/arms/`, which `.gitignore:48` ignores
+`materialize()` writes a literal SKILL.md — into `hb/arms/`, which `.gitignore:58` ignores
 (only explicit negations escape `hb/*`). The same hole motivates `define()`'s content
 guard: a delta body containing the bang-backtick pattern is refused outright.
 
