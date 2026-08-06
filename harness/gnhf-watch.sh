@@ -65,7 +65,7 @@ kill -0 "$PID" 2>/dev/null || { say "FATAL: no live process with pid $PID"; exit
 # zero spend on any runtime failure and reads as "well under budget" for the rest of the night.
 # TESTED: a helper stubbed to exit 3 yielded exact=0, so COST_MAX could never fire.
 SPEND="$ROOT/harness/gnhf-spend.py"
-SPEND_FAIL_MAX="${SPEND_FAIL_MAX:-3}"   # consecutive failures tolerated before stopping
+SPEND_FAIL_MAX="${SPEND_FAIL_MAX:-3}"   # WHICH consecutive failure stops the run, not how many
 spend_fails=0
 if [ "$(awk -v c="$COST_MAX" 'BEGIN{print (c>0)?1:0}')" = 1 ] && [ ! -f "$SPEND" ]; then
   say "FATAL: COST_MAX is set but $SPEND is missing; the cap would silently never fire."
