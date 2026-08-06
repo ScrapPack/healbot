@@ -15,6 +15,7 @@ catches.
   venv/bin/python probe_fleet_claude.py
 """
 
+import importlib.util
 import json
 import math
 import os
@@ -111,8 +112,18 @@ CONFIG_MATERIALIZED = Env(
 # fixture, the shipped reader's extracted body seeing the sentinel through the padding,
 # and the recovered pre-fix read missing it. The live pair exists because the trap is
 # tmux's own padding, which no source read can prove; tmux joins the environment
-# requirements, so skip_max rises 2 -> 5. 106.
-r = Results(expect=107, skip_max=5)
+# requirements, so skip_max rises 2 -> 5. 106. Ticket 18 (2026-08-05) adds nine: four
+# driving doctor's fault function over scratch roots that hold a real puncture, a real
+# traversal and a set divergence — one of them the negative control the count-only row it
+# replaces never had — three on the row being a FAIL the claude tier reads, and two on the
+# installer refusing to write the puncture back. The defect they guard is a row that
+# reported PASS at "28/28 surfaced" for as long as the puncture existed, which is the
+# a-count-is-not-an-outcome shape this file's own header names. 116. Ticket 04's claims
+# mode (2026-08-05) adds six, all driving .scratch/frontier.awk over a five-ticket
+# fixture whose blocker is itself takeable, so flipping one status moves two tickets in
+# opposite directions and neither direction can pass by accident; the last two hold an
+# unknown mode to a REFUSAL rather than a silent fall-back to the frontier. 122.
+r = Results(expect=122, skip_max=5)
 
 
 def sh_n(path):
@@ -996,6 +1007,186 @@ try:
     r.check("MUTATION: an exit that bypasses the tier verdicts is caught",
             not exit_reads_the_tiers(doc.replace(
                 "any(state is False for state in tier_states)", "False", 1)))
+
+    # -- the redirected root must not reach into the default one (2026-08-05) ------
+    # Ticket 18. harness/claude/skills/context-handoff was a symlink into ~/.claude/skills,
+    # the arrangement ticket 10 recorded as rejected in those words, and doctor's row
+    # reported PASS at "28/28 surfaced" for as long as it existed: a COUNT, which no value
+    # the workload can produce turns red. The row now reports faults, and the faults are
+    # computed by a function taking both roots as arguments, so these rows drive the SHIPPED
+    # predicate over scratch roots holding a real puncture rather than reading its source.
+    spec = importlib.util.spec_from_file_location("hb_doctor", DOCTOR)
+    hbdoc = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(hbdoc)
+
+    def roots(td):
+        """default root, mirror, and a canonical source outside BOTH — the real shape.
+
+        x  clean:     both roots link at the canonical body.
+        p  puncture:  the body lives in the default root, so the mirror links into it.
+                      This is context-handoff exactly.
+        t  traversal: the mirror links at the DEFAULT root's entry, which links on to the
+                      canonical body. realpath lands outside ~/.claude and the coupling is
+                      the same, which is the near miss repairing p produces by accident.
+        """
+        canon, default, mirror = (os.path.join(td, n) for n in ("canon", "default", "mirror"))
+        for n in ("x", "t"):
+            os.makedirs(os.path.join(canon, n))
+        os.makedirs(os.path.join(default, "skills"))
+        os.makedirs(mirror)
+        os.makedirs(os.path.join(default, "skills", "p"))
+        for n in ("x", "t"):
+            os.symlink(os.path.join(canon, n), os.path.join(default, "skills", n))
+        os.symlink(os.path.join(canon, "x"), os.path.join(mirror, "x"))
+        os.symlink(os.path.join(default, "skills", "p"), os.path.join(mirror, "p"))
+        os.symlink(os.path.join(default, "skills", "t"), os.path.join(mirror, "t"))
+        return default, mirror
+
+    with tempfile.TemporaryDirectory() as td:
+        default, mirror = roots(td)
+        want, have, missing, extra, punctures = hbdoc.config_root_skill_faults(default, mirror)
+        r.check("the faults function names the mirror entries that reach into the default "
+                "root, and only those",
+                punctures == ["p", "t"] and want == have == {"p", "t", "x"},
+                f"punctures={punctures} want={sorted(want)} have={sorted(have)}")
+        # The negative control the count-only row never had: the clean entry is the same
+        # shape (a symlink to a directory, surfaced identically) and must NOT be reported,
+        # or the predicate is a tautology over every mirror entry.
+        r.check("NEGATIVE CONTROL: an entry linked at a canonical source outside both roots "
+                "is not a puncture, so the predicate is not true of every entry",
+                "x" not in punctures and not missing and not extra)
+        r.check("the traversal case is caught by chain_reaches and MISSED by realpath alone, "
+                "which is why the shipped predicate is not realpath",
+                hbdoc.chain_reaches(os.path.join(mirror, "t"), default)
+                and not hbdoc.resolves_under(os.path.join(mirror, "t"), default))
+
+    with tempfile.TemporaryDirectory() as td:
+        default, mirror = roots(td)
+        os.remove(os.path.join(mirror, "x"))
+        os.makedirs(os.path.join(mirror, "z"))
+        _, _, missing, extra, _ = hbdoc.config_root_skill_faults(default, mirror)
+        r.check("set divergence is reported in BOTH directions: the captain's direction is "
+                "that the roots carry the same skill SET, and only `missing` was checked",
+                missing == ["x"] and extra == ["z"])
+
+    def puncture_row_is_fail_and_gates_the_tier(s):
+        # The decoration hazard the auth and twin rows above are guarded against: a fault
+        # the row prints but no tier reads changes nothing a human sees. FAIL, and a name
+        # inside the family root_fail matches.
+        return (bool(re.search(
+                    r'row\(FAIL, "claude config-root skills reach into the default root"', s))
+                and bool(re.search(
+                    r'root_fail = any\(s == FAIL and n\.startswith\("claude config-root '
+                    r'skills"\)', s))
+                and "not root_fail" in s)
+
+    r.check("doctor's puncture row is a FAIL and gates the claude tier, not merely printed",
+            puncture_row_is_fail_and_gates_the_tier(doc),
+            "TESTED both ways 2026-08-05 on this machine's real roots: exit 1 with the tier "
+            "NOT YET while context-handoff punctured, exit 0 after the body moved to "
+            "~/.agents and both roots were pointed at it")
+    r.check("MUTATION: demoting the puncture row to a WARN is caught",
+            not puncture_row_is_fail_and_gates_the_tier(doc.replace(
+                'row(FAIL, "claude config-root skills reach into the default root"',
+                'row(WARN, "claude config-root skills reach into the default root"', 1)))
+    r.check("MUTATION: dropping the root-fault gate from the claude tier is caught",
+            not puncture_row_is_fail_and_gates_the_tier(
+                doc.replace(" and not root_fail", "", 1)))
+
+    def installer_refuses_a_cross_root_body(s):
+        # doctor reports the fault; the installer is what would otherwise recreate it on the
+        # next run. Refuse and report, never delete: dropping the entry would make the two
+        # roots carry different SETS, which the same direction rules out.
+        body = s[s.find("def mirror_harness_root"):]
+        return ("resolves_under(src, default_root)" in body
+                and "REFUSED" in body
+                and body.find("resolves_under(src, default_root)") < body.find("surface(name"))
+
+    inst = open(os.path.join(HARNESS, "install-skills.py")).read()
+    r.check("install-skills refuses to mirror a skill whose body lives in the default root, "
+            "BEFORE it would link one", installer_refuses_a_cross_root_body(inst),
+            "TESTED 2026-08-05: exit 1 naming context-handoff and the promotion remedy, "
+            "27 other entries untouched")
+    r.check("MUTATION: dropping the refusal lets the puncture be rewritten, and is caught",
+            not installer_refuses_a_cross_root_body(
+                inst.replace("resolves_under(src, default_root)", "False", 1)))
+
+    # -- the tracker query: the ONE reader of a ticket's header block --------------
+    # .scratch/frontier.awk owns the blocking rule and the header-block parse, and
+    # docs/agents/issue-tracker.md names it as their only implementation — anything that
+    # renders a frontier calls it. Ticket 04 adds the second mode a renderer needs (the
+    # claims half), so the file now decides two things instead of one and this section is
+    # what keeps both honest. The failure it guards is not a wrong answer, it is a QUIET
+    # one: that file's own header records the rule having once been written inline in
+    # prose and returning an EMPTY frontier rather than an error.
+    #
+    # NOT COVERED HERE, said so the section is not read as wider than it is: no shipped
+    # caller renders the claims mode yet. `hb-fleet.sh map` is written and measured
+    # against these same rules and is NOT in the tree — see ticket 04's Comments for why
+    # and for the rows that go with it.
+    AWKQ = os.path.join(REPO, ".scratch", "frontier.awk")
+
+    def _awk(files, mode=None):
+        cmd = ["awk"] + (["-v", "mode=" + mode] if mode else []) + ["-f", AWKQ] + files
+        p = subprocess.run(cmd, capture_output=True, text=True)
+        return (p.returncode, sorted(ln for ln in p.stdout.split("\n") if ln.strip()),
+                p.stderr)
+
+    def _nums(lines):
+        return sorted(int(re.search(r"\s(\d+)\.\s", ln).group(1)) for ln in lines)
+
+    def _fixture_tickets(d, blocker_status):
+        """Five tickets covering every arm of the rule at once: takeable, a blocker, the
+        ticket it blocks, an open CLAIMED one, and a closed claimed one. The blocker is
+        itself takeable while it is open, so flipping its status moves TWO tickets in
+        opposite directions — a fixture where only one thing moves cannot tell a rule
+        that reads `Blocked by` from one that just counts."""
+        t = os.path.join(d, "fx", "tickets")
+        os.makedirs(t, exist_ok=True)
+        rows = [("01-takeable.md", "takeable", "open", "-", "-"),
+                ("02-blocker.md", "the blocker", blocker_status, "-", "-"),
+                ("03-blocked.md", "blocked by the blocker", "open", "-", "02"),
+                ("04-claimed.md", "claimed and open", "open", "bosun", "-"),
+                ("05-shipped.md", "claimed and closed", "closed", "bosun", "-")]
+        for name, title, status, asg, blk in rows:
+            with open(os.path.join(t, name), "w") as f:
+                f.write("# %s\n\nType: task\nMode: AFK\nStatus: %s\nAssignee: %s\n"
+                        "Blocked by: %s\n\n## Question\n\nfixture\n"
+                        % (title, status, asg, blk))
+        return sorted(os.path.join(t, n) for n, *_ in rows)
+
+    with tempfile.TemporaryDirectory() as _d:
+        fx_open = _fixture_tickets(os.path.join(_d, "a"), "open")
+        fx_closed = _fixture_tickets(os.path.join(_d, "b"), "closed")
+        rc_front, front, _ = _awk(fx_open)
+        rc_claims, claims, _ = _awk(fx_open, "claims")
+        _, front_closed, _ = _awk(fx_closed)
+        rc_bad, bad_out, bad_err = _awk(fx_open, "nope")
+
+    r.check("the frontier query on a controlled fixture prints exactly the open, "
+            "unblocked, unassigned tickets", _nums(front) == [1, 2],
+            "01 takeable and 02 takeable-and-a-blocker; 03 is blocked, 04 is claimed, "
+            "05 is closed")
+    r.check("CONTROL, the other direction: closing the blocker admits the ticket it "
+            "blocked AND drops the blocker itself", _nums(front_closed) == [1, 3],
+            "scoped honestly: this is the control for a rule that ignores `Status: closed` "
+            "on the blocker, NOT for the blocking rule existing — TESTED 2026-08-05, "
+            "deleting the blocker check leaves this row green and takes the row above red")
+    r.check("claims mode prints the OPEN assigned ticket with its holder",
+            _nums(claims) == [4] and "[bosun]" in claims[0],
+            "05 is assigned to the same holder and closed, so a claims mode that read "
+            "only `Assignee` would print two")
+    r.check("CONTROL: frontier and claims never name the same ticket, and neither is "
+            "empty on this fixture",
+            bool(front) and bool(claims)
+            and not set(_nums(front)) & set(_nums(claims)))
+    r.check("an unknown mode REFUSES rather than falling back to the frontier",
+            rc_bad == 2 and bad_out == [] and "nope" in bad_err,
+            "a typo that silently printed takeable work as though it were the frontier is "
+            "the silent-wrong-answer class this file's header names; deleting the BEGIN "
+            "guard prints the frontier at exit 0, which is what this row refuses")
+    r.check("CONTROL: the two modes the query names both exit 0",
+            rc_front == 0 and rc_claims == 0)
 
     # -- the screen reader: strip the padding, THEN tail (2026-08-05) --------------
     # capture-pane -p pads its output to the pane HEIGHT and the CLI paints top-down,

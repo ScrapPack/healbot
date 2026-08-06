@@ -2,13 +2,13 @@
 
 WHY A SECOND DRIVER INSTEAD OF EDITING THE FIRST. run_refusal.py is pinned by live evidence:
 the stranded refusal-full run's meta.json records driver_sha256 over that file's exact bytes,
-and resume refuses on drift (run_refusal.py:295-298, 363-367). Editing it to add pluggability
-would orphan 24 paid rows to improve a file whose whole value is that it does not move. So
-this driver is built ALONGSIDE it, copying the shapes that run proved right — atomic
-checkpoint after every row, reserve-before-send, explicit --retry-pending for ambiguous
-interrupted spend (run_refusal.py:125-144, 446-504) — per the house rule for pinned code
-(ab.serve_arm vs rig.serve): copy the shape, cite the source, own the copy. Three things
-change:
+and resume refuses on drift (run_refusal.py:295-298, 393-397). Editing it for pluggability would
+have churned a file whose whole value is that it does not move. It has moved once since, for the
+spend tripwire (run_refusal.py:325-336), which orphaned no resumable run: the live ab.py already
+matches neither recorded scorer_sha256. So this driver is built ALONGSIDE it, copying the shapes
+that run proved right — checkpoint after every row, reserve-before-send, explicit --retry-pending
+for ambiguous interrupted spend (run_refusal.py:125-144, 476-534) — per the house rule for pinned
+code (ab.serve_arm vs rig.serve): copy the shape, cite the source, own the copy. Three things change:
 
 1. THE SCORER IS THE STUDY'S, NOT THE DRIVER'S. A study definition is a module named
    study_<name>.py in this directory owning validate()/score()/delivered() (+ optional
@@ -409,7 +409,7 @@ def workspace_lease_owner(workspace):
 
 def pending_disposition(pending, probe, msgs, retry, lease_owner, run_owner):
     """What a saved reservation means, decided with no side effects so the decision itself
-    is testable. run_refusal.py:446-474's lattice plus one new refusal: a checked probe
+    is testable. run_refusal.py:476-504's lattice plus one new refusal: a checked probe
     whose transcript survived but whose WORKSPACE did not (lease gone, or re-leased to
     someone else) cannot be recovered — the hidden check would measure a restored tree and
     record the number as this turn's. Returns "recover" | "retry" | "refuse-incomplete" |

@@ -308,6 +308,17 @@ screen_tail() {  # screen_tail <pane> [lines]
   t capture-pane -p -t "$1" | grep -v '^[[:space:]]*$' | tail -"${2:-25}"
 }
 
+# The cockpit's OPTIONAL panes, by the same @hb_role marker `up` sets on them. `up` has its own
+# hb_has_role, but that one is defined inside the `up)` branch and answers a yes/no question
+# during construction; this one is global and returns the pane id, because `focus` and `diff`
+# address those panes long after `up` has exited. Empty output means the pane is not in this
+# cockpit, which is a NAMED SKIP for every caller (nvim absent is a machine without nvim, or a
+# `start --no-nvim`), never a failure of the fleet.
+role_pane() {  # role_pane <role>  -> pane id on stdout, empty if this cockpit has no such pane
+  t list-panes -t "$HB_RUN:bridge" -F '#{@hb_role} #{pane_id}' 2>/dev/null \
+    | awk -v r="$1" '$1==r{print $2; exit}'
+}
+
 # The range is the header's command list PLUS the selector paragraph, and it is a LINE range
 # into this file: inserting a command line above shifts the paragraph and silently truncates
 # the last line of it. Bumped 22 -> 23 for `preflight`, 23 -> 25 for `start`/`help`.
@@ -823,6 +834,102 @@ peek)
   NAME="${1:-}"; [ -n "$NAME" ] || usage
   P="$(resolve_pane "$NAME")"
   screen_tail "$P" "${2:-25}"
+  ;;
+
+# -- verbs firstmate drives ON THE CAPTAIN'S BEHALF ------------------------------------------
+# Ticket 11 on the daily-driver map. The captain's answer to "why are you still on stock Claude
+# Code" was "I don't know how to operate within the harness", and docs/E2E.md already existed as
+# a written walk, so the repair is that there is LESS to know, not another document. These two
+# verbs are deliberately NOT on the `C-b ?` command card: they are firstmate's tools, and the
+# card is the captain's, scarce, and non-scrolling (its geometry has already caused one measured
+# failure). The firstmate skill documents them; hb_header's 4,25 range is untouched.
+
+focus)
+  # "Show me crewmate 3", as a sentence rather than a chord.
+  TARGET="${1:-}"
+  [ -n "$TARGET" ] || { echo "hb-fleet: focus <crewmate|nvim|grid> [--no-zoom]" >&2; exit 2; }
+  shift
+  ZOOM=1
+  while [ $# -gt 0 ]; do case "$1" in
+    --no-zoom) ZOOM=0; shift;;
+    *) echo "hb-fleet: focus: unknown option '$1'" >&2; exit 2;;
+  esac; done
+
+  # Manifest FIRST, exactly as send/peek/kill resolve: a crewmate that exists always wins the
+  # name, and an unknown name refuses loudly rather than focusing a guessed pane.
+  if PANE="$(manifest_get "$TARGET" pane)"; then
+    WINDOW=crew
+    pane_exists "$PANE" || {
+      echo "hb-fleet: '$TARGET' is in the manifest but tmux no longer lists pane $PANE — run ls" >&2
+      exit 2; }
+    # A corpse still holds its screen, and reading a dead crewmate's last output is a real
+    # reason to focus it. Say so rather than presenting it as live.
+    pane_dead "$PANE" && echo "hb-fleet: note: '$TARGET' is a DEAD pane (remain-on-exit corpse) — showing its last screen"
+  else
+    PANE="$(role_pane "$TARGET")"
+    [ -n "$PANE" ] || {
+      echo "hb-fleet: no crewmate and no cockpit pane named '$TARGET'" >&2
+      echo "hb-fleet: crew: $(manifest_names 2>/dev/null)" >&2
+      echo "hb-fleet: cockpit roles: nvim grid" >&2
+      exit 2; }
+    WINDOW=bridge
+  fi
+
+  t select-window -t "$HB_RUN:$WINDOW" || exit 2
+  t select-pane -t "$PANE" || exit 2
+  if [ "$ZOOM" = 1 ]; then
+    # `resize-pane -Z` TOGGLES. An unconditional call makes this verb non-idempotent — the
+    # second `focus` of the same crewmate would UNZOOM the pane the first one zoomed — so the
+    # flag is read first. select-pane above may already have unzoomed a different pane, which
+    # is why the flag is read after it rather than before.
+    [ "$(t display-message -p -t "$PANE" '#{window_zoomed_flag}' 2>/dev/null)" = "1" ] \
+      || t resize-pane -Z -t "$PANE"
+  fi
+  echo "hb-fleet: focused $TARGET (pane $PANE, window $WINDOW)"
+  ;;
+
+diff)
+  # Put a diff in front of the captain in the cockpit's nvim pane, which is the human-review
+  # surface the destination names. Two design rules, both load-bearing:
+  #
+  # 1. ALWAYS A NEW TAB, never the current buffer. The nvim pane is the captain's, not a
+  #    crewmate's, and firstmate driving it must not disturb what they were doing.
+  # 2. The git output goes to a FILE and nvim is only ever handed a path we generate. Building
+  #    an `:r !git diff ...` command line would push the caller's arguments through tmux
+  #    send-keys AND nvim's command line, two quoting layers deep, where a path with a space or
+  #    a `|` is an injection rather than an argument. git runs here, in a shell that already
+  #    quotes correctly.
+  DIR="$REPO"
+  while [ $# -gt 0 ]; do case "$1" in
+    --dir) DIR="$2"; shift 2;;
+    *) break;;
+  esac; done
+  [ $# -gt 0 ] || { echo "hb-fleet: diff [--dir DIR] <git-diff-args...>   e.g. diff HEAD~1 -- harness/doctor.py" >&2; exit 2; }
+
+  NVIM="$(role_pane nvim)"
+  [ -n "$NVIM" ] || {
+    echo "hb-fleet: this cockpit has no nvim pane, so there is nowhere to show a diff." >&2
+    echo "hb-fleet: it is absent when nvim is not installed or the fleet started --no-nvim." >&2
+    echo "hb-fleet: named skip, not a failure: read it with 'git -C $DIR diff $*' instead." >&2
+    exit 3; }
+
+  mkdir -p "$HB_FLEET_DIR/diffs"
+  OUT="$HB_FLEET_DIR/diffs/$$.diff"
+  if ! git -C "$DIR" diff "$@" >"$OUT" 2>"$OUT.err"; then
+    echo "hb-fleet: git diff refused in $DIR:" >&2; cat "$OUT.err" >&2
+    rm -f "$OUT" "$OUT.err"; exit 2
+  fi
+  rm -f "$OUT.err"
+  # An empty diff is a true answer, not a failure, and opening an empty buffer would present it
+  # as one. Exit 0 and say so.
+  [ -s "$OUT" ] || { echo "hb-fleet: no diff for those arguments — nothing to show"; rm -f "$OUT"; exit 0; }
+
+  # Escape first: nvim may be sitting in insert mode, where the rest would be typed as text.
+  t send-keys -t "$NVIM" Escape
+  t send-keys -t "$NVIM" ":tabnew $OUT" Enter
+  t send-keys -t "$NVIM" ":setlocal readonly nomodifiable filetype=diff" Enter
+  echo "hb-fleet: opened $(wc -l <"$OUT" | tr -d ' ') diff lines in the nvim pane ($OUT)"
+  echo "hb-fleet: focus it with: $SELF focus nvim"
   ;;
 
 occupancy)

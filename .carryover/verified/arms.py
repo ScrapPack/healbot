@@ -236,14 +236,20 @@ def materialize(runpath, name):
     return live
 
 
-def serve(runpath, name, port, db, log=None, timeout=120):
-    """Boot a headless server under a materialized arm. ab.serve_arm's shape exactly — the
-    same leak-stripping, the same OPENCODE_DB-only isolation, the same readiness probe —
-    but the environment is CONSTRUCTED from the snapshot rather than inherited from a shell:
-    XDG_CONFIG_HOME points at the materialized dir and both external-skill switches are
-    pinned true, so the only skill any arm can see is the one its manifest declares."""
-    fixtures()
-    live = materialize(runpath, name)
+def _serve_env(live, db):
+    """The child environment for a materialized arm, built and guarded in one place.
+
+    The XDG_DATA_HOME guard needs a reference INDEPENDENT of the dict it checks, so the
+    inherited value is captured before the copy. The previous form
+    (`"XDG_DATA_HOME" not in env or env[...] == os.environ.get(...)`) compared the copy
+    against a live re-read of the source the copy came from: it did catch a direct
+    `env["XDG_DATA_HOME"] = ...`, but a set that went through `os.environ` satisfied both
+    disjuncts and passed. Both routes are controlled in probe_arm_factory.py by compiling a
+    mutated copy of this file, so the guard is proven red as well as green without a boot.
+
+    A refusal, not an assert: `python -O` strips asserts, and this guard stands between a
+    paid run and the OAuth credentials in auth.json."""
+    inherited = os.environ.get("XDG_DATA_HOME")
     env = dict(os.environ)
     for leak in ("XDG_CONFIG_HOME", "OPENCODE_DISABLE_EXTERNAL_SKILLS", "OPENCODE_DISABLE_CLAUDE_CODE"):
         env.pop(leak, None)
@@ -252,8 +258,23 @@ def serve(runpath, name, port, db, log=None, timeout=120):
     env["OPENCODE_DISABLE_CLAUDE_CODE"] = "true"
     env["OPENCODE_DB"] = db
     env.setdefault("OPENCODE_CLIENT", "cli")
-    assert "XDG_DATA_HOME" not in env or env["XDG_DATA_HOME"] == os.environ.get("XDG_DATA_HOME"), \
-        "this function must never introduce XDG_DATA_HOME (auth.json lives there)"
+    if env.get("XDG_DATA_HOME") != inherited:
+        raise RuntimeError(
+            f"arms._serve_env moved XDG_DATA_HOME ({inherited!r} -> "
+            f"{env.get('XDG_DATA_HOME')!r}) — this function must never introduce or change "
+            f"it: auth.json lives there and OpenAI is on oauth, so isolate the DB only")
+    return env
+
+
+def serve(runpath, name, port, db, log=None, timeout=120):
+    """Boot a headless server under a materialized arm. ab.serve_arm's shape exactly — the
+    same leak-stripping, the same OPENCODE_DB-only isolation, the same readiness probe —
+    but the environment is CONSTRUCTED from the snapshot rather than inherited from a shell:
+    XDG_CONFIG_HOME points at the materialized dir and both external-skill switches are
+    pinned true, so the only skill any arm can see is the one its manifest declares."""
+    fixtures()
+    live = materialize(runpath, name)
+    env = _serve_env(live, db)
     sink = open(log, "w", encoding="utf-8") if log else subprocess.PIPE
     proc = subprocess.Popen(
         ["/bin/zsh", "-c", f"exec {OC} serve --port {port} --hostname 127.0.0.1"],

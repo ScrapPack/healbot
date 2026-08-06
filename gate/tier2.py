@@ -59,8 +59,9 @@ from gate import BLOCKED, DECLARED, ERROR, PASS, PY, ROOT, RUNS, TIER1, VERIFIED
 # not an equality — adding a probe is safe; retiring one means lowering this number in the
 # same change, deliberately. (13 at birth; 14 at probe_pool.py; 15 at probe_arm_factory.py;
 # 16 at probe_study_driver.py; 17 at probe_fleet_claude.py, counted late on 2026-08-02,
-# a floor that lagged one probe behind the tier for two days; 18 at probe_gate_scope.py.)
-FLOOR = 18
+# a floor that lagged one probe behind the tier for two days; 18 at probe_gate_scope.py;
+# 19 at probe_gnhf_spend.py.)
+FLOOR = 19
 
 # Per-probe watchdog, sized ABOVE the ~20-minute hazard on record: wait_for's deadline is
 # checked only between calls to fn, and Api.__call__ defaults to timeout=900, so a probe's
