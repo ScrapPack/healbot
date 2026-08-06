@@ -574,3 +574,33 @@ probe would TERMINATE a lease holder on Windows). Still open, and honestly held:
 native-Windows "yes" is INFERRED until `harness/doctor.py` and docs/WINDOWS.md's conversion
 checklist run on a real PC — this machine can verify mechanisms, not that machine's
 behavior.
+
+## Agent skills
+
+The per-repo configuration the installed engineering skills read (`/wayfinder`, `/to-issues`,
+`/triage`, `/diagnose`, `/tdd`, `/improve-codebase-architecture`, `/grill-with-docs`,
+`/domain-modeling`). Scaffolded 2026-08-05.
+
+It lives **here** rather than in `CLAUDE.md` or `AGENTS.md`, which is where those skills expect
+it, because both of those filenames are in this repo's `BANNED` set and the gate refuses them as
+a BLOCKED row. That deviation is itself the first thing a skill needs to know, so it is stated
+in `docs/agents/domain.md` as a trap rather than left to be discovered by a blocked push.
+
+### Issue tracker
+
+Local markdown under `.scratch/`, tracked. No GitHub Issues. See
+[docs/agents/issue-tracker.md](docs/agents/issue-tracker.md), which also carries the
+**Wayfinding operations** section `/wayfinder` requires: the map and ticket layout, the header
+block that stands in for labels and assignees, and the frontier query as a command.
+
+### Triage labels
+
+No label system. The five canonical roles are `Status:` values in a ticket's header block. See
+[docs/agents/triage-labels.md](docs/agents/triage-labels.md).
+
+### Domain docs
+
+Single-context, and the conventional filenames are banned. `HARNESS.md` is the glossary and the
+index; decisions live in `NEXT.md`'s `DECIDED` section and the dated phase records. There is no
+`CONTEXT.md` and no `docs/adr/`, and skills must not create either. See
+[docs/agents/domain.md](docs/agents/domain.md).

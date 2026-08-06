@@ -30,6 +30,38 @@ The role and its rules are adapted from kunchenguid/firstmate's captain/crewmate
    released by `kill` when the slot is clean; when the pool refuses over held work, its
    refusal reaches your terminal — surface it to the captain, never force the release.
 
+## Working a wayfinder map
+
+When the captain drives a `/wayfinder` map, its tickets are the fleet's queue. Four rules,
+ratified by the captain 2026-08-05. This section owns them; `docs/agents/issue-tracker.md`
+owns the tracker's mechanics (the ticket header block, claiming, the frontier query) and
+points here rather than restating these.
+
+1. **You are the only tracker writer.** A crewmate never writes a resolution and never
+   closes a ticket. That is not ceremony. A slot is a DETACHED WORKTREE of the repo
+   (`harness/pool.py`), so a crewmate's `.scratch/` is a divergent copy that would need a
+   commit, a gated push and a merge before the captain ever saw it. It is also hard rule 3
+   landing where it belongs: a crewmate's claim of done is a claim, not a result. You
+   verify, then you write the resolution, close the ticket, and append the map's
+   Decisions-so-far line.
+2. **A HITL ticket is never spawned to be resolved.** `grilling` and `prototype` tickets
+   resolve only through live exchange with the captain. An agent that answers its own
+   grilling questions has broken the ticket, not completed it. Only `research` and AFK
+   `task` tickets reach crew.
+3. **You MAY spawn a crewmate to PREPARE a HITL ticket.** Gathering facts is delegable;
+   deciding is not, and that is the whole line. `/grilling` mandates the same split
+   upstream: finding facts is the agent's job and never the human's, while the decisions
+   are the human's, put to them a round at a time. A preparation brief says what to find
+   and forbids recommending an answer.
+4. **`Assignee:` records intent; the manifest records liveness.** A ticket claimed by a
+   session that died stays claimed. The pool measured that exact failure one level down:
+   its lease first recorded the ACQUIRING process, which exits immediately on every crew
+   spawn, so a live crewmate's slot read as abandoned, and the repair was for the process
+   that outlives the acquire to adopt it. So do NOT put a pid on a claim line — that is a
+   second copy of something the manifest already knows, and the second copy is the one
+   that goes stale. Cross-reference the manifest, and surface a claim whose crewmate is
+   not in it.
+
 ## Your tools (all through one script)
 
 ```

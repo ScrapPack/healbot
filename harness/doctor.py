@@ -464,6 +464,54 @@ def check_skill_twins():
             "is a hand copy back)")
 
 
+def check_config_root_skills():
+    """The skills surface of the config root the CLAUDE HARNESS actually uses.
+
+    The row above verifies the twins under ~/.agents, and install-skills.py surfaces them to
+    Claude Code through ~/.claude/skills. That is the DEFAULT root. env.claude.sh redirects
+    CLAUDE_CONFIG_DIR at harness/claude, and Claude Code builds its user skills directory as
+    join(config_dir, "skills") with no fallback to the default root, unlike its `ide` lookup
+    which explicitly adds one. So until 2026-08-05 every harness session, and every crewmate
+    hb-fleet.sh ever spawned, loaded no skills at all: the installer and the twins row were
+    both correct about the default root and both blind to the one in use. That is the
+    green-on-a-surface-nobody-uses failure this file exists to catch, which is why it gets
+    its own row rather than widening the twins row to mean two things.
+
+    Evidence, including the free `claude plugin list` control that settled the same question
+    for plugins: .scratch/daily-driver/research/09-config-dir-skill-resolution.md.
+
+    Three states, the twins row's shape: every default-root skill surfaced (PASS), none
+    surfaced (WARN, this machine has not adopted it yet), some missing (FAIL, a live root is
+    serving an incomplete set and no session will say so).
+    """
+    default = os.path.expanduser(os.path.join("~", ".claude", "skills"))
+    mirror = os.path.join(HARNESS, "claude", "skills")
+    if not os.path.isdir(default):
+        row(WARN, "claude config-root skills",
+            f"no {default} — nothing to surface into the redirected root yet. "
+            "Install: python3 harness/install-skills.py")
+        return
+    want = {n for n in os.listdir(default) if os.path.isdir(os.path.join(default, n))}
+    have = ({n for n in os.listdir(mirror) if os.path.isdir(os.path.join(mirror, n))}
+            if os.path.isdir(mirror) else set())
+    missing = sorted(want - have)
+    if not want:
+        row(WARN, "claude config-root skills", f"{default} is empty — nothing to surface")
+    elif not missing:
+        row(PASS, "claude config-root skills",
+            f"{len(want)}/{len(want)} surfaced under {mirror} (the root env.claude.sh "
+            "redirects CLAUDE_CONFIG_DIR at)")
+    elif not have:
+        row(WARN, "claude config-root skills not installed",
+            f"none of the {len(want)} skills under {default} are surfaced at {mirror} — "
+            "every harness session and every crewmate loads NONE of them. "
+            "Install: python3 harness/install-skills.py")
+    else:
+        row(FAIL, "claude config-root skills incomplete",
+            f"{len(missing)} of {len(want)} missing at {mirror}: {', '.join(missing)} — "
+            "harness sessions silently lack them. Fix: python3 harness/install-skills.py")
+
+
 # -- platform-bound tiers -------------------------------------------------------------
 
 
@@ -504,11 +552,17 @@ def tier_summary():
     # twin set degrades BOTH workflows — claude and opencode load the same ~/.agents copies
     # (fork SKILL.MAP.md sources 1-2) — so the gate reaches both tiers below.
     twin_fail = any(s == FAIL and n.startswith("skill twin") for s, n, _ in ROWS)
+    # Added 2026-08-05, and it gates the CLAUDE tier only: the redirected root is that
+    # workflow's alone, while the twins above degrade both. FAIL only, same reasoning as
+    # the twins guard: the not-installed WARN is bring-up, not breakage.
+    root_fail = any(s == FAIL and n.startswith("claude config-root skills")
+                    for s, n, _ in ROWS)
     claude_ok = ok("git", "claude", "claude harness settings", "harness claude auth") \
-        and not crew_fail and not twin_fail
+        and not crew_fail and not twin_fail and not root_fail
     tiers.append(("claude code workflow (env.claude.sh + settings pin)",
                   claude_ok, "needs git, claude CLI, settings.json, constraints in sync, "
-                             "skill twins in sync, and the redirected root signed in"))
+                             "skill twins in sync, the redirected root's skills surfaced, "
+                             "and that root signed in"))
     tiers.append(("opencode workflow (env.sh + fork TUI/grid)",
                   ok("bun", "opencode/ checkout", "opencode harness config") and not twin_fail,
                   "needs bun + the reconstituted checkout (fork/README.md), skill twins in sync"))
@@ -549,6 +603,7 @@ def main():
         check_claude_md()
         check_claude_auth()
         check_skill_twins()
+        check_config_root_skills()
         check_fleet_and_rig()
     width = max(len(n) for _, n, _ in ROWS)
     for status, name, detail in ROWS:
