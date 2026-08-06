@@ -92,6 +92,28 @@ sees NONE of your context — the brief is its entire world. Use `--slot` only f
 healbot itself (it leases a pooled worktree via harness/pool.py); for other projects pass
 an explicit `--dir`, ideally a worktree that is the crewmate's alone.
 
+**A brief that sweeps N items must persist incrementally.** When the objective is a sweep
+(findings to classify, files to migrate, call sites to fix), the brief says to create the
+output file FIRST and append each item's result the moment it is settled, before starting
+the next. "Write the report when you are done" bets the whole objective on the crewmate
+finishing inside one context, and auto-compaction is off here, so the ceiling is a hard
+error rather than a squeeze. MEASURED 2026-08-05, and read the ending too: a crewmate
+sweeping 27 review findings reached 160K of the 300K marker in 14 minutes, about 10K per
+minute, holding every classification in context until it wrote the file in one turn at the
+end. It landed safely. Nothing guaranteed that, and at 50 findings rather than 27 the
+ceiling arrives first and the whole sweep is unrecoverable, which is why the rule stands on
+the arithmetic rather than on a failure it has not yet produced here. Pair it with a depth
+cap: that same crewmate spent over nine minutes on its first item, so say what settles an
+item and say that coverage of all of them beats depth on any one. Incremental persistence
+is also what makes the handoff below possible at all — a successor inherits a FILE, not a
+memory.
+
+Do not pace a crewmate off its own estimate of its context. Asked, it reported ~90K while
+its transcript showed a 161,542-token prompt on the same turn; `occupancy` reads the
+transcript and was right. MEASURED 2026-08-05. A model introspecting its own window is
+guessing, and a crewmate arguing that your instrument is running hot is the case for
+checking the instrument, not for believing the argument.
+
 ## Model policy
 
 The default is the harness settings pin — Opus 5 at `effortLevel: xhigh` — and you do NOT

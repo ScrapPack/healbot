@@ -4,7 +4,7 @@ Type: task
 Mode: AFK
 Status: open
 Assignee: -
-Blocked by: 11, 12
+Blocked by: 11, 12, 16
 
 ## Question
 
@@ -40,3 +40,31 @@ Two things to get right rather than to discover later:
 anything, the nvim pane shows that diff at the cited line with one line of explanation. TESTED
 end to end against a live fleet, with a control in the other direction: a diff below the bar clears
 and the pane stays untouched.
+
+## What ticket 12 settled, and what it hands here
+
+Ticket 12 closed 2026-08-05. Read its Resolution before starting; the trigger, the mode split, the
+attempt cap, the refusal-over-truncation rule and the narrowed path escalation are all decided there
+and are not to be re-opened here. Three things land directly on this ticket:
+
+1. **A third collect mode is required.** A completion review run with no base against a crewmate
+   that committed its work reviews an EMPTY diff and passes. Take the slot's recorded baseline sha
+   as `--base` and review baseline...HEAD plus whatever is uncommitted on top. Ticket 12 carries the
+   evidence.
+2. **Run the slot's own copy of `review.py`.** `ROOT` is `__file__`-derived, so the main checkout's
+   copy reviews the main checkout however the refs are aimed.
+3. **Three outcomes to render, not two.** `blocked` (a reviewer said no), `unmeasured` (nothing
+   could measure it, exit 3) and pass. Only pass clears silently. `unmeasured` must never render as
+   either of the other two.
+
+Ticket 16 closed 2026-08-05 and delivered the measurement: 18 real, 0 wrong, 7 unacted, a 0%
+false-positive rate over the acted-on findings, with the caveats in its resolution. **What 16 did
+NOT deliver is the ruling.** The captain has not decided whether that rate clears `blocking` to be
+switched on, and this ticket's done-condition cannot be met until it does, because the done-condition
+is a crewmate's diff actually tripping the bar. Build against a `blocking` review by all means; do
+not read a closed 16 as permission to switch it on, and do not switch it on here.
+
+Take 16's finding with you: severity as the reviewer assigns it did not predict what the captain
+acted on. In one review both `error` findings were left unrepaired and are still open, while the
+`warning` and `info` from the same review were fixed within four minutes. That is the ordering this
+ticket renders to the captain.

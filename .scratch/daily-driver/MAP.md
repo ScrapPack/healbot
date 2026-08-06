@@ -65,9 +65,11 @@ Domain, and the standing preferences every session on this map must consult:
   exposes rather than the nine tracked twins, because the captain drives `/wayfinder` and the
   planning skills. `doctor.py` gained its own row for it, TESTED red and green. Plugins deliberately
   deferred to a real `claude plugin` install rather than a hand copy of state the CLI owns.
-- **The review bar is severity, fail-closed, plus a path escalation** for `harness/`, `gate/` and
-  `fork/`. `gate/review.py`'s `blocking` mode already implements the severity half. Ticket 12 owns
-  the trigger point and the spend bound; ticket 13 owns the missing handoff to the captain.
+- **The review bar is severity, fail-closed, plus a path escalation.** `gate/review.py`'s `blocking`
+  mode already implements the severity half. The escalation set was narrowed by ticket 12 to `gate/`,
+  `fork/` and `.carryover/verified/probe_*`, the things that can make the measurement lie; plain
+  `harness/` was dropped because it fired on 25 of the last 60 commits. Ticket 13 owns the missing
+  handoff to the captain.
 - **Firstmate drives the cockpit.** The captain learns how to talk to firstmate and nothing else.
   Ticket 11.
 - **[Firstmate drives the cockpit](tickets/11-firstmate-drives-the-cockpit.md)** — `focus` and
@@ -85,6 +87,28 @@ Domain, and the standing preferences every session on this map must consult:
   ever goes on a claim line.
 - **Plain `git worktree` per project** for non-healbot crew workspaces. The pool is healbot-only by
   construction and Mac-only by mechanism. Ticket 14.
+- **[Were the review's error findings ever right](tickets/16-calibrate-the-review-bar.md)** — 18
+  real, 0 wrong, 7 unacted, 2 stub records excluded, so the real corpus is 25 findings and not the
+  27 ticket 12 carried. False-positive rate 0% over the acted-on findings, and the honest floor is
+  narrower than that number looks: no repair commit in the corpus refutes an error finding, while a
+  finding judged wrong would land in `unacted` rather than `wrong`. Six of the seven unacted ones
+  were verified factually correct, so they are unrepaired rather than noise. **The captain's ruling
+  on switching `blocking` on is still outstanding and is carried on ticket 13.** The result that
+  bears hardest on ticket 12: severity as the reviewer assigns it did NOT predict what the captain
+  acted on, one review having its `warning` and `info` fixed in four minutes and both its `error`
+  findings left open to this day. Worked by a crewmate, records only, no credits.
+- **[When does the automatic review run, and what bounds its spend](tickets/12-when-does-the-review-run.md)**
+  — per crewmate completion in `blocking` mode, wired into `hb-fleet.sh` on the slot-return path
+  rather than written as a skill rule, because a rule a first mate must remember is the arrangement
+  the gate was built to replace. The pre-push review stays advisory and unchanged. Spend is bounded
+  structurally with no dollar ceiling: one review per completion attempt, three attempts per
+  objective, then the captain. No crewmate report ever substitutes for a review. The could-not-run
+  branch is named `unmeasured`, distinct from `blocked`, with one retry except on timeout. Measured
+  here and worth carrying: `blocking` would have refused 20% of the captain's own pushes, a
+  timed-out review records no cost at all so no ceiling can be summed from the records, and the crew
+  config root was TESTED able to authenticate a review (`gate/runs/20260805-204306-48726-review.json`,
+  $0.94 for an 878-byte diff, which is why the bound is reviews times roughly one dollar and not a
+  function of diff size).
 
 ## Not yet specified
 
@@ -104,7 +128,9 @@ In scope, not yet sharp enough to ticket.
 - **Side-by-side panes, and what that costs the census.** Ticket 11 shipped `focus` and `diff` but
   refused `join-pane` on evidence: seven call sites enumerate the `crew` window by name, so a joined
   crewmate reads as dead or missing everywhere. Whether the census should address crew panes by
-  marker rather than by window is the real question underneath, and it is not sharp yet.
+  marker rather than by window is the real question underneath, and it is not sharp yet. **Ticket 17
+  narrows half of it:** pane-id identity turns out to be unsafe already, with no `join-pane`
+  involved, so the identity scheme is now its own decision and this item is only the layout half.
 - **What else the cockpit sheds once firstmate drives it.** Fewer panes, fewer verbs on the command
   card, possibly a different default layout. The card did not shrink in ticket 11 because nothing on
   it became redundant; that changes as more captain actions become firstmate verbs.
