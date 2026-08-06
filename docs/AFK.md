@@ -523,10 +523,21 @@ pid and not a flag: a glob over every run directory would charge this run for ev
 and would let an earlier run's files answer the "has anything been written yet" question and fire
 the stall detector during bootstrap. Then watch that one directory's `iteration-*.jsonl`
 (§1.4 — that file is the agent's live output stream, so its mtime is the only free liveness signal
-gnhf offers). If no iteration file has been written in `STALL_MIN` minutes, or `MAX_HOURS` have
-elapsed, or spend has reached `COST_MAX`, send `SIGTERM` — which gnhf treats as an immediate force
-stop (§1.5 #6). Then `SIGKILL` after 10 s, and report any surviving `claude` process, since gnhf
-spawns it `detached: true`. A forced stop exits 2; gnhf finishing on its own exits 0.
+gnhf offers). If iteration files **exist** and none of them is fresher than `STALL_MIN` minutes, or
+`MAX_HOURS` have elapsed, or spend has reached `COST_MAX`, send `SIGTERM` — which gnhf treats as an
+immediate force stop (§1.5 #6). Then `SIGKILL` after 10 s, and report any surviving `claude`
+process, since gnhf spawns it `detached: true`. A forced stop exits 2; gnhf finishing on its own
+exits 0.
+
+That last report is a `pgrep` on `--output-format stream-json`, and **read it before acting on
+it.** MEASURED 2026-08-06 during the §5 stall test: the pattern also matches interactive Claude
+Code sessions on the same machine, which are not gnhf's and must not be killed. The report is
+report-only by design, and this is why.
+
+The existence test is a separate leg from the freshness test, and it is not a detail: a run that
+has not written its first iteration file yet is **starting up**, not stalled, so the stall leg
+deliberately does not fire on it. Collapsing the two into one "nothing written recently" test
+would kill every run during its own bootstrap.
 
 Defaults: `STALL_MIN=25`, `MAX_HOURS=8`. Tune the stall window **above** the slowest legitimate
 single operation. Two documented ones to size against: `verify_question.py` polls three framings at
@@ -665,8 +676,8 @@ started; no model turn was spent by any command below.
 | mutual exclusion | `--worktree --current-branch` | exit 1, "Cannot combine" |
 | **all three §2 invocations** | extracted from this file by script, retargeted at a **dirty** scratch repo | all three **parsed their full flag set** and then halted at the clean-tree guard, exit 1 — the intended outcome, and 0 credits. **Recorded 2026-07-31 against the single-command form**, which 2026-08-06 replaced with the two-step form (§3.6). The replacement was parse-checked, not re-executed |
 | §2 invocation portability | `bash -n` under `/bin/bash` 3.2.57 **and** `zsh -n` | re-run 2026-08-06 over every block in this file carrying `GNHF=$!`, extracted by script: **4 of 4** (the three §2 recipes and the §3.6 snippet) OK under **both** |
-| `gnhf-watch.sh` syntax | `bash -n` | OK |
-| `gnhf-watch.sh` stall detector | fed a fake `.gnhf/runs/` tree | correctly fired on a 157-minute-old `iteration-*.jsonl`; correctly did **not** fire on an empty runs directory (the bootstrap case) |
+| `gnhf-watch.sh` syntax | `bash -n` | OK. **Re-run 2026-08-06 against the tracked script**; the 2026-07-31 result was measured against the scratchpad version this replaced |
+| `gnhf-watch.sh` stall detector **and its pid scoping** | **2026-08-06.** Two fake runs side by side under one `.gnhf/runs/`: `stall-case`, holding a `run:start` line for pid A and an `iteration-*.jsonl` aged 157 minutes; `bootstrap-case`, holding a `run:start` line for pid B and no iteration file at all. A watchdog started on each pid | A resolved `stall-case`, stopped on *"stalled: no iteration write in 25m"*, killed pid A and exited **2**. B resolved `bootstrap-case`, kept polling and left pid B alone: correctly silent on a run that has written nothing yet, **and** on A's stale file, which is the pid scoping doing its job. The 2026-07-31 row measured the same two legs against the scratchpad script, before run directories were pid-scoped, so this supersedes it rather than repeating it |
 | `gnhf-watch.sh` refuses a non-pid | 2026-08-06, three invocations by hand against the tracked script | flags as `$1`, a dead pid, and `BILL_MAX` set each exited **1** with a `FATAL:` line. Transcribed into §3.6 |
 
 The parse check earned its place: it caught the bash 3.2 heredoc defect described in the §2
