@@ -550,13 +550,14 @@ it `detached: true`. A forced stop exits 2; gnhf finishing on its own exits 0.
 the same pid, `RUN_DIR` would never resolve, the stall and spend legs would never run at all, and
 `MAX_HOURS` would be the only bound left on the night.
 
-That last report is a `pgrep` on `--output-format stream-json`. **Read it before acting on it:**
-MEASURED 2026-08-06 on this machine, with no gnhf agent running, every process it matched was an
-interactive Claude Code session. It is a list to check by hand, never a list to kill. The comment
-beside that `pgrep` in the script still says no interactive session passes the pattern; measured,
-they do. The comment's discriminator is gnhf pairing that flag with `--json-schema`, and only the
-first half of the pair is in the pattern, so the narrowing is real but unfinished. Where the two
-disagree, the measurement is the one that was run.
+That last report is a `pgrep` on gnhf's **flag pair**, `--output-format stream-json --json-schema`,
+which `buildClaudeArgs` emits adjacently and unconditionally (§1.7) and which no config can
+reorder, because gnhf reserves both flags against `agentArgsOverride`. The first flag alone is the
+Claude Code app's as well: MEASURED 2026-08-06 with no gnhf agent running, every process it
+matched was an interactive session, and the pair matched none of them.
+Still read the list rather than killing from it. And note the failure this narrowing accepts: if a
+future gnhf reorders those flags the pair matches nothing, which is also what a clean reap looks
+like, so re-check it when gnhf moves off 0.1.43.
 
 The existence test is a separate leg from the freshness test, and it is not a detail: a run that
 has not written its first iteration file yet is **starting up**, not stalled, so the stall leg
@@ -703,6 +704,7 @@ started; no model turn was spent by any command below.
 | `gnhf-watch.sh` syntax | `bash -n` | OK. **Re-run 2026-08-06 against `harness/gnhf-watch.sh` as tracked on `wayfinder-adoption`**; the 2026-07-31 result was measured against the scratchpad version this replaced |
 | `gnhf-watch.sh` stall detector **and its pid scoping** | **2026-08-06, against the same `wayfinder-adoption` copy.** Two fake runs side by side under one `.gnhf/runs/`: `stall-case`, holding a `run:start` line for pid A and an `iteration-*.jsonl` aged 157 minutes; `bootstrap-case`, holding a `run:start` line for pid B and no iteration file at all. A watchdog started on each pid | A resolved `stall-case`, stopped on *"stalled: no iteration write in 25m"*, killed pid A and exited **2**. B resolved `bootstrap-case`, kept polling and left pid B alone: correctly silent on a run that has written nothing yet, **and** on A's stale file, which is the pid scoping doing its job. The 2026-07-31 row measured the same two legs against the scratchpad script, before run directories were pid-scoped, so this supersedes it rather than repeating it |
 | `gnhf-watch.sh` refuses a non-pid | 2026-08-06, three invocations by hand against the tracked script | flags as `$1`, a dead pid, and `BILL_MAX` set each exited **1** with a `FATAL:` line. Transcribed into §3.6 |
+| `gnhf-watch.sh` leftover-process report | **2026-08-06**, end to end: the stalled fixture above, plus one process wearing gnhf's documented arg shape standing in for the detached agent, with this machine's interactive Claude Code sessions live alongside it as distractors | the watchdog stopped the pid, exited **2**, and reported **only** the gnhf-shaped process. Not one interactive session reached the report, though several were running throughout. The `--json-schema` half is what discriminates: the first flag alone is the app's too |
 
 The parse check earned its place: it caught the bash 3.2 heredoc defect described in the §2
 preamble, which changed the design from inline prompts to prompt files. A spec whose commands were

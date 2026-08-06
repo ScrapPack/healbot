@@ -182,13 +182,27 @@ fi
 # with it. Report rather than kill: a surviving claude may be mid-write, and the operator
 # deciding is better than this script guessing at 3am.
 #
-# Matched on gnhf's OWN invocation signature, not on the word "claude". A bare
-# `pgrep -fl claude` was the first version and it was useless: MEASURED, it returned ten
-# Claude.app Electron helpers plus the captain's live crewmate, burying the one line that
-# matters under a page of --field-trial-handle. gnhf's buildClaudeArgs (docs/AFK.md 1.7)
-# always passes --output-format stream-json together with --json-schema, which no
-# interactive session and no hb-fleet crewmate does.
-leftover="$(pgrep -fl -- '--output-format stream-json' 2>/dev/null || true)"
+# Matched on gnhf's OWN flag PAIR, not on the word "claude" and not on the first flag alone.
+# Both earlier versions over-matched. `pgrep -fl claude` came first and was useless: MEASURED, it
+# returned ten Claude.app Electron helpers plus the captain's live crewmate, burying the one line
+# that matters under a page of --field-trial-handle. `--output-format stream-json` alone replaced
+# it and read as narrow, but the comment here claimed a discriminator the pattern did not carry:
+# the reasoning was about that flag TOGETHER WITH --json-schema, and only the first half was in
+# the pgrep. MEASURED 2026-08-06 with no gnhf agent running, it matched five processes and every
+# one was an interactive Claude Code session, which passes --output-format stream-json too.
+#
+# The pair is safe to require. buildClaudeArgs (docs/AFK.md 1.7) emits
+# `--output-format stream-json --json-schema <schema>` adjacently and unconditionally, and
+# isReservedAgentArg refuses both flags in agentArgsOverride, so no config can reorder, split or
+# duplicate them. MEASURED the same day against a process wearing that documented shape: the pair
+# matched it and skipped all five interactive sessions.
+#
+# The residual risk is SILENT, so it is written down rather than papered over: if a future gnhf
+# reorders those flags the pair matches nothing, and nothing is also what a clean reap looks like.
+# Re-check against buildClaudeArgs when gnhf moves off 0.1.43. A widening fallback was considered
+# and rejected -- it would fire on every successful stop, since a correct reap and a stale pattern
+# are the same empty match, and it would reprint the noise this narrowing exists to remove.
+leftover="$(pgrep -fl -- '--output-format stream-json --json-schema' 2>/dev/null || true)"
 if [ -n "$leftover" ]; then
   say "SURVIVING claude process(es) -- gnhf spawns detached, so check these by hand:"
   printf '%s\n' "$leftover" >&2
