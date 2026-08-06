@@ -10,9 +10,14 @@ it builds a `Results` object, runs the whole sweep, and exits from a `finally`. 
 runs the sweep and kills the importer. Nothing here runs at import: no walk, no `git`, no
 `sys.exit`. Import is free and the caller decides when to pay.
 
-STDLIB ONLY, and it does NOT import `rig`. `gate.py` runs outside the rig venv, so a
-dependency on the rig would make the gate unable to load its own check. The repo root is
-computed the same way `gate.py:39` computes it, from this file's own location.
+STDLIB ONLY, and it does NOT import `rig`. The reason first written here was that `gate.py`
+runs outside the rig venv, and that is FALSE: `gate/hooks/pre-push` invokes it as
+`$VENVPY $ROOT/gate/gate.py`, on the venv interpreter (review finding from the 7e6673b push).
+The true reason is narrower and still worth the constraint. `rig` imports `term`, which
+imports `pyte`, a third-party package; `staleness.py` is a push-time stage that must run
+wherever the hook runs, and a resolver that drags a pyte dependency behind it could not be
+called from a bare interpreter at all. The repo root is computed the same way `gate.py:39`
+computes it, from this file's own location.
 
 WHAT MOVED AND WHAT DID NOT: resolution moved (the regex, the git-owned scoping, the index,
 the proximity tie-break, the verdicts). The verbatim-quote leg did NOT — it is one probe's
@@ -66,12 +71,18 @@ CITE = re.compile(r"(?<![\w/])([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:ts|tsx|py|sh|jso
 class CheckoutAbsent(Exception):
     """`opencode/` is DERIVED and gitignored, so a fresh clone or worktree does not have it.
 
-    Was a module-level `sys.exit(3)` in the probe. It cannot stay an exit: this module is
-    imported by `gate.py`, and a module that exits its importer at import time is not a
-    library. The exit code it stood for is preserved by the caller — `probe_citations.py`
-    catches this ABOVE its try/finally and exits 3, because a sys.exit inside the try is
-    replaced by the finally's own verdict exit, which would silently rewrite 3 back into a
-    red 1. The gate maps a tier-1 exit 3 to ERROR; every other nonzero stays BLOCKED.
+    Was a module-level `sys.exit(3)` in the probe. It cannot stay an exit: a module that exits
+    its importer at import time is not a library.
+
+    THE EXIT CODE IT STOOD FOR IS THE CALLER'S TO PRESERVE, and preserving it takes real work
+    rather than a comment. `probe_citations.py` pre-checks with `checkout_present()` above its
+    try, which covers the ordinary case, but the checkout can also go away BETWEEN that check
+    and `owned_set()`. A first draft claimed the pre-check handled that and it did not: the
+    exception fell to the generic `except Exception`, went red, and exited 1 — the exact
+    3-rewritten-to-1 collapse this docstring warned about (review finding from the 7e6673b
+    push). The probe now catches this class explicitly and carries the verdict out through its
+    `finally`, because a `sys.exit(3)` raised inside the try is replaced by the finally's own
+    exit. The gate maps a tier-1 exit 3 to ERROR; every other nonzero stays BLOCKED.
 
     Raised from build_index() rather than at import, so the failure surfaces when the graph
     is actually wanted. Before this, the first thing to touch the absent checkout was
@@ -126,16 +137,6 @@ def git_owned(root):
 
 _owned = None
 _cache = {}
-
-
-def reset_caches():
-    """Drop memoized state. The probe and the staleness stage run in separate processes today,
-    so this exists for tests that mutate a tree between calls inside ONE process. Without it a
-    fixture's second scan would answer from the first fixture's index, which is a probe that
-    passes for a reason unrelated to its claim."""
-    global _owned
-    _owned = None
-    _cache.clear()
 
 
 def owned_set():

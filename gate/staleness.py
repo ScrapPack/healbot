@@ -13,8 +13,15 @@ sometimes hundreds of commits after the change that caused it.
 WHY IT IS NOT A gate.py ROW. A finding here is advice, never a refusal. `gate.py` maps a
 nonzero tier-1 exit to BLOCKED and its own ERROR state to exit 3, so a row could not report
 "you might want to re-read this" without also owning the power to refuse a push. This is a
-separate stage on the same hook, shaped on `review.py`: `HEALBOT_STALE` is `advisory` by
-default, `blocking` opts in, `off` skips. In advisory mode every path exits 0.
+separate stage on the same hook: `HEALBOT_STALE=off` skips it, and every other value runs it
+advisory. EVERY PATH EXITS 0, and the hook appends `|| true` on top of that.
+
+There is deliberately NO blocking mode. `review.py` has one and this does not, because a
+finding here is a prompt to go and read something, never a claim that a document is wrong —
+the stage cannot tell a moved pointer from a false claim, and refusing a push over a signal
+that cannot distinguish those trains the operator to reach for `--no-verify`, which also
+silently disables the evidence publisher. If a blocking mode is ever wanted it arrives with
+the operator-visible output, not before it.
 
 WHY IT IS RANGE-ONLY. It runs on `base...head` and declines working-tree mode outright.
 `gate.changed_files` unions `git ls-files --others --exclude-standard` when base is None, while
@@ -269,15 +276,28 @@ def main(argv, env):
     head = head or "HEAD"
 
     t0 = time.time()
+    findings, unmeasured = [], None
     if not citegraph.checkout_present():
-        record = {"state": "unmeasured", "why": "opencode/ checkout absent"}
-        findings = []
+        unmeasured = "opencode/ checkout absent"
     else:
         index, _ = citegraph.build_index()
         srcs, _ = citegraph.sources()
         inv = invert(citegraph.scan(index, srcs))
-        changed = set(_sh(["git", "diff", "--name-only", f"{base}...{head}"]).split())
-        findings = join(base, head, changed, inv)
+        # `_sh` returns None on any nonzero git exit — an unfetched base, a typo'd sha on the
+        # standalone invocation, unrelated histories. Unguarded, `.split()` on that raises out
+        # of a stage documented to print nothing, and no record is written at all. An
+        # unreachable range is UNMEASURED, which is a different fact from a clean one, and
+        # keeping the two apart is the same argument gate.py's ERROR-versus-PASS lattice makes.
+        out = _sh(["git", "diff", "--name-only", f"{base}...{head}"])
+        if out is None:
+            unmeasured = f"git could not diff {base}...{head}"
+        else:
+            changed = set(out.split())
+            findings = join(base, head, changed, inv)
+
+    if unmeasured:
+        record = {"state": "unmeasured", "why": unmeasured, "base": base, "head": head}
+    else:
         record = {
             "state": "measured", "base": base, "head": head,
             "documents": len({f["document"] for f in findings}),
@@ -291,13 +311,19 @@ def main(argv, env):
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(record, fh, indent=2)
 
-    # Shadow mode: the record is written, the operator sees nothing. The two independent
-    # calibrations of the flag rate disagreed by more than 4x on the mean and 5x on the worst
-    # case, and both used today's corpus against historical diffs, so both are lower bounds.
-    # No number goes into a document until live records produce one.
+    # Shadow mode: the record is written, the operator sees nothing. Two independent replays of
+    # historical pushes disagreed by more than 4x on the mean, and both used today's corpus
+    # against old diffs, so both are lower bounds. No number goes into a document until live
+    # records produce one.
     if env.get("HEALBOT_STALE_SHOW") == "1":
-        print(f"\n-- citation staleness ({record.get('citations', 0)} citation(s)) --")
-        print(render(findings))
+        if unmeasured:
+            # An unmeasured run must NOT read as a clean one. Rendering "no document points at
+            # a line this change moved" here would collapse exactly the distinction the record
+            # above keeps, and it is the human-facing half that gets believed.
+            print(f"\n-- citation staleness: NOT MEASURED — {unmeasured} --")
+        else:
+            print(f"\n-- citation staleness ({len(findings)} citation(s)) --")
+            print(render(findings))
     return 0
 
 

@@ -38,7 +38,7 @@ DELETE_ABOVE = [(2, 4, 2, 1)]     # four old lines became one
 CHANGE_BELOW = [(50, 2, 50, 9)]   # entirely past any span we cite
 OVERLAP = [(9, 4, 9, 4)]          # rewrites old lines 9-12
 
-r = rig.Results(expect=22)
+r = rig.Results(expect=23)
 
 try:
     # --- parse_hunks: the one form that breaks a naive parse ------------------------------
@@ -197,17 +197,19 @@ try:
     )
 
     # --- integration against real history --------------------------------------------------
-    found, rng = [], None
     head = staleness._sh(["git", "rev-parse", "HEAD"]).strip()
-    log = staleness._sh(["git", "rev-list", "--max-count=60", head]).split()
+    log = staleness._sh(["git", "rev-list", "--max-count=25", head]).split()
+    found, rng, candidates, reported = [], None, 0, 0
     for sha in log[1:]:
         changed = set((staleness._sh(["git", "diff", "--name-only", f"{sha}...{head}"]) or "").split())
-        if not any(f in inv for f in changed):
+        cand = sum(len(inv[t]) for t in changed if t in inv)
+        if not cand:
             continue
         got = staleness.join(sha, head, changed, inv)
-        if got:
+        candidates += cand
+        reported += len(got)
+        if got and rng is None:
             found, rng = got, (sha, head)
-            break
     r.check(
         f"INTEGRATION: the join runs on real history and finds something — {len(found)} "
         f"finding(s) over {rng[0][:8] if rng else 'none'}...HEAD",
@@ -219,11 +221,27 @@ try:
         "verdict is `moved`",
     )
     r.check(
+        f"THE FILTERS SUPPRESS THROUGH THE REAL GIT PATH — {reported} reported of "
+        f"{candidates} citation(s) into files these ranges changed",
+        candidates > reported > 0,
+        "the one leg that exercises the filters end to end on real diffs rather than on "
+        "fixtures, and DELIBERATELY COARSE: it asserts the filters do something and not "
+        "everything. It does NOT isolate a filter, and the first draft of this sentence "
+        "claimed it did. TESTED 2026-08-06 by disabling anchor confirmation: reported went "
+        "61 -> 506 of 679 and this predicate still held, because the other two filters kept "
+        "suppressing; the fixture leg above is what went red. So read the NUMBER in this "
+        "label, not the boolean — an 8x move in it is the calibration signal. What the "
+        "boolean catches is the class no fixture can: all three filters degrading together "
+        "against real git output, in either direction. `reported > 0` is the quieter half, "
+        "and a stage that suppresses everything is the worse failure of the two",
+    )
+    r.check(
         "NEGATIVE CONTROL: with NO changed files the join reports nothing",
         staleness.join(rng[0] if rng else "HEAD~1", head, set(), inv) == [],
-        "findings must be driven by the CHANGE, not by the corpus. A join that walked the index "
-        "instead of the changed set would flag the same documents on every push forever, and "
-        "every absence assertion above would still pass",
+        "narrow by construction — join's only loop is over `changed`, so this catches exactly "
+        "one mutation, a join that walked the index instead of the change. It is kept because "
+        "that mutation is real and nothing else here would catch it, and it is NOT the leg that "
+        "proves the filters work; the one above it is (review finding from the 7e6673b push)",
     )
 
 except SystemExit:

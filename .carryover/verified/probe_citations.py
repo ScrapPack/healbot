@@ -181,6 +181,7 @@ def scan_quotes(index, srcs):
 
 
 r = rig.Results(expect=21)
+vanished = False
 
 try:
     index, idx_dropped = build_index()
@@ -400,11 +401,23 @@ try:
 
 except SystemExit:
     raise
+except citegraph.CheckoutAbsent:
+    # The guard above catches the ordinary case; this catches the checkout going away DURING
+    # the sweep. Without it the exception fell to `except Exception` below, went red, and left
+    # on 1 — reporting "your citations rotted" for a run that never read them. A sys.exit here
+    # would be discarded by the finally, so the verdict travels as a flag instead.
+    vanished = True
+    print(
+        f"\n!! {CHECKOUT}/.git vanished mid-sweep. The claim is UNMEASURED, not failed.\n",
+        file=sys.stderr,
+    )
 except Exception:
     import traceback
 
     traceback.print_exc()
     r.check("UNEXPECTED EXCEPTION", False, "see traceback above")
 finally:
+    if vanished:
+        sys.exit(3)
     ok = r.summary()
     sys.exit(0 if ok else 1)
