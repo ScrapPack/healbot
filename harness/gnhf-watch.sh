@@ -32,9 +32,10 @@
 # what it was doing when it hung is worth more than a clean tree.
 set -u
 
-PID="${1:?usage: gnhf-watch.sh <gnhf-pid>   (STALL_MIN, MAX_HOURS via env)}"
+PID="${1:?usage: gnhf-watch.sh <gnhf-pid>   (STALL_MIN, MAX_HOURS, BILL_MAX via env)}"
 STALL_MIN="${STALL_MIN:-25}"
 MAX_HOURS="${MAX_HOURS:-8}"
+BILL_MAX="${BILL_MAX:-0}"          # 0 disables the billable cap
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "gnhf-watch: not a git repo" >&2; exit 1; }
 RUNS="$ROOT/.gnhf/runs"
@@ -64,6 +65,31 @@ while kill -0 "$PID" 2>/dev/null; do
   if [ -z "$fresh" ]; then
     reason="stalled: no iteration write in ${STALL_MIN}m"
     break
+  fi
+
+  # BILLABLE CAP. gnhf's own --max-tokens counts cache reads at FULL weight (docs/AFK.md 1.6),
+  # and MEASURED on this repo 2026-08-05 that runs 10.2x ahead of billable usage: one iteration
+  # reported 3,281,270 counted against 256,693 billable. So gnhf's cap cannot express "spend at
+  # most N". This does. Billable is fresh input + cache WRITE + output; cache reads are what you
+  # already paid to write, so they are excluded.
+  if [ "$BILL_MAX" -gt 0 ]; then
+    bill=$(python3 - "$RUNS" <<'PY' 2>/dev/null || echo 0
+import json, sys, glob, os
+t = 0
+for f in glob.glob(os.path.join(sys.argv[1], "**", "iteration-*.jsonl"), recursive=True):
+    for l in open(f, errors="replace"):
+        try: d = json.loads(l)
+        except Exception: continue
+        u = (d.get("message") or {}).get("usage") or d.get("usage")
+        if not u: continue
+        t += u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0) + u.get("output_tokens", 0)
+print(t)
+PY
+)
+    if [ "${bill:-0}" -ge "$BILL_MAX" ]; then
+      reason="billable cap: ${bill} >= ${BILL_MAX} tokens (fresh input + cache write + output)"
+      break
+    fi
   fi
 done
 
