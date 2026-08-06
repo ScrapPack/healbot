@@ -5,7 +5,10 @@ reproducible from the run dir, refusing on any tamper or drift. Every one of tho
 gets a control here, because each failure mode is silent in exactly the way this suite's
 history punishes: a leaked external skill contaminates both arms equally (invisible in the
 comparison), a tampered snapshot materializes yesterday's config under today's manifest,
-and a moved lockfile swaps the dependency tree under a frozen study.
+and a moved lockfile swaps the dependency tree under a frozen study. The same applies to the
+one env var the arm factory must never touch: four rows drive `arms._serve_env` directly and
+two of them compile a MUTATED arms.py, because the way that guard gets violated is a future
+edit to serve(), not an input any run can supply.
 
 The decisive rows boot BOTH arms from their materialized configs and read GET /skill off
 the live servers: the delta skill must be present in B, absent in A, and B's skill set must
@@ -27,7 +30,7 @@ sys.path.insert(0, SP)
 import arms  # noqa: E402
 from rig import Api, Results, db  # noqa: E402
 
-r = Results(expect=19)
+r = Results(expect=23)
 TMP = tempfile.mkdtemp(prefix="probe-arm-factory-")
 PORT_A, PORT_B = 4781, 4782
 DELTA_NAME = "probe-delta-skill"
@@ -58,6 +61,21 @@ def raises(fn, *args, **kwargs):
         return None
     except (ValueError, RuntimeError) as exc:
         return str(exc)
+
+
+def mutant_arms(old, new):
+    """arms.py recompiled with one line changed, as an isolated namespace. The violation
+    the XDG_DATA_HOME guard exists for is a future EDIT to serve(), not a runtime input, so
+    its negative control has to be an edit — the same tactic probe_rig_contract.py uses when
+    it feeds itself the pre-fix sources out of git. An anchor that does not match exactly
+    once raises HERE, so a rotted anchor cannot turn into a vacuous green below."""
+    src = open(arms.__file__, encoding="utf-8").read()
+    if src.count(old) != 1:
+        raise RuntimeError(f"mutation anchor appears {src.count(old)}x in arms.py, want 1 — "
+                           f"re-derive it: {old!r}")
+    ns = {"__name__": "arms_mutant", "__file__": arms.__file__}
+    exec(compile(src.replace(old, new), arms.__file__, "exec"), ns)
+    return ns
 
 
 try:
@@ -155,6 +173,42 @@ try:
     r.check("freeze REFUSES an unconstituted base (no lockfile, no node_modules) outright",
             unfit is not None and "reconstitute" in unfit.lower(),
             "a fresh clone must be a refusal at freeze time, not a silent dep-less arm")
+
+    # -- the XDG_DATA_HOME guard, controlled in BOTH directions (rig-defects ticket 02) ----
+    # It used to read `"XDG_DATA_HOME" not in env or env[...] == os.environ.get(...)`, which
+    # compared the child env against a live re-read of the source that env was copied from.
+    # That caught a direct write to env and nothing else. arms._serve_env now captures the
+    # inherited value BEFORE the copy, so the reference is independent of what it checks.
+    ANCHOR = '    env.setdefault("OPENCODE_CLIENT", "cli")\n'
+    LIVE_ARG, DB_ARG = "/tmp/probe-live", "/tmp/probe.db"
+    had_data_home = os.environ.pop("XDG_DATA_HOME", None)
+    clean = arms._serve_env(LIVE_ARG, DB_ARG)
+    r.check("with XDG_DATA_HOME unset the built env does not carry it, and the pins are the "
+            "OPENCODE_DB-only isolation",
+            "XDG_DATA_HOME" not in clean and clean["OPENCODE_DB"] == DB_ARG
+            and clean["XDG_CONFIG_HOME"] == LIVE_ARG
+            and clean["OPENCODE_DISABLE_EXTERNAL_SKILLS"] == "true", "")
+    os.environ["XDG_DATA_HOME"] = "/tmp/probe-inherited"
+    inherited = arms._serve_env(LIVE_ARG, DB_ARG)
+    os.environ.pop("XDG_DATA_HOME", None)
+    r.check("an INHERITED XDG_DATA_HOME passes through untouched — the rule is never MOVE it, "
+            "and this row is red if a future edit pops it",
+            inherited.get("XDG_DATA_HOME") == "/tmp/probe-inherited",
+            "the old assert's first disjunct accepted a pop silently")
+    direct = mutant_arms(ANCHOR, ANCHOR + '    env["XDG_DATA_HOME"] = "/tmp/probe-x"\n')
+    hit = raises(direct["_serve_env"], LIVE_ARG, DB_ARG)
+    r.check("an edit that sets XDG_DATA_HOME on the child env is REFUSED, and the message "
+            "names the variable and the value it would have shipped",
+            hit is not None and "XDG_DATA_HOME" in hit and "/tmp/probe-x" in hit, "")
+    sneaky = mutant_arms(ANCHOR, ANCHOR + '    os.environ["XDG_DATA_HOME"] = "/tmp/probe-x"\n'
+                                          '    env["XDG_DATA_HOME"] = "/tmp/probe-x"\n')
+    leak = raises(sneaky["_serve_env"], LIVE_ARG, DB_ARG)
+    os.environ.pop("XDG_DATA_HOME", None)
+    r.check("the same edit routed through os.environ is refused too — THIS is the case the "
+            "old assert passed, both of its disjuncts reading the source it had just moved",
+            leak is not None and "XDG_DATA_HOME" in leak, "")
+    if had_data_home is not None:
+        os.environ["XDG_DATA_HOME"] = had_data_home
 
     # -- the decisive rows: boot both arms, read /skill off the live servers --------------
     procs.append(arms.serve(run1, "base", PORT_A, db("armfactory-a"), log=f"{TMP}/a.log"))

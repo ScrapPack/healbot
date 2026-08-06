@@ -464,6 +464,73 @@ def check_skill_twins():
             "is a hand copy back)")
 
 
+def resolves_under(path, root):
+    """Does path land inside root once every symlink on the way is followed?
+
+    realpath on both sides, then a separator-terminated prefix: a bare startswith would
+    call ~/.claude-backup a hit on ~/.claude, and comparing the LINK path instead of its
+    target is the whole failure this predicate exists to catch."""
+    p, r = os.path.realpath(path), os.path.realpath(root)
+    return p == r or p.startswith(r + os.sep)
+
+
+def chain_reaches(path, root):
+    """Does path's symlink chain TOUCH root — landing inside it, or naming it on the way?
+
+    The second half is not pedantry. A mirror entry linked at ~/.claude/skills/x, which is
+    itself a link on to ~/.agents/skills/x, has a realpath outside ~/.claude and is still
+    unusable the moment the default root moves: traversal is the same coupling as landing,
+    and it is the near miss a repair of the landing case produces by accident.
+
+    Each hop is compared without following the hop ITSELF, since realpath alone would
+    resolve the whole chain and see only its end. Its PARENT is resolved, though: a
+    normpath comparison alone misses every root under a symlinked ancestor, which on macOS
+    is any path under /tmp or /var. A chain over 40 hops is a loop, and a loop is reported
+    as reaching rather than followed: it is broken either way and a human should look."""
+    r = os.path.realpath(root)
+    cur = os.path.abspath(path)
+    for _ in range(40):
+        lit = os.path.join(os.path.realpath(os.path.dirname(cur)), os.path.basename(cur))
+        if lit == r or lit.startswith(r + os.sep):
+            return True
+        if not os.path.islink(cur):
+            return resolves_under(cur, root)
+        target = os.readlink(cur)
+        cur = target if os.path.isabs(target) else os.path.join(os.path.dirname(cur), target)
+    return True
+
+
+def config_root_skill_faults(default_root, mirror):
+    """The redirected root's two properties, as data: (want, have, missing, extra, punctures).
+
+    Split out of the row below on 2026-08-05 for ticket 18, which is what a count-only row
+    could not see. Claude Code builds a config root's user skills directory as
+    join(config_dir, "skills"), so `want` comes from the DEFAULT root's and `have` from the
+    redirected one's. Two distinct faults:
+
+    - set difference either way. The captain's direction is that both roots carry the same
+      skill SET; `missing` was the only half the row checked, and an entry present in the
+      mirror and absent from the default root is the same divergence mirrored.
+    - punctures: a mirror entry whose symlink chain reaches into the default config root,
+      which is what ticket 10 recorded as rejected in those words. Checked against the
+      config root and not merely its skills/ subdirectory, because the claim is that no
+      root reaches into another root, and ~/.claude/agents would puncture it exactly as
+      much; and by chain_reaches rather than realpath, so a link that hops THROUGH the
+      default root on its way somewhere legitimate is a puncture too.
+
+    Pure over its two path arguments, so the probe can drive it on scratch roots that hold
+    a puncture — a property no source read of this file can establish.
+    """
+    default = os.path.join(default_root, "skills")
+    want = ({n for n in os.listdir(default) if os.path.isdir(os.path.join(default, n))}
+            if os.path.isdir(default) else set())
+    have = ({n for n in os.listdir(mirror) if os.path.isdir(os.path.join(mirror, n))}
+            if os.path.isdir(mirror) else set())
+    punctures = [n for n in sorted(have)
+                 if chain_reaches(os.path.join(mirror, n), default_root)]
+    return want, have, sorted(want - have), sorted(have - want), punctures
+
+
 def check_config_root_skills():
     """The skills surface of the config root the CLAUDE HARNESS actually uses.
 
@@ -480,36 +547,46 @@ def check_config_root_skills():
     Evidence, including the free `claude plugin list` control that settled the same question
     for plugins: .scratch/daily-driver/research/09-config-dir-skill-resolution.md.
 
-    Three states, the twins row's shape: every default-root skill surfaced (PASS), none
-    surfaced (WARN, this machine has not adopted it yet), some missing (FAIL, a live root is
-    serving an incomplete set and no session will say so).
+    States, the twins row's shape: nothing to surface or nothing surfaced yet (WARN, this
+    machine has not adopted it), a fault (FAIL), otherwise PASS. Until 2026-08-05 the PASS
+    branch was a COUNT — 28 of 28 surfaced — and a count is not the claim. It read PASS over
+    a mirror entry that was a symlink into ~/.claude/skills, so the redirected root reached
+    into the default root and the row built to see that reported green (ticket 18; the
+    faults are enumerated in config_root_skill_faults above).
     """
-    default = os.path.expanduser(os.path.join("~", ".claude", "skills"))
+    default_root = os.path.expanduser(os.path.join("~", ".claude"))
+    default = os.path.join(default_root, "skills")
     mirror = os.path.join(HARNESS, "claude", "skills")
     if not os.path.isdir(default):
         row(WARN, "claude config-root skills",
             f"no {default} — nothing to surface into the redirected root yet. "
             "Install: python3 harness/install-skills.py")
         return
-    want = {n for n in os.listdir(default) if os.path.isdir(os.path.join(default, n))}
-    have = ({n for n in os.listdir(mirror) if os.path.isdir(os.path.join(mirror, n))}
-            if os.path.isdir(mirror) else set())
-    missing = sorted(want - have)
+    want, have, missing, extra, punctures = config_root_skill_faults(default_root, mirror)
     if not want:
         row(WARN, "claude config-root skills", f"{default} is empty — nothing to surface")
-    elif not missing:
-        row(PASS, "claude config-root skills",
-            f"{len(want)}/{len(want)} surfaced under {mirror} (the root env.claude.sh "
-            "redirects CLAUDE_CONFIG_DIR at)")
     elif not have:
         row(WARN, "claude config-root skills not installed",
             f"none of the {len(want)} skills under {default} are surfaced at {mirror} — "
             "every harness session and every crewmate loads NONE of them. "
             "Install: python3 harness/install-skills.py")
-    else:
+    elif punctures:
+        row(FAIL, "claude config-root skills reach into the default root",
+            f"{len(punctures)} of {len(have)} at {mirror} resolve inside {default_root}: "
+            f"{', '.join(punctures)} — the redirected root is not isolated, it is borrowing. "
+            "Fix: give each one a body under ~/.agents/skills/<name>/ and point both roots "
+            "at that, then python3 harness/install-skills.py")
+    elif missing or extra:
+        parts = [f"{n} (missing here)" for n in missing] + [f"{n} (not in {default})"
+                                                            for n in extra]
         row(FAIL, "claude config-root skills incomplete",
-            f"{len(missing)} of {len(want)} missing at {mirror}: {', '.join(missing)} — "
-            "harness sessions silently lack them. Fix: python3 harness/install-skills.py")
+            f"the two roots carry different skill SETS: {', '.join(parts)} — harness "
+            "sessions silently differ from a default one. "
+            "Fix: python3 harness/install-skills.py")
+    else:
+        row(PASS, "claude config-root skills",
+            f"{len(want)}/{len(want)} surfaced under {mirror}, same SET as {default}, none "
+            "resolving back inside " + default_root)
 
 
 # -- platform-bound tiers -------------------------------------------------------------

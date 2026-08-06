@@ -114,7 +114,21 @@ repo root:
 
 ```bash
 awk -f .scratch/frontier.awk .scratch/*/tickets/*.md | sort
+awk -v mode=claims -f .scratch/frontier.awk .scratch/*/tickets/*.md | sort
 ```
+
+The second form prints the other half of the same header block: every **open** ticket that IS
+assigned, with its holder in `[brackets]`, blocked or not. A claim is a claim whatever it waits
+on. Any other `mode` is refused at exit 2 rather than falling back to the frontier, because a
+typo that printed takeable work as though it were claimed work would be wrong in silence.
+
+Both modes are TESTED by `probe_fleet_claude.py` against a five-ticket fixture whose blocker is
+itself takeable, so flipping one `Status:` moves two tickets in opposite directions and neither
+direction can pass by accident.
+
+The claims mode has no renderer yet. It exists because the cockpit view that wants it
+(`hb-fleet.sh map`, ticket 04) must call this file rather than grow a second reader of the header
+block, and building the shared half first is what makes that possible.
 
 `.scratch/frontier.awk` is the **only** place the blocking rule is implemented. Anything that
 renders the frontier calls it rather than reimplementing it, because two implementations of one
