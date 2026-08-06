@@ -49,12 +49,14 @@ is the pipeline map; this is the checklist.
    surface cannot widen silently — each rig budgets its skips and goes red past the budget
    — but it can widen deliberately, and this step is where somebody notices.
 
-6. The run itself dirties the tree, and that is expected: probe_error_state and
-   probe_focus write `.carryover/verified/hb/errorstate.db` and `hb/focus.db`, which are
-   TRACKED measurement corpus (the suite writes to the corpus it measures —
-   docs/CLONE.md §4). Commit those deltas with the close; never reset or delete them
-   (corpus history is evidence — archive, never delete). If `git status` shows hb/*.db
-   changes you did NOT produce, another session is working the tree: stop and check.
+6. The run rewrites `.carryover/verified/hb/errorstate.db` and `hb/focus.db` every time —
+   probe_error_state and probe_focus each open with `shutil.copyfile(db("retire350"), …)` —
+   and since 43d90b9 both are UNTRACKED, so that churn never reaches `git status`. Nothing
+   to commit, checkpoint or reset for those two, and do not re-add negation lines for them.
+   The TRACKED corpus is still evidence (the suite writes to the corpus it measures —
+   docs/CLONE.md §4): never reset or delete a tracked `hb/*.db`, archive by rename. If
+   `git status` shows tracked hb/*.db changes you did NOT produce, another session is
+   working the tree: stop and check.
 
 7. Tier 3 (`verify_*` rigs) stays un-run unless the owner said go — it is PAID. The
    close names it NOT RUN, which is honest and free.

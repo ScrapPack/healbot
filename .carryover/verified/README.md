@@ -474,8 +474,9 @@ is a new tag with fresh DBs, and an archived run's DBs keep their names in the c
 paid-run-protocol skill's: `.gitignore` ignores `hb/*` wholesale and un-ignores each paid DB
 BY NAME, and its own comment warns that a new paid DB without its negation line is "silently
 unprotected"; and the WAL must be folded in (`PRAGMA wal_checkpoint(TRUNCATE)`) before
-committing a corpus update so the committed bytes are self-contained (if the update includes
-`errorstate.db`/`focus.db`, checkpoint AFTER `gate/tier2.py`, which rewrites both). Run
+committing a corpus update so the committed bytes are self-contained, as the LAST step before
+`git add` when a run rewrote the DB. This no longer applies to `errorstate.db`/`focus.db`,
+which 43d90b9 untracked: `gate/tier2.py` still rewrites both, invisibly to git. Run
 directories under `hb/ab-runs/` are tracked evidence in full: rows, meta, server logs, frozen
 arms and corpus. A dead run is archived BY RENAME, the way `refusal-full` became
 `refusal-full-archived-20260731`, so the tag-derived path can never silently resume and

@@ -68,7 +68,7 @@ Exit codes are the interface: **0 pass · 2 blocked · 3 error** (`gate/GATE.MAP
 | `$VENVPY gate/gate.py --base main` / `--quiet` | Gate a range / verdict lines only |
 | `git push` | Runs the gate via the pre-push hook, then the advisory model review, then spawns the evidence publisher. `--no-verify` ships unverified commits — say so wherever that push is discussed |
 | `HEALBOT_REVIEW=off\|advisory\|blocking` | Review stage modes; `HEALBOT_PUBLISH=off` skips evidence publishing |
-| `$VENVPY gate/tier2.py` (`--list` to enumerate) | The rest of the free suite — **phase boundaries only**, triggered by the phase-close skill. Trap on record: tier2 boots probes that REWRITE `errorstate.db`/`focus.db`, so WAL-checkpoint those **after** a tier2 run, never before |
+| `$VENVPY gate/tier2.py` (`--list` to enumerate) | The rest of the free suite — **phase boundaries only**, triggered by the phase-close skill. tier2 boots probes that REWRITE `errorstate.db`/`focus.db`; both UNTRACKED since 43d90b9, so that churn no longer dirties the tree and needs no checkpoint. The ordering trap still holds for any tracked corpus DB a run touches: WAL-checkpoint **after** the run, never before |
 
 ## Rig and corpus (macOS / WSL2)
 
