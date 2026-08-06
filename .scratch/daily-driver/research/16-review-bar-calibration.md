@@ -6,11 +6,18 @@ only.
 
 Produced 2026-08-05 by the crewmate `calib` in pooled slot-1, brought into the main tree by the
 first mate, who is the only tracker writer. Two edits were made on the way in and nothing else was
-touched: eleven citations that this report QUOTES rather than points at (a stub's `x.py`, the
-archived run's `ARCHIVED.md`, and `harness/hb-fleet.sh` line 948, which was valid at the reviewed
-head and is blank on `main`) were rewritten out of live `file:line` form, because
-`probe_citations.py` cannot tell a specimen from a pointer and went red on all eleven. That is
+touched: every citation this report QUOTES rather than points at was rewritten out of live
+`file:line` form, because `probe_citations.py` cannot tell a specimen from a pointer. That is
 `/citation-hygiene`'s first rule and the same trap `docs/CITE.md`'s first draft hit nine times.
+Section 3's "Cited" column is specimens by construction, so it carries none. `NEXT.md` is never
+cited by line anywhere here, per the same skill's second rule about living documents.
+
+It took two passes, and the second one is the lesson. The first pass fixed the eleven the probe
+went red on and stopped there. The probe checks POSITIONAL rot only, which its own third rule
+says out loud, so the specimens that happened to land on real non-blank lines survived it: a
+further 27, including one the report itself describes as stale. They were caught by the model
+review of the push that shipped the first pass. A green `probe_citations.py` is not evidence that
+a document's citations are sound; it is evidence they are not positionally broken.
 
 Verified before acceptance, per the first mate's third hard rule that a claim of done is a claim:
 the corpus count, the counts table, and the full 27-row table were read; one classification was
@@ -86,31 +93,31 @@ All 27, in record order. Summaries are truncated; `severity` is as recorded.
 |---|---|---|---|---|---|
 | `20260731-181116-9691` | `x.py` line 3 | error | stub error | **stub** | plumbing stub, not model output |
 | `20260731-181116-9696` | `x.py` line 3 | error | stub error | **stub** | plumbing stub, not model output |
-| `20260731-182953-11413` | `gate/review.py:142` | error | The closer-appending repair does not only fix a clean tail cut: if the reply is cut mid-finding, rfind("}") lands on an earlier finding's closing... | **real** | 875e5a2 |
-| `20260731-193036-21009` | `NEXT.md:8` | error | The change adds a fifth skill (harness/skills/phase-close.md) that tier2.py names as its only trigger, but NEXT.md — the fresh-session onboarding... | **real** | a7a425f |
-| `20260731-195448-23474` | `harness/pool.py:246` | error | `release` guards only on `git status --porcelain`, so work the operator COMMITTED in the detached slot passes the clean check and is then silently... | **real** | f6dcaeb |
-| `20260731-200635-25122` | `.carryover/verified/probe_pool.py:103` | error | The row "acquire SKIPS the soiled slot" cannot fail from the guard it names: at that point slot-1 is free and clean and sorts first, so acquire... | **unacted** | still at probe_pool.py:111 on main |
-| `20260731-200635-25122` | `.carryover/verified/probe_pool.py:127` | error | The row "acquire refuses to lease the committed-work slot to anyone else" is proven by the lease guard, not the committed-work guard: the prior... | **unacted** | still at probe_pool.py:135 on main |
-| `20260731-201829-26649` | `.carryover/verified/arms.py:226` | error | The XDG_DATA_HOME assert cannot fail: `env` is a plain `dict(os.environ)` copy and neither branch of the function ever sets or pops XDG_DATA_HOME, so... | **unacted** | still at arms.py:255 on main |
-| `20260731-212534-33952` | `.carryover/verified/probe_study_driver.py:232` | error | The split strands a row that cannot fail: `compatible_meta(recomputed, expected) == []` compares two calls to `expected_meta` with byte-identical... | **real** | 900f13f |
+| `20260731-182953-11413` | `gate/review.py` line 142 | error | The closer-appending repair does not only fix a clean tail cut: if the reply is cut mid-finding, rfind("}") lands on an earlier finding's closing... | **real** | 875e5a2 |
+| `20260731-193036-21009` | `NEXT.md` line 8 | error | The change adds a fifth skill (harness/skills/phase-close.md) that tier2.py names as its only trigger, but NEXT.md — the fresh-session onboarding... | **real** | a7a425f |
+| `20260731-195448-23474` | `harness/pool.py` line 246 | error | `release` guards only on `git status --porcelain`, so work the operator COMMITTED in the detached slot passes the clean check and is then silently... | **real** | f6dcaeb |
+| `20260731-200635-25122` | `.carryover/verified/probe_pool.py` line 103 | error | The row "acquire SKIPS the soiled slot" cannot fail from the guard it names: at that point slot-1 is free and clean and sorts first, so acquire... | **unacted** | still at probe_pool.py:111 on main |
+| `20260731-200635-25122` | `.carryover/verified/probe_pool.py` line 127 | error | The row "acquire refuses to lease the committed-work slot to anyone else" is proven by the lease guard, not the committed-work guard: the prior... | **unacted** | still at probe_pool.py:135 on main |
+| `20260731-201829-26649` | `.carryover/verified/arms.py` line 226 | error | The XDG_DATA_HOME assert cannot fail: `env` is a plain `dict(os.environ)` copy and neither branch of the function ever sets or pops XDG_DATA_HOME, so... | **unacted** | still at arms.py:255 on main |
+| `20260731-212534-33952` | `.carryover/verified/probe_study_driver.py` line 232 | error | The split strands a row that cannot fail: `compatible_meta(recomputed, expected) == []` compares two calls to `expected_meta` with byte-identical... | **real** | 900f13f |
 | `20260731-213818-36791` | `.carryover/verified/hb/errorstate.db:None` | error | The commit message claims the delta is "the checkpoint's header touch" with "0 pending frames" and that "the committed bytes were already complete",... | **unacted** | commit message never corrected |
 | `20260731-221315-38634` | `.carryover/verified/hb/ab-runs/refusal-full-archived-20260731/ARCHIVED.md` line 4 | error | The rename removes the only spend tripwire rather than adding one: `ab.run_dir` builds the exact path `{RUNS}/refusal-{tag}` and... | **unacted** | run_refusal.py untouched since |
-| `20260731-221315-38634` | `.carryover/verified/hb/ab-runs/refusal-full-archived-20260731/meta.json:54` | error | The archived run's `"status": "running"` is left in place permanently, so closed evidence keeps advertising a live run: nothing will ever flip it... | **real** | ba13e0a |
-| `20260731-221315-38634` | `.carryover/verified/hb/ab-runs/refusal-full-archived-20260731/meta.json:71` | error | All six `launches[].logs` entries are absolute paths into the old directory `.../ab-runs/refusal-full/server-*.log` (meta.json:71-72, 470-471,... | **unacted** | 6/6 log paths still dangle on main |
+| `20260731-221315-38634` | `.carryover/verified/hb/ab-runs/refusal-full-archived-20260731/meta.json` line 54 | error | The archived run's `"status": "running"` is left in place permanently, so closed evidence keeps advertising a live run: nothing will ever flip it... | **real** | ba13e0a |
+| `20260731-221315-38634` | `.carryover/verified/hb/ab-runs/refusal-full-archived-20260731/meta.json` line 71 | error | All six `launches[].logs` entries are absolute paths into the old directory `.../ab-runs/refusal-full/server-*.log` (meta.json:71-72, 470-471,... | **unacted** | 6/6 log paths still dangle on main |
 | `20260731-221315-38634` | `.carryover/verified/hb/ab-runs/refusal-full-archived-20260731/ARCHIVED.md` line 15 | error | The recorded operation installed `frozen/set_a-41fecb7f-regexfix.json` as the live `studies/refusal/set_a.json` for the duration of the rescore while... | **unacted** | no commit addresses it |
-| `20260802-111518-51255` | `.claude/handoffs/handoff-20260801-003744.md:12` | error | Newly-tracked handoff writes `NEXT.md:95` in live file:line form into NEXT.md, and this same change inserts ~15 lines above it, so the cited... | **real** | 2bc89e5 |
-| `20260802-155020-94532` | `docs/CLONE.md:487` | error | "seventeen `HARNESS.md:NNN` citations from `docs/AFK.md` and `docs/REVIEW.md`" is a wrong count — MEASURED there are 12 (AFK.md 4: lines 327, 336,... | **real** | 7b9ce27 |
-| `20260802-155245-95087` | `docs/CLONE.md:488` | error | The bolded MEASURED claim is wrong on a fresh run: `git grep -o -E 'HARNESS\.md:[0-9]+'` over the tracked tree returns 22 occurrences across seven... | **real** | 90cb709 |
-| `20260802-173533-8377` | `harness/hb-fleet.sh:348` | error | The unguarded `t bind ... display-popup` runs on every `up`, but tmux parses a bind-key command string at bind time, so on tmux < 3.2 (e.g.... | **real** | 8ee08a8 |
-| `20260802-174748-9919` | `harness/hb-fleet.sh:636` | error | The new preflight comment cites "this script already did, at line 89", but line 89 is `HB_FLEET_DIR=...`; the `. env.claude.sh` source it means is... | **real** | 2e345a1 |
-| `20260802-183327-13758` | `docs/SHIP.md:249` | error | The citation `probe_fleet_claude.py:285` (the installed-skill twin) is stale: this change inserted 111 lines above it, so that r.check now lives at... | **real*** | a38b694 (incidental) |
-| `20260802-183327-13758` | `harness/hb-fleet.sh:361` | error | The `C-b ?` popup is sized smaller than the card it renders: `hb_help` emits 32 logical lines (22 header + 10 key map) and 12 of the header lines are... | **real** | 4d0f608 |
-| `20260803-013538-37728` | `.carryover/verified/probe_citations.py:403` | error | The quote-leg floor counts candidates found (`len(qrows) >= 5`), not quotes actually verified — QUOTE_UNRESOLVED rows satisfy the floor and are... | **real** | b6e97b4 |
+| `20260802-111518-51255` | `.claude/handoffs/handoff-20260801-003744.md` line 12 | error | Newly-tracked handoff writes `NEXT.md` line 95 in live file:line form into NEXT.md, and this same change inserts ~15 lines above it, so the cited... | **real** | 2bc89e5 |
+| `20260802-155020-94532` | `docs/CLONE.md` line 487 | error | "seventeen `HARNESS.md:NNN` citations from `docs/AFK.md` and `docs/REVIEW.md`" is a wrong count — MEASURED there are 12 (AFK.md 4: lines 327, 336,... | **real** | 7b9ce27 |
+| `20260802-155245-95087` | `docs/CLONE.md` line 488 | error | The bolded MEASURED claim is wrong on a fresh run: `git grep -o -E 'HARNESS\.md:[0-9]+'` over the tracked tree returns 22 occurrences across seven... | **real** | 90cb709 |
+| `20260802-173533-8377` | `harness/hb-fleet.sh` line 348 | error | The unguarded `t bind ... display-popup` runs on every `up`, but tmux parses a bind-key command string at bind time, so on tmux < 3.2 (e.g.... | **real** | 8ee08a8 |
+| `20260802-174748-9919` | `harness/hb-fleet.sh` line 636 | error | The new preflight comment cites "this script already did, at line 89", but line 89 is `HB_FLEET_DIR=...`; the `. env.claude.sh` source it means is... | **real** | 2e345a1 |
+| `20260802-183327-13758` | `docs/SHIP.md` line 249 | error | The citation `probe_fleet_claude.py` line 285 (the installed-skill twin) is stale: this change inserted 111 lines above it, so that r.check now lives at... | **real*** | a38b694 (incidental) |
+| `20260802-183327-13758` | `harness/hb-fleet.sh` line 361 | error | The `C-b ?` popup is sized smaller than the card it renders: `hb_help` emits 32 logical lines (22 header + 10 key map) and 12 of the header lines are... | **real** | 4d0f608 |
+| `20260803-013538-37728` | `.carryover/verified/probe_citations.py` line 403 | error | The quote-leg floor counts candidates found (`len(qrows) >= 5`), not quotes actually verified — QUOTE_UNRESOLVED rows satisfy the floor and are... | **real** | b6e97b4 |
 | `20260803-014712-38901` | `gate/hooks/pre-push:61` | error | Both new here-docs use an unquoted `EOF` delimiter, so the buffered `$refs` body is re-expanded by the shell: a ref name containing `$` (valid per... | **real** | a2d0801 |
-| `20260803-101544-58098` | `NEXT.md:82` | error | This change marks task 0 CLOSED in docs/SHIP.md §5 and pins both markers as MEASURED in hb-fleet.sh, but NEXT.md's task 0 still tells the next... | **real** | c2c2067 |
-| `20260803-120357-80318` | `docs/E2E.md:359` | error | The change raises the probe floor to 68 (probe_fleet_claude.py:84) but this change's own suite record still reads "probe_fleet_claude.py runs 65 rows... | **real** | a9ca1c2 |
+| `20260803-101544-58098` | `NEXT.md` line 82 | error | This change marks task 0 CLOSED in docs/SHIP.md §5 and pins both markers as MEASURED in hb-fleet.sh, but NEXT.md's task 0 still tells the next... | **real** | c2c2067 |
+| `20260803-120357-80318` | `docs/E2E.md` line 359 | error | The change raises the probe floor to 68 (probe_fleet_claude.py:84) but this change's own suite record still reads "probe_fleet_claude.py runs 65 rows... | **real** | a9ca1c2 |
 | `20260804-185654-57291` | `harness/hb-fleet.sh` line 948 | error | `down` puts the entire lease-release loop AFTER `t kill-session`, but the documented captain's seat is the bridge shell INSIDE $HB_RUN... | **real** | 8d20353 |
-| `20260805-163831-30533` | `fork/packages/core/src/session/SESSION.MAP.md:391` | error | The path-sharpening sends this SCAN-claim row to the wrong api.ts: the claim it annotates is docs/SCAN.md:90's... | **real** | c0e19cd |
+| `20260805-163831-30533` | `fork/packages/core/src/session/SESSION.MAP.md` line 391 | error | The path-sharpening sends this SCAN-claim row to the wrong api.ts: the claim it annotates is docs/SCAN.md:90's... | **real** | c0e19cd |
 `*` = repaired, but not attributably. See §5.
 
 ## 4. Examples
@@ -135,7 +142,7 @@ the tests had been green:
 An INFERRED finding, raised without the ability to run the reproduction, promoted to MEASURED-true
 by the repair.
 
-**`20260805-163831` — `fork/packages/core/src/session/SESSION.MAP.md:391`.** The reviewer said a
+**`20260805-163831` — `fork/packages/core/src/session/SESSION.MAP.md` line 391.** The reviewer said a
 path-sharpening had aimed a SCAN-claim row at the wrong `api.ts`, and cited the disambiguating
 evidence: the row's own cross-reference names `httpapi/api.ts`, whose `:79` is
 `export const OpenCodeHttpApi = HttpApi.make("opencode")`, matching the row's verbatim "block
@@ -153,7 +160,7 @@ No finding in this corpus is classifiable as wrong. I found no error-severity fi
 mistaken about the code, and no repair commit that refutes one. The two closest calls, neither of
 which meets the bar:
 
-- **`20260802-183327` — `harness/hb-fleet.sh:361`** cites the wrong line. At the reviewed head
+- **`20260802-183327` — `harness/hb-fleet.sh` line 361** cites the wrong line. At the reviewed head
   `2e345a1`, line 361 is `pane="$(t split-window ...)"`; the popup bind the finding is about is at
   line 348. The *substance* is exact, though, and I measured it: `hb_help` is
   `hb_header` (`sed -n '4,25p'`, 22 lines) plus a 10-line heredoc = **32 logical lines**, of which
@@ -161,7 +168,7 @@ which meets the bar:
   content area. The finding claimed 32 lines, 12 wide header lines, and "~44 rows". Commit
   `4d0f608` repaired it and independently stated "rendered 45 rows into a 26-row box". A wrong
   line number attached to a correct and precisely-quantified defect is not a false positive.
-- **`20260802-155020` — `docs/CLONE.md:487`** says the document's "seventeen" is wrong and offers
+- **`20260802-155020` — `docs/CLONE.md` line 487** says the document's "seventeen" is wrong and offers
   12 for the two named files. The repair `7b9ce27` found the repo-wide truth to be 18 across six
   files — a different number from the finding's — but confirms the finding's own sub-counts exactly
   (REVIEW.md 8, AFK.md 4) and confirms the headline claim that "seventeen" was wrong. Right about
@@ -169,7 +176,7 @@ which meets the bar:
 
 ### unacted — the clearest two
 
-**`20260731-200635` — `.carryover/verified/probe_pool.py:103` and `:127`.** Two error findings that
+**`20260731-200635` — `.carryover/verified/probe_pool.py` line 103 and `:127`.** Two error findings that
 a probe's rows could not fail for the reasons they named. I confirmed both against the code at the
 reviewed head `569e5e08`, and both still stand on `main`:
 
@@ -231,7 +238,7 @@ including the byte offsets, the page number, the byte-identical 100-byte SQLite 
    predict what the captain acted on.
 
 5. **One "real" is not attributable to the review** and is marked `real*` in the table.
-   `20260802-183327`'s finding on `docs/SHIP.md:249` (the `probe_fleet_claude.py:285` citation is
+   `20260802-183327`'s finding on `docs/SHIP.md` line 249 (the `probe_fleet_claude.py` line 285 citation is
    stale; the row it names had moved to `:396`) is verifiably correct — I read both lines at
    `2e345a1`, and `:285` there is a comment about `.claude.json`, unrelated non-blank text. The
    citation is gone from `main`. But it was removed by `a38b694`, which rewrote that whole bullet

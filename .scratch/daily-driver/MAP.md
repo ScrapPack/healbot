@@ -72,6 +72,12 @@ Domain, and the standing preferences every session on this map must consult:
   handoff to the captain.
 - **Firstmate drives the cockpit.** The captain learns how to talk to firstmate and nothing else.
   Ticket 11.
+- **The two harnesses may load skills differently; they must carry the same skills.** Captain's
+  direction 2026-08-05. The skill SET is the invariant across Claude Code and opencode, the loading
+  mechanism is not, and whether the two are equally capable is settled by A/B measurement rather
+  than by argument, which is ticket 08's subject. Ticket 18 carries the defect that prompted it: the
+  harness config root reaches into the DEFAULT config root for one skill, which is what ticket 10
+  recorded as rejected, and the doctor row reports it PASS.
 - **[Firstmate drives the cockpit](tickets/11-firstmate-drives-the-cockpit.md)** — `focus` and
   `diff` shipped and TESTED live, both idempotent, both off the captain's command card because they
   are firstmate's tools. Side-by-side was NOT built: it needs `join-pane`, and seven call sites

@@ -11,6 +11,14 @@ Blocked by: 03
 The captain wants A/B evaluation of the installed skills, to know which ones need to exist. The rig
 for this is built and proven; the study design is what is missing.
 
+**A second question now rides on this one.** Captain's direction 2026-08-05: the Claude Code and
+opencode harnesses may load skills by different mechanisms, but they must carry the same skill set,
+and whether the two are equally capable is to be settled by A/B measurement rather than by
+argument. So this ticket is not only "which skills need to exist" but "which skills each system
+needs to be equally capable", and it is the arbiter ticket 18 is told not to pre-empt by reasoning.
+Whether that is the same study with a second arm dimension, or a separate one, is part of what this
+ticket decides.
+
 **What exists, VERIFIED.** `run_study.py` is a generic paid-study driver over frozen synthesized arms,
 base plus exactly one skill delta, with the corpus and every config byte frozen at run creation.
 `arms-tdd.json` is the live example: `base`, and `plus-tdd` adding the tdd skill. It has run at scale:

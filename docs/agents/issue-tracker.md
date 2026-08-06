@@ -121,8 +121,10 @@ renders the frontier calls it rather than reimplementing it, because two impleme
 rule will disagree and the disagreement will be silent. A ticket that looks takeable in the map
 and is not takeable here is a map that has drifted, not a query that is wrong.
 
-TESTED 2026-08-05 against `.scratch/daily-driver`, in both directions: the baseline frontier is
-five tickets; closing a blocker admits the two it blocked and drops the blocker itself; assigning
-a frontier ticket drops it. The controls matter because the first version of this query was
+TESTED 2026-08-05 against `.scratch/daily-driver` as it stood at `829d525`, in both directions:
+the baseline frontier was five tickets; closing a blocker admits the two it blocked and drops the
+blocker itself; assigning a frontier ticket drops it. The five is a record of that run and not a
+standing figure, since the frontier moves every time a ticket closes; what the controls settle is
+the rule, which does not depend on how many tickets are open. The controls matter because the first version of this query was
 written inline in this document and was **broken** in a way that returned an empty frontier
 rather than an error, which is exactly the silent-pass failure this repo exists to hunt.

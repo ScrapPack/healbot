@@ -13,8 +13,16 @@
 # the effort that names them. Numbers are read from the filename, leading zeros stripped, so
 # "Blocked by: 03" and a file named 3-foo.md are the same ticket.
 #
-# TESTED 2026-08-05 on .scratch/daily-driver: baseline frontier 1,3,5,6,7; closing 03 admits 4 and
-# 8 and drops 03; assigning 05 drops it. Both controls in both directions.
+# TESTED 2026-08-05 on .scratch/daily-driver AS IT STOOD AT 829d525, the commit that added this
+# file, with 01 through 06 open: baseline frontier 1,3,5,6,7; closing 03 admits 4 and 8 and drops
+# 03; assigning 05 drops it. Both controls in both directions.
+#
+# Those numbers are a RECORD OF THAT RUN, not a standing expectation, and re-running the command
+# against today's tree gives a different and equally correct answer. Said explicitly because the
+# original wording read as reproducible and stopped being so within hours, when 01, 03 and 06
+# closed (caught by the model review of the 7bd4085 push). Whether the query is right is settled
+# by the two controls above, both of which are about the RULE and neither of which depends on how
+# many tickets happen to be open.
 
 FNR == 1 {
   p = FILENAME
