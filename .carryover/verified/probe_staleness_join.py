@@ -42,7 +42,19 @@ DELETE_ABOVE = [(2, 4, 2, 1)]     # four old lines became one
 CHANGE_BELOW = [(50, 2, 50, 9)]   # entirely past any span we cite
 OVERLAP = [(9, 4, 9, 4)]          # rewrites old lines 9-12
 
-r = rig.Results(expect=29)
+r = rig.Results(expect=30)
+
+# The ordinary absent-checkout case, caught BEFORE the try so the exit is not swallowed by the
+# finally. `probe_citations.py:80` does the same thing for the same reason and this probe was
+# the one file of the three that had neither this nor the mid-sweep catch below: with opencode/
+# absent it fell to `except Exception`, went red and exited 1, which `gate/tier2.py` maps to
+# BLOCKED — "a check ran and said no" — for a check that could not run at all. Exit 3 is the
+# cannot-measure verdict and `gate.py` maps it to ERROR (review finding from the b480659 push).
+if not citegraph.checkout_present():
+    print(f"\n!! {citegraph.CHECKOUT}/.git not found. UNMEASURED, not failed.\n", file=sys.stderr)
+    sys.exit(3)
+
+vanished = False
 
 try:
     # --- parse_hunks: the one form that breaks a naive parse ------------------------------
@@ -58,6 +70,15 @@ try:
         "insertion, so every citation below it shifts by the wrong amount — silently, because "
         "the resulting line number is still a real non-blank line and the citations probe stays "
         "green over it",
+    )
+
+    r.check(
+        "MUTATION: a changed path containing a SPACE stays one path",
+        staleness.changed_from("docs/a b.md\ngate/x.py\n") == {"docs/a b.md", "gate/x.py"},
+        "`set(out.split())` splits on ALL whitespace, so such a path fragments into keys that "
+        "can never match an index entry and every citation into it is dropped from the join "
+        "SILENTLY — a check going quiet about the one file somebody just renamed, which reads "
+        "exactly like a clean run. gate.py:91 already parses this command with splitlines()",
     )
 
     # --- shift_for: the delta must come from what precedes the span -----------------------
@@ -328,11 +349,20 @@ try:
 
 except SystemExit:
     raise
+except citegraph.CheckoutAbsent:
+    # The checkout going away DURING the sweep, which the pre-check above cannot cover. A
+    # `sys.exit(3)` raised in here would be DISCARDED by the finally, so the verdict travels
+    # as a flag — the same mechanism probe_citations.py uses, for the same reason.
+    vanished = True
+    print(f"\n!! {citegraph.CHECKOUT}/.git vanished mid-sweep. UNMEASURED, not failed.\n",
+          file=sys.stderr)
 except Exception:
     import traceback
 
     traceback.print_exc()
     r.check("UNEXPECTED EXCEPTION", False, "see traceback above")
 finally:
+    if vanished:
+        sys.exit(3)
     ok = r.summary()
     sys.exit(0 if ok else 1)

@@ -167,6 +167,23 @@ def classify_span(old, new, lo, hi, hs):
     return "rewritten", None, None
 
 
+def changed_from(out):
+    """-> the set of paths in `git diff --name-only` output.
+
+    SPLIT FROM THE GIT CALL for the reason `parse_hunks` is: it makes the parsing testable
+    without a repository, and this parsing has a failure mode worth a test. The first version
+    was `set(out.split())`, which splits on ALL whitespace — so a tracked path containing a
+    space fragments into pieces that can never match an index key, and every citation into that
+    file is dropped from the join SILENTLY. `gate.py:91` already parses the identical command
+    with `splitlines()`; two readings of one command's output is how they disagree.
+
+    Latent today (`git ls-files | grep -c " "` returns 0) and fixed anyway: the cost of the
+    bug is a check that goes quiet about the one file somebody just renamed with a space in it,
+    which is indistinguishable from a clean run.
+    """
+    return {ln.strip() for ln in (out or "").splitlines() if ln.strip()}
+
+
 def added_lines(base, head, path):
     """HEAD-side line numbers this change wrote in `path`. Filter 3's input.
 
@@ -314,7 +331,7 @@ def main(argv, env):
             if out is None:
                 unmeasured = f"git could not diff {base}...{head}"
             else:
-                changed = set(out.split())
+                changed = changed_from(out)
                 findings = join(base, head, changed, inv)
     except citegraph.CheckoutAbsent:
         unmeasured, findings = "opencode/ checkout vanished mid-sweep", []
