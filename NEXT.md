@@ -104,6 +104,21 @@ hole is closed. Nothing is blocking you. Do not invent something to build.
      reading a surface nobody had read AS AN ARTIFACT (a derivation, the suite from a fresh
      clone, the paid rigs as source, the prose as pointers, the shared library). If you find
      one, that IS the phase.
+     Then read the decision records: `python3 harness/memory.py recall ""`. They are new as
+     of 2026-08-06 and they are the surface nobody has read yet.
+  1b. THE CITATION-STALENESS STAGE IS IN SHADOW MODE AND NEEDS PUSHES, not work. It writes
+     gate/runs/*-staleness.json on every push from a branch carrying it and prints nothing.
+     13 records exist, several of them replays of one range, against an acceptance of 15-20
+     REAL pushes. Phase 3 (operator-visible output + the reviewer scope carve-out) stays
+     gated until a human reads the distribution: two independent replays disagreed by more
+     than 4x on the mean and both were lower bounds. Note the stage as built has NO blocking
+     mode, deliberately (gate/staleness.py's header argues it); Phase 3's design assumed one.
+  1c. THE DECISION-RECORD STORE IS BUILT AND UNMEASURED. Mechanism is proven 68/68
+     (probe_memory_store.py); whether it improves an agent's work is not, and docs/RECORDS.md
+     §9 names the three blockers that put that measurement out of reach — the arm factory
+     cannot express a memory-on/memory-off contrast, it sets no Claude config root, and
+     neither driver supports the multi-turn shape the value actually has. Do not quote a
+     benefit. The Claude-side SessionStart output contract is INFERRED, not TESTED.
   2. FREE TO WRITE, paid to test; pair each with the next paid run (per the
      paid-run-protocol skill). Detail for all four: docs/OUTCOME.md §7-9.
      - verify_question.py: three assertions red since Phase 5 assume auto-surface does not
