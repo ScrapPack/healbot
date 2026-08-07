@@ -109,15 +109,3 @@ The brief forbade repairs, so three defects the report verified as still live on
 2. The `XDG_DATA_HOME` assert in `.carryover/verified/arms.py` still cannot fail.
 3. All six `launches[].logs` entries in the archived run's `meta.json` point into a directory that
    no longer exists.
-
-### Process notes worth keeping
-
-The report's own method section records two corrections it made mid-investigation, which is why its
-head-resolution is trustworthy: 16 of 22 records predate the `head` field and were resolved by
-matching each record's file list against candidate ranges, and the resolution had to move from
-parentage to the full `base...head` file set once a push turned out not to be one commit.
-
-Bringing the report into the tree required rewriting eleven of its citations out of live
-`file:line` form. They were specimens, quoting what a finding cited rather than pointing at code,
-and `probe_citations.py` cannot tell the two apart: it went red on all eleven, exactly as
-`docs/CITE.md`'s first draft did. Green at 21/21 after.

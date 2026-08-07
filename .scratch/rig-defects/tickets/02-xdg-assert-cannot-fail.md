@@ -17,13 +17,9 @@ assert "XDG_DATA_HOME" not in env or env["XDG_DATA_HOME"] == os.environ.get("XDG
 
 Both disjuncts derive from the same source, so the assert cannot fail. `env` is a plain
 `dict(os.environ)` copy, and nothing between the copy and the assert sets or pops `XDG_DATA_HOME`.
-The function does mutate `env` first, and this ticket originally described that wrongly: it claimed
-the only keys touched were `OPENCODE_DB` and `OPENCODE_CLIENT`. In fact the lines above the assert
-pop `XDG_CONFIG_HOME`, `OPENCODE_DISABLE_EXTERNAL_SKILLS` and `OPENCODE_DISABLE_CLAUDE_CODE` and
-then set all three, before setting `OPENCODE_DB` and defaulting `OPENCODE_CLIENT`. **None of the
-five is `XDG_DATA_HOME`, so the conclusion is unchanged**, but the supporting claim was written
-after reading only the five lines above the assert rather than the whole function, and was labelled
-VERIFIED on that basis. Corrected 2026-08-05 from a review finding on the push that shipped it.
+The keys the function does mutate are `XDG_CONFIG_HOME`, `OPENCODE_DISABLE_EXTERNAL_SKILLS`,
+`OPENCODE_DISABLE_CLAUDE_CODE`, `OPENCODE_DB` and `OPENCODE_CLIENT`. None of the five is
+`XDG_DATA_HOME`.
 
 Given that: if `XDG_DATA_HOME` is absent from `os.environ` it is absent from `env` and the first
 disjunct holds; if it is present it is present with the same value and the second holds.

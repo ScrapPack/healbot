@@ -22,12 +22,6 @@ different: it exists only under `~/.claude/skills`, so the harness root reaches 
 root to find it. Meanwhile `doctor.py` reports the row PASS at 28/28 "surfaced", so the
 puncture is invisible to the check that exists to see it.
 
-Found by the model review of the `7bd4085` push. Worth recording how it was missed: the first mate
-noticed the same discrepancy hours earlier, checked ONE entry (`firstmate`, which points at
-`~/.agents`), reasoned that per-skill links to a shared canonical source are categorically different
-from root-to-root sharing, and closed the question. That reasoning is correct and the sample was
-not. The one entry not checked is the one that proves the point.
-
 ## The captain's direction, 2026-08-05
 
 Given at the time this ticket was opened, and it governs the fix:
@@ -155,4 +149,3 @@ a fixture, which is why the row's evidence string quotes that run.
 - **`chain_reaches` reports a symlink loop over 40 hops as reaching.** Deliberate: such a
   chain is broken either way and a human should look at it. It is not reachable from anything
   the installer writes.
-- **No push.** The branch is `gnhf/you-are-an-unattende-e196d4`.

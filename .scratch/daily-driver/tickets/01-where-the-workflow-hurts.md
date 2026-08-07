@@ -54,19 +54,6 @@ VERIFIED:
 - Nothing in `env.claude.sh`, `hb-fleet.sh`, `doctor.py` or `install-skills.py` wires skills into
   the redirected root.
 
-INFERRED, one unverified link: that Claude Code resolves user skills from `$CLAUDE_CONFIG_DIR/skills`
-rather than always from `~/.claude/skills`. `env.claude.sh` asserts it, but the measurement cited
-for that block covers auth and state, not skills.
-
-If the link holds, a harness session cannot invoke `/citation-hygiene`, `/rig-assertion-discipline`,
-`/paid-run-protocol` or `/healbot-traps`, which `NEXT.md`'s prompt block instructs every session to
-invoke before the matching work, and it loses `/firstmate`, `/plaincode`, `/plainspec`, `/tdd` and
-every plugin skill as well. That would make the harness strictly less capable than stock Claude Code
-for the captain's own work, which is a sufficient explanation for the switch not having happened.
-
-**Test it before designing around it.** One headless turn under the harness env, asked to list its
-skills, settles it. Within `NEXT.md`'s few-turns allowance; still `/paid-run-protocol` first.
-
 ## Resolution
 
 Grilled 2026-08-05, two rounds. The pain is **not** where the map guessed.

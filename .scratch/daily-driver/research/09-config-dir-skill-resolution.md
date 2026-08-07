@@ -115,17 +115,5 @@ than discovery, and ticket 10's acceptance test covers it anyway.
 `harness/env.claude.sh` sets `CLAUDE_CONFIG_DIR` to `harness/claude`, which has no `skills/`
 directory and a `plugins/` holding only `known_marketplaces.json` and an empty `marketplaces`. So
 **every session the harness has ever launched, including every crewmate spawned through
-`hb-fleet.sh`, has run with no skills and no plugins.**
-
-That includes the four skills `NEXT.md`'s prompt block orders every session to invoke before the
-matching work: `/rig-assertion-discipline`, `/citation-hygiene`, `/paid-run-protocol` and
-`/healbot-traps`. A crewmate instructed to invoke them could not have, and would have had no way to
-report that beyond the slash command not existing.
-
-It also means `harness/install-skills.py` and `harness/doctor.py`'s skill-twins row have been
-verifying skills at `~/.claude/skills`, a root the harness redirects away from. The installer and
-the doctor were both correct about the default root and both blind to the one the harness uses.
-
-This is a sufficient mechanical explanation for the captain's "I don't know how to operate within
-the harness": the harness has been strictly less capable than stock Claude Code, and no amount of
-learning would have closed that.
+`hb-fleet.sh`, has run with no skills and no plugins.** That includes the four skills `NEXT.md`'s
+prompt block orders every session to invoke before the matching work.

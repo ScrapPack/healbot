@@ -53,7 +53,3 @@ projects, so `/orient` as written is anchored to a repo that has `HARNESS.md`, `
 `.scratch/` map. In a fresh project none of those exist. Either the command degrades honestly to
 "this project has no map yet, want one?", or project onboarding becomes its own ticket. Decide which
 here rather than letting a fresh project produce a confusing report.
-
-The original question below still stands on what `/orient` should load. Ticket 01's diagnosis was
-that the real blocker is operator knowledge rather than a missing feature, so weigh any answer that
-adds something to remember accordingly.

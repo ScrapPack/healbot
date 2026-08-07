@@ -50,7 +50,6 @@ Resolved 2026-08-05 by grilling, four rounds. Eleven questions, all answered by 
 
 ### What the record actually said
 
-The Question's original cost line read "30 to 120 seconds" and was wrong; it is corrected above.
 Measured across the 119 records in `gate/runs/*-review.json` as of this close: 115 timed runs, of
 which 41% finish at or under 120 s, median 136 s, p90 316 s, max 443 s. 109 runs carry a
 `total_cost_usd`, median $0.89, p90 $2.08, max $4.15, $121.47 cumulative.
