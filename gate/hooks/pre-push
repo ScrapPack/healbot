@@ -64,10 +64,7 @@ STALE=${HEALBOT_STALE_CMD:-"$VENVPY $ROOT/gate/staleness.py"}
 # deletion skip: a deletion-only push (every local sha ZERO) gates nothing and passes
 # venv-free, exactly as it did before the refusal existed — a fresh clone deleting a
 # remote branch has nothing to measure. No buffering of stdin: the loop is the direct
-# reader, the original architecture. (An earlier draft buffered the refs through a
-# here-doc; the review called that an execution hazard, which was wrong — expansion
-# results are not re-scanned — but the buffer was needless moving parts either way, and
-# in-loop refusal needs none of it.)
+# reader, the original architecture.
 needs_venv=""
 if [ -z "$VENVPY" ]; then
   [ -z "${HEALBOT_GATE:-}" ] && needs_venv=1

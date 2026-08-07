@@ -24,21 +24,6 @@ reminder is structural, and a phase that closed without a `-tier2.json` record i
 gate/runs/ is visible by absence — the same absence-is-a-signal property the publish
 flow relies on.
 
-WHERE IT RUNS, and the honesty problem that created. MEASURED 2026-08-01 from a pool worktree
-slot: four probes red, none of them a defect — a symlink `env.claude.sh` materializes at source
-time, an installed skill owned by whichever checkout last synced it, a transcript corpus
-selected by CLAUDE_CONFIG_DIR, session rows keyed to the main checkout's absolute path. A slot
-run reported BLOCKED for reasons a slot cannot fix and must not try to. `rig.Env` is the
-answer: a check names the machine fact it needs, and when that fact is absent it records a
-DECLARED SKIP instead of a red. The tier lifts those out of each probe's stdout (rig.py's
-`##ENV-SKIP##` line), counts them into the run record by name and reason, and reports the
-verdict `declared-skip` — green, exit 0, and explicit that not everything here was measured.
-The rule that keeps this from becoming a mute button lives one layer down: every skip is
-budgeted per rig (`Results(skip_max=)`), a rig that skips past its budget is RED, and a rig
-where nothing was measured at all is RED whatever the budget says. In the MAIN checkout every
-requirement holds, zero skips are recorded, and the verdict is a plain `pass` — which is the
-property to assert at merge-back, because it is what says the slot's green was a local reading
-and not a lowered bar.
 
     .carryover/verified/venv/bin/python gate/tier2.py          # run the tier
     .carryover/verified/venv/bin/python gate/tier2.py --list   # show what would run
@@ -77,8 +62,7 @@ def discover():
 
 
 def first_doc_line(name):
-    """The probe's own docstring headline is its `why` — one owner for that prose, here
-    a pointer. Thirteen hand-copied summaries would be thirteen rot surfaces."""
+    """The probe's own docstring headline is its `why` — one owner for that prose."""
     try:
         with open(f"{VERIFIED}/{name}", encoding="utf-8") as fh:
             doc = ast.get_docstring(ast.parse(fh.read())) or ""
