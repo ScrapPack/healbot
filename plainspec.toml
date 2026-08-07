@@ -1,0 +1,28 @@
+# Repo-scoped exemptions from the plainspec writing standard.
+#
+# The standard itself (harness/skills/plainspec.md) is deliberately general and portable, so one
+# repo's taste does not belong inside it. This file is where a repo records the rules it has ruled
+# out. plainspec-check.py finds it by walking up from each checked file, so a hand run and a gate
+# run over the same file always agree.
+#
+# Keys match a finding as "RULE:message", by prefix. "R8" would exempt all of rule 8; "R8:em-dash"
+# exempts only that one test of it.
+
+[plainspec]
+
+# Rule 8 bans em-dashes. The owner ruled on 2026-08-01 that repo style wins here, overriding the
+# global no-em-dash rule in ~/.claude/CLAUDE.md.
+#
+# Until now that ruling lived only in .claude/handoffs/handoff-20260801-144013.md, a document
+# slated for deletion — which is why a cleanup batch that tried to delete it correctly refused, and
+# why that handoff's own closing list still carries "record the em-dash decision somewhere
+# durable" as an open item. This is that record, and it is the enforcing one: prose saying the rule
+# does not apply would not have stopped the checker counting 1,521 violations, 34% of the repo's
+# total, on every push.
+#
+# The rest of rule 8 still applies: no semicolons, at most one parenthetical per sentence.
+#
+# NOT the same policy as harness/config/opencode/agent/build.md's "no emojis or em dashes unless
+# asked". That one governs the AGENT'S OUTPUT, is frozen into both paid A/B arms at
+# arms/*/files/opencode/agent/build.md:26, and must not be touched.
+disable = ["R8:em-dash"]

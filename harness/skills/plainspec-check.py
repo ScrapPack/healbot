@@ -10,6 +10,14 @@ Usage:
     python3 plainspec-check.py [--strict] [--error-message] [--score] FILE ...
     python3 plainspec-check.py --selftest
 
+Repo-scoped exemptions: the nearest `plainspec.toml` at or above each checked file may
+carry `[plainspec] disable = ["R8:em-dash"]`. Keys match a finding as "RULE:message" by
+prefix, so a whole rule or one of its tests can be ruled out by the repo that owns the
+prose. Discovery is upward from the file and never a flag, so a hand run and a gate run
+over the same file cannot disagree. Exempted findings are counted and printed with the
+score, never silently subtracted. Needs tomllib (Python 3.11+); on an older interpreter
+the config is reported and IGNORED rather than half-applied.
+
 Exit codes: 0 clean (JUDGE flags allowed), 1 at least one VIOLATION, 2 usage or
 I/O error. --strict adds rules 12-15. --error-message additionally applies rule
 14's 3-sentence cap to the whole input (only the caller knows the text IS an
@@ -41,11 +49,70 @@ Deviations and known limits (the spec stays authoritative):
   spec lists, and version tokens ("v2") counting as measurements.
 """
 
+import os
 import re
 import sys
 
 VIOLATION = "VIOLATION"
 JUDGE = "JUDGE"
+
+CONFIG_NAME = "plainspec.toml"
+
+
+def find_config(path):
+    """The nearest `plainspec.toml` at or above a checked file, or None.
+
+    Discovery is automatic and upward, never a flag. A flag would mean that whoever forgot to pass
+    it got a different answer from the same checker over the same file — a hand run and a gate run
+    disagreeing is worse than having no exemption mechanism at all.
+    """
+    d = os.path.dirname(os.path.abspath(path))
+    while True:
+        candidate = os.path.join(d, CONFIG_NAME)
+        if os.path.isfile(candidate):
+            return candidate
+        parent = os.path.dirname(d)
+        if parent == d:
+            return None
+        d = parent
+
+
+def load_exemptions(cfg):
+    """Read `[plainspec] disable = [...]` into a set of "RULE" / "RULE:message-prefix" keys.
+
+    A key matches a finding as `f"{rule}:{msg}"`, by prefix, so a whole rule ("R8") or a single one
+    of its tests ("R8:em-dash") can be ruled out. The spec file stays authoritative about what the
+    rules ARE; this only records that one repo has decided one of them does not apply to it.
+
+    Any failure to read the file is REPORTED and the exemptions are dropped. A config that silently
+    stops applying would quietly change every count the checker prints.
+    """
+    if not cfg:
+        return frozenset()
+    try:
+        import tomllib
+    except ImportError:
+        print(f"{cfg}: this Python has no tomllib (needs 3.11+) — exemptions IGNORED",
+              file=sys.stderr)
+        return frozenset()
+    try:
+        with open(cfg, "rb") as fh:
+            data = tomllib.load(fh)
+    except (OSError, ValueError) as e:
+        print(f"{cfg}: cannot read ({e}) — exemptions IGNORED", file=sys.stderr)
+        return frozenset()
+    disabled = data.get("plainspec", {}).get("disable", [])
+    if not isinstance(disabled, list) or not all(isinstance(k, str) for k in disabled):
+        print(f"{cfg}: [plainspec] disable must be a list of strings — exemptions IGNORED",
+              file=sys.stderr)
+        return frozenset()
+    return frozenset(disabled)
+
+
+def is_exempt(finding, exemptions):
+    """Does a (rule, severity, line, msg) finding match any exemption key?"""
+    rule, _, _, msg = finding
+    return any(f"{rule}:{msg}".startswith(k) for k in exemptions)
 
 # ------------------------------------------------------------------------------------------
 # Preprocessing — plainspec.md "Running the tests": strip frontmatter, fenced code, inline
@@ -637,6 +704,7 @@ def main(argv):
     strict = "--strict" in flags
     err_mode = "--error-message" in flags
     worst = 0
+    seen_configs = {}  # config path -> exemptions, so a run over 100 files parses each config once
     for path in args:
         try:
             with open(path, encoding="utf-8") as fh:
@@ -647,12 +715,26 @@ def main(argv):
             continue
         findings = check_text(text, strict=strict, error_message=err_mode)
         n_words = len(words(preprocess(text)))
+
+        cfg = find_config(path)
+        if cfg not in seen_configs:
+            seen_configs[cfg] = load_exemptions(cfg)
+        exemptions = seen_configs[cfg]
+        n_exempt = 0
+        if exemptions:
+            kept = [f for f in findings if not is_exempt(f, exemptions)]
+            n_exempt = len(findings) - len(kept)
+            findings = kept
+
         violations = [f for f in findings if f[1] == VIOLATION]
         for rule, sev, line, msg in sorted(findings, key=lambda f: f[2]):
             print(f"{path}:{line}: {sev} [{rule}] {msg}")
         if "--score" in flags and n_words:
+            # The exempted count is PRINTED, never just subtracted. A density that silently drops
+            # because a config exists is a number nobody can check against the spec.
+            note = f", {n_exempt} exempt by {os.path.basename(cfg)}" if n_exempt else ""
             print(f"{path}: {len(violations) * 100 / n_words:.2f} violations per 100 words "
-                  f"({len(violations)} violations, {n_words} words)")
+                  f"({len(violations)} violations, {n_words} words{note})")
         if violations and worst < 2:
             worst = 1
     return worst

@@ -106,6 +106,27 @@ version numbers as non-terminal. A word is a whitespace-separated token. These
 tests run on this file too, except each rule's own test text (from "Test" to the end
 of the item).
 
+## Repo-scoped exemptions
+
+A repo may rule that one of these rules does not apply to it. That decision belongs to
+the repo, never in this file: the standard is meant to be portable, and one project's
+house style written into it would travel to every other project that installs the skill.
+
+`check.py` reads the nearest `plainspec.toml` at or above each checked file:
+
+```toml
+[plainspec]
+disable = ["R8:em-dash"]
+```
+
+Keys match a finding as `RULE:message`, by prefix, so `R8` rules out all of rule 8 and
+`R8:em-dash` rules out only that one test. Discovery walks upward from the file rather
+than taking a flag, so a hand run and a gate run over the same file cannot disagree.
+Exempted findings are counted and printed alongside the score, never silently subtracted:
+a density that quietly drops because a config exists is a number nobody can check.
+
+A repo with no `plainspec.toml` gets every rule, which is the default.
+
 ## Self-check
 
 Before delivering, scan the artifact against every listed test. When check.py sits
