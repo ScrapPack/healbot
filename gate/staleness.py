@@ -173,7 +173,7 @@ def classify_span(old, new, lo, hi, hs):
 
 
 def changed_paths(base, head, cwd=None):
-    """-> the paths this range changed, or None when git could not answer.
+    r"""-> the paths this range changed, or None when git could not answer.
 
     `core.quotePath=false` FOR THE SAME REASON `hunks()` SETS IT three functions up, and this
     call was missing it. With quoting on — git's default — a non-ASCII path arrives as

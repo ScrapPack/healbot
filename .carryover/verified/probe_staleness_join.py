@@ -74,26 +74,34 @@ try:
         "green over it",
     )
 
-    # A fixture repository built to carry exactly the path shape the real one does not have.
-    # Both legs below run the SHIPPED function against it, so removing the quotePath flag or
-    # reverting to whitespace splitting turns one red each.
+    # A fixture repository carrying a path shape the real one does not have. This leg runs the
+    # SHIPPED `changed_paths` against it; the whitespace leg below is a pure-function check on a
+    # literal. The fixture name has NO space, deliberately, so the two legs fail for two
+    # different reasons: removing the quotePath flag reddens this one only, and reverting to
+    # whitespace splitting reddens that one only.
+    #
+    # `core.quotePath` IS PINNED TRUE, which is the whole leg. It is git's default, so the first
+    # draft left it ambient — and on a machine that had disabled it globally the leg would pass
+    # whether or not the shipped code carried the flag, which is an assertion incapable of
+    # failing dressed as a mutation control (review finding from the 2e114b1 push).
     _fx = tempfile.mkdtemp(prefix="hb-quote-")
     _g = lambda *a: subprocess.run(["git", "-C", _fx, *a], capture_output=True, text=True)  # noqa: E731
     _g("init", "-q")
     _g("config", "user.email", "probe@healbot.local")
     _g("config", "user.name", "probe")
+    _g("config", "core.quotePath", "true")
     open(os.path.join(_fx, "seed.md"), "w", encoding="utf-8").write("x\n")
     _g("add", "-A")
     _g("commit", "-q", "-m", "seed")
     _base = _g("rev-parse", "HEAD").stdout.strip()
-    for _name in ("docs café.md", "plain.md"):
+    for _name in ("café.md", "plain.md"):
         open(os.path.join(_fx, _name), "w", encoding="utf-8").write("y\n")
     _g("add", "-A")
-    _g("commit", "-q", "-m", "a spaced non-ASCII path and a plain one")
+    _g("commit", "-q", "-m", "a non-ASCII path and a plain one")
     _seen = staleness.changed_paths(_base, "HEAD", cwd=_fx)
     r.check(
         "a changed path that is NON-ASCII arrives as itself, not as octal escapes",
-        _seen == {"docs café.md", "plain.md"},
+        _seen == {"café.md", "plain.md"},
         f"git quotes such a path as a `\\303\\251` escape by default, and an escaped key can "
         f"never match an index built by walking the filesystem — so the citations into that file "
         f"are dropped from the join SILENTLY. `hunks()` sets `core.quotePath=false` for exactly "
