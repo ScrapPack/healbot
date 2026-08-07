@@ -50,10 +50,13 @@ import memory  # noqa: E402
 # Re-declared from each phase's first green run rather than kept at the number the plan
 # projected (17, then 26). The plan's own rule: a number written down before the rows are
 # counted is how an unreachable floor gets cited in four documents as exit-gate evidence.
-# Phase 4 closed at 22; phase 5 adds the three triggers and closed at 38; phase 6 adds
-# retrieval and orientation and closed at 55; phase 7 adds backfill, the promotion
-# path and the doctor rows and closes at 68.
-r = rig.Results(expect=68)
+#
+# The per-phase running tally that used to sit here is DELETED rather than corrected. It was a
+# number with nothing computing it, so every leg added below rotted it — and correcting it
+# produces a new number the next leg invalidates, which is the mechanism that sustains this
+# repo's review-fix chains. The floor is on the next line and the probe prints it; the phase
+# it was raised in is in `git log -p` on that line, which does compute the answer.
+r = rig.Results(expect=70)
 
 STORE = tempfile.mkdtemp(prefix="hb-records-")
 ENV = {"HEALBOT_RECORDS": STORE}
@@ -77,7 +80,7 @@ def sample(**over):
         ],
         rationale="First paragraph of the reasoning.\n\nSecond paragraph, so the body is proven "
                   "to survive a blank line rather than only a single line.",
-        evidence=["harness/memory.py:1", "gate/gate.py:245"],
+        evidence=["harness/memory.py:1", "gate/gate.py:333"],
         classification="VERIFIED",
         anchor={"commit_sha": "deadbeef", "changed_files": ["harness/memory.py"]},
         supersedes=None,
@@ -353,6 +356,12 @@ try:
     git("init", "-q")
     git("config", "user.email", "probe@healbot.local")
     git("config", "user.name", "probe")
+    # `core.quotePath` IS PINNED TRUE, and the pin is load-bearing for the odd-path rows below.
+    # True is git's default, so leaving it ambient would let those rows pass on a machine that
+    # had disabled it globally whether or not the shipped code carries `core.quotePath=false` —
+    # a mutation control incapable of failing dressed as one that is, which is the finding a
+    # fixture in this same work already earned (review finding from the 2e114b1 push).
+    git("config", "core.quotePath", "true")
     with open(os.path.join(hookrepo, "watched.py"), "w", encoding="utf-8") as fh:
         fh.write("one\ntwo\nthree\n")
     with open(os.path.join(hookrepo, "ignored.py"), "w", encoding="utf-8") as fh:
@@ -428,6 +437,65 @@ try:
         "a record already carrying a sha keeps it. Re-stamping would move every record in the "
         "store onto whatever commit happened last, which is the opposite of an anchor",
     )
+    # --- the two path shapes a naive parse of `git diff-tree` destroys ------------------------
+    #
+    # BOTH SHAPES, ONE FIXTURE, and through the SHIPPED HOOK rather than by calling `changed_in`
+    # directly, because that is three regressions one leg cannot otherwise reach:
+    #
+    #   - the NON-ASCII name fails if `changed_in` stops passing `core.quotePath=false`;
+    #   - the SPACED name fails if it goes back to `.stdout.split()`, which breaks on ALL
+    #     whitespace;
+    #   - EITHER fails if `_cmd_stamp` stops routing through `changed_in` and inlines its own
+    #     parse again, which is the pair of copies this leg exists over (review finding from the
+    #     3441813 push, where both call sites in `memory.py` carried both defects).
+    #
+    # The same construction as `probe_staleness_join.py`'s fixture for the sibling module, and
+    # for its reason: a previous draft there dropped the space to make two legs "fail for
+    # different reasons" and bought that tidiness with the wiring coverage (review finding from
+    # the 4c4ff85 push).
+    odd_path = memory.capture(
+        {"question": "Does the anchor survive a path git would mangle?",
+         "choice": "The changed set is parsed once, with quoting off and on line boundaries",
+         "classification": "TESTED",
+         "evidence": ["café.md:1", "two words.md:1"],
+         "rationale": "captured unanchored, like every other record the hook stamps"},
+        start=hookrepo, env=ENV,
+    )
+    for odd_name in ("café.md", "two words.md"):
+        with open(os.path.join(hookrepo, odd_name), "w", encoding="utf-8") as fh:
+            fh.write("first line\n")
+    git("add", "-A")
+    git("commit", "-q", "-m", "a non-ASCII path and a spaced path in one commit")
+    odd = run_hook()
+    # Read back BY PATH, never by index into `load_all`: an index would silently read the
+    # already-anchored record from the rows above if this capture had not landed, and the leg
+    # would then be asserting about the wrong record.
+    odd_rec = memory.read(odd_path)
+    odd_files = set(odd_rec["anchor"]["changed_files"])
+    r.check(
+        "a NON-ASCII and a SPACED changed path both reach `anchor.changed_files` intact",
+        odd_rec["anchor"]["commit_sha"] == git("rev-parse", "HEAD").stdout.strip()
+        and odd_files == {"café.md", "two words.md"},
+        f"TWO CAUSES, and the missing entry names which. `café.md` absent: `changed_in` stopped "
+        f"passing `core.quotePath=false`, so git returned a `\\303\\251` escape, quotes "
+        f"included. `two words.md` absent, or fragmented into `two` and `words.md`: the parse "
+        f"went back to `.stdout.split()`, which splits on ALL whitespace. Either way the record "
+        f"anchors to a commit whose file list is missing the file the decision is about — "
+        f"SILENTLY, which reads exactly like a clean run. got {sorted(odd_files)}",
+    )
+    r.check(
+        "…and the revalidation flag fires for the evidence pointing into BOTH of them, and for "
+        "nothing else",
+        "café.md:1" in odd.stderr and "two words.md:1" in odd.stderr
+        and "watched.py" not in odd.stderr,
+        f"the consequence a reader actually sees, and the reason the row above is not enough on "
+        f"its own: `stamp` matches every `evidence` pointer against that same changed set, so a "
+        f"mangled path costs the one warning the hook exists to print. `watched.py` carries the "
+        f"NEGATIVE half in this same run — it is cited by the first record and was not in this "
+        f"commit, so a hook that reported every pointer it could see would pass the two positive "
+        f"clauses and fail here. stderr: {odd.stderr.strip()!r}",
+    )
+
     bare = tempfile.mkdtemp(prefix="hb-nogit-")
     outside = subprocess.run(["/bin/sh", HOOK], cwd=bare, env=hook_env,
                              capture_output=True, text=True)
@@ -824,7 +892,7 @@ try:
         memory._home_predicate() is not None
         and memory._home_predicate()("x " + anchored_path)
         and not memory._home_predicate()("./home/footer imports"),
-        "gate.py:256 carries a standing 14-row truth table validated before every scan, and it "
+        "gate.py:344 carries a standing 14-row truth table validated before every scan, and it "
         "already caught one real bug two ad-hoc controls missed. A re-implementation here would "
         "start that history over, and the place it would be wrong is a public repository",
     )

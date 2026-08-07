@@ -195,7 +195,7 @@ def changed_from(out):
     without a repository, and this parsing has a failure mode worth a test. The first version
     was `set(out.split())`, which splits on ALL whitespace — so a tracked path containing a
     space fragments into pieces that can never match an index key, and every citation into that
-    file is dropped from the join SILENTLY. `gate.py:91` already parses the identical command
+    file is dropped from the join SILENTLY. `gate.py:117` already parses the identical command
     with `splitlines()`; two readings of one command's output is how they disagree.
 
     Latent today (`git ls-files | grep -c " "` returns 0) and fixed anyway: the cost of the

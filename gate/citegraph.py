@@ -114,7 +114,7 @@ def rel_posix(path):
 
 def git_owned(root):
     """Absolute paths of every file git owns under `root`: tracked, plus untracked and not
-    ignored. Same pair of commands `gate.py:78-91` uses to decide what a change touches.
+    ignored. Same pair of commands `gate.py:78-86` uses to decide what a change touches.
 
     TWO repositories are asked, not one. `/opencode/` is gitignored wholesale by this repo
     and is its own checkout, so asking only the outer repo would empty the index of the

@@ -41,12 +41,13 @@ mutants. That record predates the deletion leg, which reads only the hook and is
 to the range machinery that test reverted.
 
 Commit identities and dates are pinned, so the scratch shas are stable and this probe's
-output is byte-identical across runs: MEASURED 2026-08-03 at 19 rows (the sentinel legs
-included), 4 runs, one sha256 over the full output. Tier 2 hashes nothing, so nothing
-depends on that; it is measured because
+output is byte-identical across runs: MEASURED 2026-08-03, 4 runs, one sha256 over the full
+output. Tier 2 hashes nothing, so nothing depends on that; it is measured because
 the gate's determinism note says to measure rather than hope, and it is what Tier 1
-membership would require. Needs `ruff` on PATH, the same requirement the gate's own lint
-stage carries.
+membership would require. The row count that used to sit in that sentence is gone rather
+than corrected: it is a number with nothing computing it, so every leg added below rotted
+it, and `Results(expect=N)` already computes and prints it. Needs `ruff` on PATH, the same
+requirement the gate's own lint stage carries.
 
   venv/bin/python probe_gate_scope.py
 """
@@ -79,6 +80,20 @@ OLD_SCOPE = "f\"{base}...{head or 'HEAD'}\""
 NEW_SCOPE = 'f"{base}...HEAD"'
 OLD_HEAD = '"head": gated, "tree": tree,'
 NEW_HEAD = '"head": tree,'
+
+# The two path shapes git's own defaults destroy, and one of them is a BANNED filename so the
+# cost lands on an invariant rather than on tidiness: `banned_names` matches by basename, and
+# the basename of the quoted form is `CLAUDE.md"` — trailing quote — which is not in BANNED.
+ODD_BANNED = "docs/café/CLAUDE.md"
+ODD_SPACED = "té st.py"
+
+# MUTATION 3 takes the quoting flag off the shared enumeration. MUTATION 4 stops it reading the
+# exit code, so git's `fatal:` text becomes the file list again. Both are the pre-fix source
+# restated exactly, and both must match gate.py once — asserted before the legs that use them.
+OLD_QUOTE = 'sh(["git", "-c", "core.quotePath=false", *args])'
+NEW_QUOTE = 'sh(["git", *args])'
+OLD_CODE = '    if r["code"] != 0:\n        return None\n'
+NEW_CODE = "    if False:\n        return None\n"
 
 # Pinned identity and dates: scratch shas do not move between runs and no machine identity
 # leaks into scratch commits. The config isolation keeps the user's global git config
@@ -147,6 +162,45 @@ def build_scenario(tmp, plant=PLANT):
     tip = rev(work, "HEAD")
     git(work, "checkout", "-q", "-b", "parked", base)  # park the checkout on the ancestor
     return work, remote, base, tip
+
+
+def build_odd(tmp):
+    """A gated push whose change carries the two path shapes git quotes by default, one of them
+    a banned filename. Returns (work, remote, base, tip).
+
+    NO PARKED CHECKOUT, unlike `build_scenario`: these legs ask what the enumeration RETURNS,
+    not which tip it ends at, and a parked checkout would put a second explanation behind every
+    red. The quoting premise is structural rather than a config line — `GIT_ENV` points
+    `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_SYSTEM` at os.devnull and sets `GIT_CONFIG_NOSYSTEM`, so
+    `core.quotePath` sits at git's compiled-in default and no machine can have disabled it under
+    the legs. That is asserted rather than assumed: a fixture inheriting ambient git config is
+    how a mutation control ends up incapable of failing (review finding from the 2e114b1 push).
+    """
+    os.makedirs(tmp)
+    remote, work = f"{tmp}/remote.git", f"{tmp}/work"
+    git(tmp, "init", "-q", "--bare", "remote.git")
+    git(tmp, "init", "-q", "-b", "main", "work")
+    write(f"{work}/README.md", "odd-path scratch repo for probe_gate_scope.py\n")
+    write(f"{work}/.gitignore", "/gate/\n/.carryover/\n/review-stub.sh\n")
+    git(work, "add", ".")
+    git(work, "commit", "-q", "-m", "base")
+    base = rev(work, "HEAD")
+    git(work, "remote", "add", "origin", remote)
+    git(work, "push", "-q", "origin", "main")          # before the hook wires in: ungated
+    git(work, "config", "core.hooksPath", HOOKS)       # the REAL pre-push, from this repo
+    write(f"{work}/{ODD_BANNED}", "# a banned filename behind a non-ASCII directory\n")
+    write(f"{work}/{ODD_SPACED}", "def clean():\n    return 2\n")  # clean: ruff must not block
+    git(work, "add", "-A")
+    git(work, "commit", "-q", "-m", "a quoted path and a spaced one")
+    return work, remote, base, rev(work, "HEAD")
+
+
+def row_of(rec, name):
+    """One named row from a run record, or {}. Never None, so a predicate reading `.get` on a
+    record that was never written is False rather than an AttributeError the crash guard would
+    report as an exception instead of as the claim that failed."""
+    rows = [c for c in (rec.get("checks", []) if rec else []) if c.get("check") == name]
+    return rows[0] if len(rows) == 1 else {}
 
 
 def tier1_stub_names():
@@ -226,7 +280,7 @@ def record_scope_ok(rec, work, tip):
             and rec.get("tree") == short(work, "HEAD"))
 
 
-r = Results(expect=19)
+r = Results(expect=30)
 TMP = tempfile.mkdtemp(prefix="probe_gate_scope.")
 try:
     r.check(
@@ -409,6 +463,150 @@ try:
         and rev(c_remote, "refs/heads/main") == c_base,
         "the boundary that keeps the sentinel narrow: only the DECLARED refusal "
         "reclassifies — a crash or a red stays a finding, fail-closed",
+    )
+
+    # --- the change scope itself: a path git quotes, and a range git cannot resolve ------
+    #
+    # Two defects in the one function every change-scoped check reads (review finding from the
+    # 3441813 push). `gate/staleness.py` and `harness/memory.py` both parse this same command's
+    # output correctly and both cite gate.py for `splitlines()` — gate.py was the copy the
+    # other two pointed at and the one still missing `core.quotePath=false`, and it also read
+    # `sh()["out"]` (stderr merged in) without ever reading `["code"]`.
+    r.check(
+        "the quoting mutation still applies to gate.py, exactly once",
+        gate_src.count(OLD_QUOTE) == 1,
+        f"zero would mean the shared enumeration moved under this probe, and MUTATION 3 below "
+        f"would install a gate.py identical to the shipped one — a detection row that cannot "
+        f"fail. count={gate_src.count(OLD_QUOTE)}",
+    )
+    r.check(
+        "the exit-code mutation still applies to gate.py, exactly once",
+        gate_src.count(OLD_CODE) == 1,
+        f"same argument as the quoting count, for MUTATION 4. count={gate_src.count(OLD_CODE)}",
+    )
+
+    o_work, o_remote, o_base, o_tip = build_odd(f"{TMP}/odd")
+    install_gate(o_work)
+    raw = git(o_work, "diff", "--name-only", f"{o_base}...{o_tip}").stdout
+    r.check(
+        "PREMISE: this scenario's git DOES quote, so the two legs below are controls",
+        '"docs/caf\\303\\251/CLAUDE.md"' in raw and '"t\\303\\251 st.py"' in raw,
+        f"the legs below assert that the SHIPPED path un-quotes what raw git quotes. If git "
+        f"ever stops quoting here — a changed default, or a config reaching the scenario past "
+        f"GIT_ENV — they would pass over a gate.py with no flag at all, and this row is what "
+        f"says so instead. raw git returned {raw.split()!r}",
+    )
+    opush = push(o_work)
+    o_rec = run_record(o_work)
+    r.check(
+        "a QUOTED and a SPACED changed path both reach the record as themselves",
+        o_rec is not None and o_rec.get("files") == sorted([ODD_BANNED, ODD_SPACED]),
+        f"TWO CAUSES, and the surviving entry names which. Octal-escaped and quoted: the "
+        f"enumeration stopped passing `core.quotePath=false`. Fragmented into `té` and `st.py`: "
+        f"it went back to splitting on all whitespace. got {(o_rec or {}).get('files')!r}",
+    )
+    r.check(
+        "…and the BANNED-filename invariant fires on the quoted one, refusing the push",
+        row_of(o_rec, "banned-filenames").get("state") == "blocked"
+        and ODD_BANNED in row_of(o_rec, "banned-filenames").get("out", "")
+        and opush.returncode != 0 and rev(o_remote, "refs/heads/main") == o_base,
+        f"the consequence, and the reason the row above is not enough on its own: BANNED is "
+        f"matched by BASENAME, and the basename of the quoted form is `CLAUDE.md\"` — trailing "
+        f"quote — which is not in the set. The ban goes quiet on the one file it exists to "
+        f"refuse and the remote advances. row={row_of(o_rec, 'banned-filenames').get('state')!r} "
+        f"push={opush.returncode} ref_moved={rev(o_remote, 'refs/heads/main') != o_base}",
+    )
+
+    r.check(
+        "…and lint SCOPES TO the non-ASCII Python file rather than skipping it",
+        row_of(o_rec, "ruff").get("state") == "pass"
+        and "1 changed Python file(s)" in row_of(o_rec, "ruff").get("why", ""),
+        f"the SECOND cost the flag carries, and the two rows above cannot see it. A quoted "
+        f"`té st.py` ends in `.py\"`, so `lint`'s `endswith('.py')` stops matching and ruff "
+        f"records SKIPPED over changed Python — and a regression in lint SCOPING alone (in "
+        f"`_in_change`, not in the enumeration) leaves the file list and the banned row exactly "
+        f"as they are here. Without this row that regression is green. "
+        f"ruff={row_of(o_rec, 'ruff').get('state')!r} why={row_of(o_rec, 'ruff').get('why')!r}",
+    )
+
+    def bad_base(work, base="nosuchref"):
+        """gate.py run DIRECTLY on an unresolvable range -> (process, record). Direct because
+        the hook validates its base before gate.py sees it (`git cat-file -e`, then a
+        merge-base fallback guarded by `[ -n "$base" ]`), so the reachable caller is the
+        documented hand-run form — `gate.py --base main`, which docs/AFK.md's autonomous
+        stop-condition polls. A dedicated runs dir per call: `run_record` requires exactly
+        one record, and the push above already wrote one."""
+        runs = f"{work}/gate/runs-{base}"
+        p = subprocess.run([sys.executable, f"{work}/gate/gate.py", "--base", base], cwd=work,
+                           capture_output=True, text=True, timeout=300,
+                           env={**os.environ, **GIT_ENV, "HEALBOT_GATE_RUNS": runs})
+        found = glob.glob(f"{runs}/*.json")
+        if len(found) != 1:
+            return p, None
+        with open(found[0], encoding="utf-8") as fh:
+            return p, json.load(fh)
+
+    bp, b_rec = bad_base(o_work)
+    r.check(
+        "a range git CANNOT resolve is ERROR at exit 3, and the record carries git's own text",
+        bp.returncode == 3 and (b_rec or {}).get("verdict") == "error"
+        and row_of(b_rec, "change-scope").get("state") == "error"
+        and "fatal:" in row_of(b_rec, "change-scope").get("out", ""),
+        f"UNMEASURED is not CLEAN — gate.py's own lattice says so and `home_paths` already "
+        f"refused this on its enumeration. The `fatal:` clause is the diagnosability half: the "
+        f"pre-fix code leaked git's message by printing it as the file list, so a fix that "
+        f"merely swallowed the failure would trade one silent wrong answer for a silent right "
+        f"one. exit={bp.returncode} verdict={(b_rec or {}).get('verdict')!r}",
+    )
+    r.check(
+        "…and every change-scoped row says ERROR rather than SKIPPED or PASS",
+        all(row_of(b_rec, n).get("state") == "error"
+            for n in ("ruff", "tsgo", "oxlint", "banned-filenames"))
+        and row_of(b_rec, "home-paths").get("state") == "pass",
+        f"ALL FOUR, not a sample: the rows are the durable artifact, so a verdict of error over "
+        f"rows still reading `no changed Python files`, `no changed fork/ TypeScript` and `none "
+        f"in the change` would leave fabricated affirmative claims in the record. An earlier "
+        f"draft of this row named four and read two, so a later narrowing of lint's unmeasured "
+        f"branch to `ruff` alone would have passed it. `home-paths` is the NEGATIVE half: it "
+        f"does not read the file list, so it must still measure — a run that reported "
+        f"everything unmeasured would pass the first clause and fail here. "
+        f"{ {n: row_of(b_rec, n).get('state') for n in ('ruff', 'tsgo', 'oxlint', 'banned-filenames', 'home-paths')} }",
+    )
+
+    # --- mutation 3: take the quoting flag back off the shared enumeration ---------------
+    q_work, q_remote, q_base, q_tip = build_odd(f"{TMP}/mut-quote")
+    install_gate(q_work, source=gate_src.replace(OLD_QUOTE, NEW_QUOTE))
+    qpush = push(q_work)
+    q_rec = run_record(q_work)
+    r.check(
+        "MUTATION 3: the quoted paths IS detected — the same predicate, red on the mutant",
+        q_rec is not None and q_rec.get("files") != sorted([ODD_BANNED, ODD_SPACED])
+        and any(f.startswith('"') for f in q_rec.get("files") or []),
+        f"the same record predicate the live leg passed. got {(q_rec or {}).get('files')!r}",
+    )
+    r.check(
+        "MUTATION 3: ...and the banned filename SAILS THROUGH in green",
+        row_of(q_rec, "banned-filenames").get("state") == "pass"
+        and qpush.returncode == 0 and rev(q_remote, "refs/heads/main") == q_tip,
+        "a tracked CLAUDE.md reaches the remote past the invariant that exists to refuse it, "
+        "and the record says `none in the change`: the outcome the flag exists to make "
+        "impossible, reproduced on demand",
+    )
+
+    # --- mutation 4: stop reading the exit code, the way the pre-fix source did ----------
+    e_work, _er, _eb, _et = build_odd(f"{TMP}/mut-code")
+    install_gate(e_work, source=gate_src.replace(OLD_CODE, NEW_CODE))
+    ep, e_rec = bad_base(e_work)
+    r.check(
+        "MUTATION 4: an unresolvable range exits 0 in green, git's error text as the file list",
+        ep.returncode == 0 and (e_rec or {}).get("verdict") == "pass"
+        and any("fatal:" in f for f in (e_rec or {}).get("files") or [])
+        and row_of(e_rec, "banned-filenames").get("state") == "pass",
+        f"the pre-fix behaviour restated: `sh` folds stderr into `out`, so the fatal text "
+        f"becomes the change set, no pseudo-path ends in `.py` or is named in BANNED, and the "
+        f"gate reports PASS at exit 0 over a scope it never enumerated — which is what the "
+        f"autonomous stop-condition in docs/AFK.md polls. exit={ep.returncode} "
+        f"verdict={(e_rec or {}).get('verdict')!r} files={(e_rec or {}).get('files')!r}",
     )
 
 except SystemExit:

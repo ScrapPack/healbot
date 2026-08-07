@@ -108,11 +108,28 @@ def collect_change(base, head=None):
     cannot see a new file cannot guard the change that adds one."""
     files = gate.changed_files(base, head)
     dropped = []
+    if files is None:
+        # An unenumerated range means the `git diff` below would return git's own `fatal:` text,
+        # and this stage ships its return value to a model as the untrusted CHANGE payload. A
+        # review of an error message reads as a clean review. `run_review` maps None to ERROR.
+        return None, "", []
     if base:
         diff = gate.sh(["git", "diff", f"{base}...{head or 'HEAD'}"])["out"]
     else:
         diff = gate.sh(["git", "diff", "HEAD"])["out"]
-        untracked = gate.sh(["git", "ls-files", "--others", "--exclude-standard"])["out"].splitlines()
+        # `gate.git_paths`, not a fourth copy of the rule. This is the SAME enumeration
+        # `changed_files` runs on the no-base path, and parsing it a second way here is what
+        # made `rec["files"]` name a file the payload did not carry: without
+        # `core.quotePath=false` an untracked `docs/café/CLAUDE.md` arrives quoted, `open`
+        # raises FileNotFoundError on the escaped name, and `dropped` records it as UNREADABLE
+        # — the filesystem blamed for an enumeration bug, over a file that is perfectly
+        # readable and that `files` above already lists as in scope.
+        untracked = gate.git_paths(["ls-files", "--others", "--exclude-standard"])
+        if untracked is None:
+            # Unreachable while `changed_files` runs the identical command above and returns
+            # None on its failure — but stated rather than assumed, because that coupling is
+            # not visible from here and a later edit could break it silently.
+            return None, "", []
         for f in untracked:
             path = f"{ROOT}/{f}"
             try:
@@ -187,6 +204,13 @@ def run_review(base, head=None):
 
     if MODE == "off":
         rec.update({"state": gate.SKIPPED, "why": "HEALBOT_REVIEW=off"})
+        return rec
+    # BEFORE the falsy check, because `not None` is True and would file an unenumerable range
+    # as "no changed files" — a SKIPPED record byte-shaped like the one a genuinely empty push
+    # produces. Unmeasured is ERROR here for the same reason it is in gate.py.
+    if files is None:
+        rec.update({"state": gate.ERROR,
+                    "why": "git could not enumerate the change — nothing was reviewed"})
         return rec
     if not files:
         rec.update({"state": gate.SKIPPED, "why": "no changed files"})

@@ -75,20 +75,88 @@ def sh(cmd, cwd=ROOT, timeout=900, input=None):
         return {"cmd": cmd, "code": None, "out": f"TIMEOUT after {timeout}s", "secs": time.time() - t0}
 
 
-def changed_files(base, head=None):
-    """Files this change touches. `base` of None means the working tree (staged + unstaged +
-    untracked); otherwise a diff of base...head, where `head` names the pushed tip (default
-    HEAD). A push gated from a checkout parked on another branch MUST pass head, or the
-    range collapses to whatever that checkout has: run 20260802-184854 gated a merge push
-    as ZERO files because its HEAD was an ancestor of the base. Untracked files stay
-    included: a gate that cannot see a new file cannot guard the change that adds one."""
+def _enum_cmds(base, head=None):
+    """The git enumerations `changed_files` runs, AS DATA. One list, two consumers: the
+    enumeration itself and the ERROR row that has to name which of them failed and carry git's
+    own text into the record. A second copy of these argument lists is how the row ends up
+    describing a command the run did not issue."""
     if base:
-        out = sh(["git", "diff", "--name-only", f"{base}...{head or 'HEAD'}"])["out"]
-    else:
-        tracked = sh(["git", "diff", "--name-only", "HEAD"])["out"]
-        untracked = sh(["git", "ls-files", "--others", "--exclude-standard"])["out"]
-        out = tracked + untracked
-    return sorted({ln.strip() for ln in out.splitlines() if ln.strip()})
+        return [["diff", "--name-only", f"{base}...{head or 'HEAD'}"]]
+    return [["diff", "--name-only", "HEAD"], ["ls-files", "--others", "--exclude-standard"]]
+
+
+def git_paths(args):
+    r"""-> the paths this `git` enumeration named, or None when git could not answer.
+
+    ONE RULE, EVERY CALL. `changed_files` issues three of these and all three had the same two
+    defects. `gate/staleness.py:175` and `harness/memory.py:625` parse identical output
+    correctly and both cite THIS FILE for `splitlines()` — so the call the other two point at
+    was the one still holding the bug (review finding from the 3441813 push).
+
+    `core.quotePath=false` because quoting is git's DEFAULT: without it `docs/café/CLAUDE.md`
+    arrives as `"docs/caf\303\251/CLAUDE.md"`, quotes and octal escapes included. `basename` of
+    that is `CLAUDE.md"`, which is not in `BANNED` — so the repo's own filename invariant
+    reports "none in the change" about the exact file it exists to refuse — and it no longer
+    ends in `.py`, so `lint` records SKIPPED over changed Python. Both go quiet in green.
+
+    None ON A NONZERO EXIT, because `sh` folds stderr into `out`: an unresolvable `--base` made
+    git's `fatal:` text the file list, and since no pseudo-path ends in `.py` or is named in
+    `BANNED`, lint recorded SKIPPED and `banned_names` recorded PASS and the gate exited 0.
+    `home_paths` below already refuses exactly this on its own enumeration — "a failed (or
+    empty) enumeration is an UNMEASURED tree, not a clean one" — and this was the one
+    enumeration in the file that did not. `staleness.py:65` is the same rule again.
+
+    A ZERO exit with text on stderr still reaches the parse, because `sh` merges the streams for
+    every caller in this file. Left alone deliberately rather than fixed here for one function:
+    on a zero exit git writes warnings to stderr, not paths, and the merge is `sh`'s to answer
+    for across all of its callers.
+    """
+    r = sh(["git", "-c", "core.quotePath=false", *args])
+    if r["code"] != 0:
+        return None
+    return [ln.strip() for ln in r["out"].splitlines() if ln.strip()]
+
+
+def changed_files(base, head=None):
+    """Files this change touches, or None when git could not enumerate them. `base` of None
+    means the working tree (staged + unstaged + untracked); otherwise a diff of base...head,
+    where `head` names the pushed tip (default HEAD). A push gated from a checkout parked on
+    another branch MUST pass head, or the range collapses to whatever that checkout has: run
+    20260802-184854 gated a merge push as ZERO files because its HEAD was an ancestor of the
+    base. Untracked files stay included: a gate that cannot see a new file cannot guard the
+    change that adds one.
+
+    NONE IS NOT AN EMPTY CHANGE and no caller may treat it as one — see `git_paths`. On the
+    working-tree path BOTH enumerations must succeed: half a working tree is not the working
+    tree, and a tracked-only answer would report a clean scope while the untracked half — the
+    half that carries a newly added banned filename — went unread."""
+    outs = [git_paths(c) for c in _enum_cmds(base, head)]
+    if any(o is None for o in outs):
+        return None
+    return sorted({p for o in outs for p in o})
+
+
+def scope_error(base, head=None):
+    """The ERROR row for a change scope git could not enumerate.
+
+    Re-issues the enumerations to name WHICH one failed and to carry git's own text into the
+    run record. Built the way `home_paths` builds its enumeration failure, and for its reason:
+    the record is the artifact that survives the scrollback, and an ERROR whose cause is not in
+    it sends the reader back to a terminal they have already closed. Only reached when
+    `changed_files` already returned None, so the second call costs nothing on a healthy run."""
+    fails = [(c, sh(["git", "-c", "core.quotePath=false", *c])) for c in _enum_cmds(base, head)]
+    fails = [(c, r) for c, r in fails if r["code"] != 0]
+    diag = "\n".join(f"git {' '.join(c)} -> exit {r['code']}\n{r['out'].strip()}" for c, r in fails)
+    return {
+        "check": "change-scope",
+        "why": "git could not enumerate the change — every change-scoped check below is "
+               "UNMEASURED, which is not the same fact as clean",
+        "cmd": "git diff --name-only", "code": None, "secs": 0.0,
+        "sha256": hashlib.sha256(diag.encode()).hexdigest(),
+        "tail": [f"{len(fails)} enumeration(s) failed, first: git {' '.join(fails[0][0])}"
+                 if fails else "enumeration failed, then succeeded on re-issue"],
+        "state": ERROR, "out": diag,
+    }
 
 
 # ==========================================================================================
@@ -139,6 +207,15 @@ def lint(files, head=None):
     never the working tree: the checkout the hook runs in can sit on another branch and hold
     none of the pushed files (the 20260802-184854 mis-scope), and linting whatever the tree
     happens to have would attest bytes nobody is pushing."""
+    if files is None:
+        # UNMEASURED, and SKIPPED would be the wrong word for it. SKIPPED is a scoping decision
+        # made from a scope that was read; this is the scope failing to be read at all, so
+        # "no changed Python files" would be a claim about a list nobody ever had.
+        return [{"check": name,
+                 "why": "the change scope could not be enumerated — see the change-scope row",
+                 "state": ERROR, "code": None, "secs": 0.0, "sha256": "",
+                 "tail": ["change scope unmeasured — nothing linted"], "out": ""}
+                for name in ("ruff", "tsgo", "oxlint")]
     rows = []
     py = [f for f in files if f.endswith(".py") and _in_change(f, head)]
     ts = [f for f in files if f.endswith((".ts", ".tsx")) and _in_change(f, head)]
@@ -228,6 +305,17 @@ def banned_names(files):
     2026-07-31 against 1.18.5, the installed 1.18.0 and upstream 1.18.10 — still unfixed).
 
     The ban held for twelve phases on memory alone. This makes it a check."""
+    if files is None:
+        # "none in the change" is a claim about a list. Without one there is nothing to say,
+        # and saying PASS here is what let a quoted `"docs/caf\303\251/CLAUDE.md"` — basename
+        # `CLAUDE.md"`, not in BANNED — clear the one invariant it violates.
+        return {
+            "check": "banned-filenames",
+            "why": "the change scope could not be enumerated — the ban was NOT checked",
+            "cmd": "static", "code": None, "secs": 0.0, "sha256": "",
+            "tail": ["change scope unmeasured — not 'none in the change'"],
+            "state": ERROR, "out": "",
+        }
     hits = [f for f in files if os.path.basename(f) in BANNED]
     return {
         "check": "banned-filenames", "why": "HARNESS.md:9-13 — auto-ingest and the skill-glob shell hole",
@@ -312,7 +400,7 @@ def home_paths():
     """Full-tree scan, not change-scoped: the invariant is about the tree, and a
     change-scoped check would have grandfathered exactly the files this rule exists for.
     Untracked-unignored files are included for the same reason changed_files includes them
-    (gate.py:78-91): a gate that cannot see a new file cannot guard the change adding one —
+    (gate.py:78-86): a gate that cannot see a new file cannot guard the change adding one —
     the first draft scanned `git ls-files` alone and was blind to this session's own
     untracked LICENSE while it sat in the working tree. The corpus exemption is BY PATH
     only; a stray .db outside it is exactly the artifact this check should name.
@@ -442,11 +530,16 @@ def main():
 
     files = changed_files(base, head)
     scope = f" vs {base}...{head}" if head else (f" vs {base}" if base else " in the working tree")
-    print(f"== healbot gate ==  {len(files)} changed file(s)" + scope, flush=True)
-    for f in files[:12]:
-        print(f"   {f}", flush=True)
-    if len(files) > 12:
-        print(f"   … and {len(files) - 12} more", flush=True)
+    # A count printed over an unenumerated scope is the headline the old failure hid behind:
+    # git's `fatal:` lines were counted as files and listed as if they were paths.
+    if files is None:
+        print("== healbot gate ==  CHANGE SCOPE UNMEASURED" + scope, flush=True)
+    else:
+        print(f"== healbot gate ==  {len(files)} changed file(s)" + scope, flush=True)
+        for f in files[:12]:
+            print(f"   {f}", flush=True)
+        if len(files) > 12:
+            print(f"   … and {len(files) - 12} more", flush=True)
 
     # What each half of the run attests. Tier 1 and the invariants read the CHECKOUT tree;
     # lint reads the pushed blobs. When the two commits differ the split is worth a line in
@@ -458,6 +551,11 @@ def main():
               "invariant scans read the checkout tree; lint reads the pushed blobs.", flush=True)
 
     rows = []
+    # tier1 and home_paths do NOT read `files` and still run when the scope is unmeasured. Half
+    # a run is worth more than none, and reporting the half that measured is the whole reason
+    # the states are typed rather than folded into one bool.
+    if files is None:
+        rows.append(scope_error(base, head))
     print("\n-- tier 1: static, free, always on --", flush=True)
     rows += tier1()
     print("\n-- lint: scoped to the change --", flush=True)

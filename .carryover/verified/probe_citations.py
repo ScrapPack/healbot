@@ -27,7 +27,7 @@ EOF. All artifacts. So a candidate is only accepted if it actually CONTAINS the 
 `.md` citations prefer this repo over the checkout (both trees have a `PLAN.md`).
 
 SCOPE IS THE OTHER HALF OF THAT PROBLEM. Both the swept documents and the resolver's candidate
-set are FILES GIT OWNS — tracked, plus untracked-but-not-ignored, `gate.py:78-91`'s definition
+set are FILES GIT OWNS — tracked, plus untracked-but-not-ignored, `gate.py:78-86`'s definition
 applied to the whole tree instead of to one change. Walking the filesystem instead put state
 nobody wrote into both. MEASURED in the main checkout, gate run 20260801-115807: Claude Code's
 login auto-installed a plugin marketplace under `harness/claude/plugins/` (gitignored by that

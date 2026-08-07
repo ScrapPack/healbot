@@ -123,7 +123,7 @@ try:
         "`set(out.split())` splits on ALL whitespace, so such a path fragments into keys that "
         "can never match an index entry and every citation into it is dropped from the join "
         "SILENTLY — a check going quiet about the one file somebody just renamed, which reads "
-        "exactly like a clean run. gate.py:91 already parses this command with splitlines()",
+        "exactly like a clean run. gate.py:117 already parses this command with splitlines()",
     )
 
     # --- shift_for: the delta must come from what precedes the span -----------------------

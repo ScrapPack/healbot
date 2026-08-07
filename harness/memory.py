@@ -622,6 +622,38 @@ def capture(payload, start=None, env=None, when=None):
     return write(rec, start=start, env=env)
 
 
+def changed_in(sha, cwd=None):
+    r"""-> the set of paths commit `sha` changed.
+
+    ONE RULE, BOTH CALLS. `_cmd_stamp` and `backfill` each ran this command and each parsed it
+    with `.stdout.split()` and no `core.quotePath`, which is the same pair of defects
+    `gate/staleness.py:175` carried — a module that sets a flag on one git call and not on its
+    sibling (review finding from the f5c21e9 push), found here on both calls (review finding
+    from the 3441813 push). Two copies of a parse rule are two chances to fix one of them, so
+    there is one function and both callers hold it.
+
+    `core.quotePath=false` because quoting is git's DEFAULT: without it a non-ASCII path arrives
+    as `"docs/\303\251.md"`, quotes and octal escapes included. `splitlines()` rather than
+    `split()` because `split()` breaks on ALL whitespace, so a path containing a space fragments
+    into pieces. `gate/gate.py:117` already parses the identical output with `splitlines()`.
+
+    Both shapes cost the same thing and cost it SILENTLY. The mangled path matches nothing, so
+    it is missing from the `anchor.changed_files` this commit writes, and `stamp` never raises
+    the revalidation flag for a record whose evidence points into it — the hook goes quiet about
+    the file that just moved, which reads exactly like a clean run.
+
+    A FAILING `git` IS NOT DISTINGUISHED from a commit that changed nothing. That is what both
+    call sites already did and it is left alone rather than widened under a review finding:
+    each of them reaches here only after a `git rev-parse` (`_cmd_stamp`) or a `git log`
+    (`commits`, which raises `NotAProject`) has already succeeded in the same directory.
+    """
+    out = subprocess.run(
+        ["git", "-c", "core.quotePath=false",
+         "diff-tree", "--no-commit-id", "--name-only", "-r", sha],
+        cwd=cwd or os.getcwd(), capture_output=True, text=True)
+    return {ln.strip() for ln in out.stdout.splitlines() if ln.strip()}
+
+
 def stamp(sha, changed, start=None, env=None):
     """Anchor every unanchored record to `sha`, and report the ones this commit may have moved.
 
@@ -758,10 +790,7 @@ def backfill(rev_range=None, limit=None, start=None, env=None):
     cite = _cite()
     written, skipped = [], []
     for commit in commits(rev_range, limit, start):
-        files = subprocess.run(
-            ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", commit["sha"]],
-            cwd=start or os.getcwd(), capture_output=True, text=True)
-        rec = as_record(commit, files.stdout.split(), cite)
+        rec = as_record(commit, changed_in(commit["sha"], cwd=start), cite)
         existing = read(path_of(rec["id"], start=start, env=env))
         if existing and existing.get("classification") not in ("", "INFERRED"):
             skipped.append((rec["id"], f"hand-authored as {existing['classification']}"))
@@ -785,7 +814,7 @@ def backfill(rev_range=None, limit=None, start=None, env=None):
 def _home_predicate():
     """The GATE'S OWN home-path predicate, or None when it cannot be reached.
 
-    Not a second copy. `gate/gate.py:256`'s `_home_anchored` carries a standing 14-row truth
+    Not a second copy. `gate/gate.py:344`'s `_home_anchored` carries a standing 14-row truth
     table validated before every scan, and it already caught one real bug (the `i == 0`
     empty-`before` case) that two ad-hoc controls missed. A re-implementation here would start
     that history over, and the place it would be wrong is a public repository.
@@ -930,9 +959,7 @@ def _cmd_stamp(argv, env):
     if head.returncode != 0:
         return 0  # no commits yet; nothing to anchor to
     sha = head.stdout.strip()
-    files = subprocess.run(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", sha],
-                           cwd=start or os.getcwd(), capture_output=True, text=True)
-    stamped, flagged = stamp(sha, files.stdout.split(), start=start, env=env)
+    stamped, flagged = stamp(sha, changed_in(sha, cwd=start), start=start, env=env)
     if stamped:
         print(f"decision records: anchored {len(stamped)} to {sha[:8]}", file=sys.stderr)
     for rec_id, pointer in flagged:

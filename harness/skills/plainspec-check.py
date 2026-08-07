@@ -470,7 +470,7 @@ FIXTURES = [
     # engine: file:line citations never count toward any test
     ("R3", "clean", "",
      "The gate runs the sweep before every close so the records stay part of the "
-     "boundary and nothing ships unverified at gate/gate.py:220 and harness/doctor.py:297."),
+     "boundary and nothing ships unverified at gate/gate.py:297 and harness/doctor.py:297."),
     ("R8", "fire", "", "The cache warms at boot; requests then hit memory."),
     ("R8", "fire", "", "The cache — the warm one — hits first."),
     ("R8", "fire", "", "The parser (fast) accepts input (mostly) from stdin."),
@@ -478,7 +478,7 @@ FIXTURES = [
     ("R8", "clean", "", "Loop with `for(i=0;i<n;i++)` and read https://x.test/a;b now."),
     ("R8", "clean", "", 'The old draft said "a; b; c" and we quote it here.'),
     ("R8", "clean", "",
-     "The ban list (gate/gate.py:220) and the doctor rows (harness/doctor.py:297) hold."),
+     "The ban list (gate/gate.py:297) and the doctor rows (harness/doctor.py:297) hold."),
     ("R8", "clean", "", "| a; b | c |\n| d | e; f |"),
     ("R8", "clean", "",
      "The doc shows an example.\n\n  ```\n  a robust; seamless demo\n  ```\n\nThe doc ends."),

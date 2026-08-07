@@ -11,7 +11,7 @@ Blocked by: -
 Ticket 12 chose per-crewmate-completion in `blocking` mode. `blocking` is fail-closed on a severity
 string the reviewer model assigns to its own finding: anything not explicitly `warning` or `info`
 refuses, and an untagged finding refuses too
-([gate/review.py:238](../../../gate/review.py)). Nobody has ever checked whether those findings were
+([gate/review.py:262](../../../gate/review.py)). Nobody has ever checked whether those findings were
 right.
 
 The scale, measured at ticket 12's close from the 119 records in `gate/runs/*-review.json`: 110

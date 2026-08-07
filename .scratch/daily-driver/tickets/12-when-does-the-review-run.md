@@ -60,9 +60,9 @@ Three findings changed the shape of the decision:
 1. **Blocking is not a rare event.** The 110 reviews that reached the model produced 27 `error`,
    99 `warning` and 72 `info` findings. 22 of the 110 carried at least one finding that is not
    warning or info, so `blocking` mode would have refused **20% of the captain's own pushes**
-   ([gate/review.py:238](../../../gate/review.py)).
+   ([gate/review.py:262](../../../gate/review.py)).
 2. **A dollar ceiling cannot be summed from the records.** A timed-out review returns code `None`,
-   lands in the nonzero branch at [gate/review.py:213](../../../gate/review.py), and records no
+   lands in the nonzero branch at [gate/review.py:237](../../../gate/review.py), and records no
    `total_cost_usd` at all, because that number exists only in a wrapper reply that never arrived.
    Any ceiling built on the sum undercounts precisely the most expensive runs.
 3. **The path escalation fires on the majority of healbot work and on none of any other project's.**
@@ -99,9 +99,9 @@ valuation, not a metered bill. The figures above bound usage, not an invoice.
 - **The could-not-run branch: one conditional retry, then the captain, and the crewmate never
   reports done.** The three `Not logged in` records are stale, all 2026-07-31, before the harness
   root login, with 109 successful runs since. The branch is not stale: exit 3 also fires on timeout
-  ([gate/review.py:213](../../../gate/review.py)), on a malformed reply
-  ([gate/review.py:230](../../../gate/review.py)), on a missing CLI
-  ([gate/review.py:195](../../../gate/review.py)) and on any crash, a measured 2.6% of runs with
+  ([gate/review.py:237](../../../gate/review.py)), on a malformed reply
+  ([gate/review.py:254](../../../gate/review.py)), on a missing CLI
+  ([gate/review.py:219](../../../gate/review.py)) and on any crash, a measured 2.6% of runs with
   everything healthy. Retry once **only when the cause was not a timeout**: a timeout is
   diff-size-driven and a retry of the same diff times out again at full cost, so a timeout is really
   the diff-size refusal arriving late and goes straight to the captain. The outcome is named
