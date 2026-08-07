@@ -80,9 +80,11 @@ def find_config(path):
 def load_exemptions(cfg):
     """Read `[plainspec] disable = [...]` into a set of "RULE" / "RULE:message-prefix" keys.
 
-    A key matches a finding as `f"{rule}:{msg}"`, by prefix, so a whole rule ("R8") or a single one
-    of its tests ("R8:em-dash") can be ruled out. The spec file stays authoritative about what the
-    rules ARE; this only records that one repo has decided one of them does not apply to it.
+    A key is a whole rule ("R8") or a rule plus a message prefix ("R8:em-dash"). The RULE half is
+    matched EXACTLY and only the message half by prefix — see `is_exempt`, which had to stop
+    prefix-matching the whole string once R1 was found exempting R10 through R15. The spec file
+    stays authoritative about what the rules ARE; this only records that one repo has decided one
+    of them does not apply to it.
 
     Any failure to read the file is REPORTED and the exemptions are dropped. A config that silently
     stops applying would quietly change every count the checker prints.

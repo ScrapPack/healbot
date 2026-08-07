@@ -14,13 +14,18 @@ python3 -m venv venv && venv/bin/pip install pyte
 # probe_refusal_scoring (20), probe_review_parse (9), probe_rig_contract (40), probe_study_driver
 # (42) and probe_turn_predicate (18) went 303/303 green. None of the ten reads hb/ at all.
 # EVERY OTHER PROBE IN THIS LIST NEEDS MORE. Stated as an allowlist on purpose: an earlier draft
-# named seven that need more and so implied, by omission, that the other eight run. They do not.
-# probe_citations, probe_twin, probe_control_wiring and probe_staleness_join exit 3 without the
-# gitignored opencode/ checkout (rebuild from fork/README.md). probe_headless_arm and
-# probe_request_channel call rig.serve(), which runs that same checkout. probe_error_state,
-# probe_focus and probe_turn_growth need hb/*.db, which only the PAID rigs below can create.
-# probe_arm_factory, probe_fleet and probe_on_grid go partial without it, and probe_backend,
-# probe_fleet_claude and probe_gnhf_spend take an environment SKIP rather than running.
+# named seven that need more and so implied, by omission, that the other eight run.
+# MEASURED, and reproducible across runs: probe_citations, probe_twin, probe_control_wiring and
+# probe_staleness_join exit 3 without the gitignored opencode/ checkout (rebuild from
+# fork/README.md); probe_headless_arm and probe_request_channel call rig.serve(), which runs that
+# same checkout; probe_error_state, probe_focus and probe_turn_growth need hb/*.db, which only the
+# PAID rigs below can create.
+# DELIBERATELY NOT CHARACTERISED: probe_backend, probe_fleet_claude, probe_gnhf_spend,
+# probe_arm_factory, probe_fleet and probe_on_grid depend on ambient state rather than on the
+# checkout — a Claude Code transcript for THIS checkout (probe_backend exits 3 without one, its
+# own declared cannot-measure sentinel, not an environment skip), a live server, or a skip budget.
+# Two sweeps an hour apart gave different exit codes for three of them, so any fixed list here
+# would be a number that rots between runs. Run them and read the probe's own output.
 # An earlier version of this comment said "all but probe_turn_predicate.py need the checkout" and
 # "on a fresh clone this suite does not run". Both were false, and together they discouraged the
 # only free verification a fresh clone has — see docs/CLONE.md.

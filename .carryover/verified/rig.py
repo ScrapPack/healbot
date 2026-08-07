@@ -88,10 +88,14 @@ def git_baseline(also=()):
     and BEFORE the session runs.
 
     `also` names files this rig created ON PURPOSE and wants in the BASELINE rather than showing up
-    as changes. `verify_retire_350k.py` is the case that defines it: it writes 70 chunk files at
-    :173 so a session can read them without every read counting as a diff, and deletes
-    findings.txt immediately after so that CREATING findings.txt is a diff. Both halves depend on
-    the baseline being exactly what the rig chose. Accepts names or glob patterns.
+    as changes. `verify_retire_350k.py` is the case that defines it: its `make_chunks()` writes 70
+    chunk files before this call so a session can read them without every read counting as a diff,
+    and it deletes findings.txt immediately after so that CREATING findings.txt is a diff. Both
+    halves depend on the baseline being exactly what the rig chose. Accepts names or globs.
+
+    Named by FUNCTION, not by line. The first draft of this docstring cited that file at a line
+    number, and the very next commit — removing an unused import from it — moved the target by one.
+    Nothing caught it: citegraph sweeps .md only, so a stale `:NNN` in a .py comment rots unseen.
 
     Not optional for anything that asserts on changed files. `GET /session/{id}/diff` serves
     `summary.diffs`, which `SessionSummary.summarize` (`summary.ts:102-127`) computes with git

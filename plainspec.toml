@@ -5,8 +5,10 @@
 # out. plainspec-check.py finds it by walking up from each checked file, so a hand run and a gate
 # run over the same file always agree.
 #
-# Keys match a finding as "RULE:message", by prefix. "R8" would exempt all of rule 8; "R8:em-dash"
-# exempts only that one test of it.
+# A key is a whole rule ("R8", exempting all of rule 8) or a rule plus a message prefix
+# ("R8:em-dash", exempting only that one test of it). The RULE half is matched exactly and only the
+# message half by prefix: an earlier draft prefix-matched the whole key, so "R1" also exempted R10
+# through R15.
 
 [plainspec]
 

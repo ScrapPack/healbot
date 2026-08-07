@@ -176,10 +176,13 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       # `2>&1` into grep and ended in `|| true`, so a checker that crashed printed this stage's
       # header and then nothing at all: an ERROR rendered as a clean PASS, which is the exact
       # collapse gate.py's typed states exist to prevent, rebuilt inside the gate.
-      # shellcheck disable=SC2086
       # < /dev/null for the reason given at the top of this loop: a command inside `while read`
       # inherits the loop's stdin and can eat the remaining ref lines. plainspec-check never reads
       # stdin, so this is the rule rather than a live bug — and every other stage here obeys it.
+      #
+      # The disable directive stays IMMEDIATELY above the command it annotates: shellcheck binds a
+      # directive to the next line, so a comment wedged between the two silently detaches it.
+      # shellcheck disable=SC2086
       prose_out=$(cd "$ROOT" && $VENVPY harness/skills/plainspec-check.py --score "${md[@]}" < /dev/null)
       prose_rc=$?
       if [ "$prose_rc" -ge 2 ]; then
