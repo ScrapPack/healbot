@@ -35,9 +35,7 @@ evaluates arguments eagerly, so `r.check("x", open(path).read() == canon, needs=
 read — and already crashed — before the guard is entered; the protection the author believes
 they added runs too late to do anything. `Results.check` raises TypeError on a non-callable,
 which catches it at run time; this contract catches it at read time, and a lambda is the one
-form that is unambiguous from source. A bare function reference would also be callable, and
-requiring the lambda anyway costs nothing (every guarded predicate in this suite is an inline
-expression) while keeping the rule one grep away from being verified by eye.
+form that is unambiguous from source.
 
 Contract 6 is a different animal from 1–5 and is worth saying why. Those five are about whether a
 rig can REPORT a failure. The sixth is about whether it can SEE one. `fire()` appends a turn that
@@ -70,9 +68,7 @@ from rig import Env, Results, completed  # noqa: E402
 # are scratch tools that make no claims. If this list ever silently narrows, the sweep below
 # passes by measuring nothing — so its size is asserted, and the exclusions are asserted too.
 #
-# THIS FILE IS DELIBERATELY NOT EXEMPT. It was, in its first version, and a guard that exempts
-# itself is the same shape as the defects it exists to catch: the one rig whose contract nobody
-# checks. It satisfies its own four predicates and is swept with the rest.
+# THIS FILE IS DELIBERATELY NOT EXEMPT: its own eleven predicates are run over it with the rest.
 LIB = {"rig.py", "term.py"}
 
 
@@ -92,8 +88,9 @@ def read(name):
 
 
 # ------------------------------------------------------------------------------------------
-# The four predicates. Each takes SOURCE TEXT, so the mutation checks below can hand them a
-# corrupted copy and get the same code path the live sweep gets.
+# The eleven predicates. All but `records_crash` take SOURCE TEXT, so the mutation checks below
+# can hand them a corrupted copy and get the same code path the live sweep gets; `records_crash`
+# and the `_`-prefixed helpers take AST nodes.
 # ------------------------------------------------------------------------------------------
 def floor_of(src):
     """The N in `Results(expect=N)`, or None if the rig declares no floor.
@@ -219,10 +216,6 @@ def swallows_crash(src):
                                                      non-zero exit. Nothing is there to swallow it.
       - `finally: sys.exit(...)` with NO guard    — THE DEFECT. Seven probes and ten paid rigs.
 
-    An earlier version of this predicate demanded a guard unconditionally and reported
-    probe_twin.py — which has no `try` — as defective. That would have forced a 190-line reindent
-    to satisfy a check rather than to fix anything, which is how a guard starts costing more than
-    it protects.
     """
     for node in ast.walk(ast.parse(src)):
         if isinstance(node, ast.Try) and node.finalbody:
@@ -290,9 +283,7 @@ def finally_ends_on_verdict(src):
     """For every `try/finally`, is the LAST statement of the `finally` a verdict-bearing exit?
 
     `acts_on_verdict` only asks whether such an exit exists ANYWHERE in the file, which a stray or
-    unreachable one would satisfy. This asks whether it is the thing that actually runs last — the
-    property that was verified by hand across all twenty rigs during the Phase 10 review and, being
-    verified by hand, was exactly the kind of thing that should not stay verified by hand.
+    unreachable one would satisfy. This asks whether it is the thing that actually runs last.
 
     Rigs with no `try/finally` are vacuously fine and say so by returning True: they exit at module
     level and an escaping exception propagates (`probe_twin.py`, `probe_turn_growth.py`,
@@ -784,8 +775,6 @@ try:
         with contextlib.redirect_stdout(io.StringIO()):
             return res.summary()
 
-    # The four predicates above are about SOURCE. This is the behaviour that source is chosen to
-    # produce, and asserting it here is what stops the two drifting.
     r.check("RUNTIME: a full pass returns True", verdict(3, [True] * 3) is True, "3 of 3 with a floor of 3")
     r.check(
         "RUNTIME: a SHORT run returns False even with zero failures",

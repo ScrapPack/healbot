@@ -26,13 +26,6 @@ the same merged ruleset, and the session-creating branch is gated behind `if (to
 (`:43-58` → `createToolContext` → `sessionSvc.create` at `:131`), so without `--tool` no session
 is created and no provider call is made. Only EXECUTION of a tool needs a real turn.
 
-That disabled set is now COMPUTED by two rows below rather than recorded here as a hand-run
-number. It was prose for a phase, and in that phase `healbot_decide` was allowed back for
-`build` while `healbot_recall` was not — the default agent could write a decision record and
-never read one — with no row anywhere able to see it, because the static rows read the config
-files for the SHAPE of the wiring and never its result (review finding from the 3441813 push).
-A measurement kept in a docstring is a claim about a file at a moment; the rows re-take it on
-every run.
 
 The honest caveat: `agent.handler.ts` is a SEPARATE function calling the same predicate, not the
 request path. The real one (`session/llm/request.ts:208-214`) additionally merges session-level
@@ -88,10 +81,7 @@ def agent_tools(name):
     requirement must be strictly weaker than the check it guards — so a machine where the
     command answers and the permission is wrong still goes RED, which is the finding, while a
     machine where it cannot answer declares a NAMED skip instead of a red meaning "wrong
-    machine". The first draft returned None for both cases and discarded `returncode` and
-    stderr, so a provider-auth failure and a genuinely wrong permission printed the same
-    `got None` and both turned the rows red; a timeout raised straight into the UNEXPECTED
-    EXCEPTION row and exit 1 (review finding from the a90dac0 push). `_agent_why` carries the
+    machine". `_agent_why` carries the
     cause into the skip note, because a skip nobody can diagnose is its own dead end.
     """
     import subprocess
@@ -143,23 +133,6 @@ DEBUG_AGENT = rig.Env(
 )
 
 
-# The ordinary absent-checkout case. Without it this probe timed out for 90s, reported red rows
-# and an UNEXPECTED EXCEPTION and exited 1 — "a check ran and said no" for a check that could not
-# run, the ERROR-versus-BLOCKED collapse the gate's state lattice exists to prevent.
-# `probe_staleness_join.py` was corrected for this and this probe was never backfilled; exit 3 is
-# the cannot-measure verdict and `gate.py` maps it to ERROR.
-#
-# IT SITS ABOVE THE SEVEN STATIC ROWS, WHICH DO NOT NEED THE CHECKOUT, and that costs their
-# coverage in a fresh clone or a linked worktree. Deliberate, and the alternatives are worse
-# rather than merely more work (review finding from the a90dac0 push, action no-op). Moving the
-# exit BELOW them hides a red: a static row that failed would be recorded and then buried under
-# exit 3, cannot-measure masking a finding. Hoisting the rows ABOVE the try to keep the exit
-# pre-try loses them the UNEXPECTED EXCEPTION guard, so a `FileNotFoundError` on the config read
-# would traceback out at exit 1 with no row and `Results(expect=)` would never judge it. The
-# principled third option is a `rig.Env` on the server-dependent rows, the way `DEBUG_AGENT`
-# guards the two permission rows above — that recovers the seven and is the right shape, but it
-# restructures the server setup and every runtime row, which is more risk than a no-op finding
-# earns inside a repair. Nothing here is silently wrong: exit 3 says UNMEASURED out loud.
 sys.path.insert(0, os.path.join(rig.HEALBOT, "gate"))
 import citegraph  # noqa: E402
 
@@ -223,12 +196,6 @@ try:
     # `Permission.disabled` over the same merged ruleset as the request path
     # (`cli/cmd/debug/agent.handler.ts:88-98`) and creates no session, so this is free.
     #
-    # THIS PROBE ASSERTED IT IN PROSE AND NOWHERE ELSE. The docstring above recorded "TESTED
-    # under this harness … `debug agent build` reports all five healbot_* false" as a hand-run
-    # measurement, which is a claim about a file at a moment with nothing computing it — and in
-    # the interval `healbot_decide` was allowed back for `build` and `healbot_recall` was not,
-    # with no row anywhere able to see it (review finding from the 3441813 push). The regex rows
-    # above cannot: they read the two config files for the SHAPE of the wiring, never its result.
     # -----------------------------------------------------------------------------------------
     build_set, control_set = agent_tools("build"), agent_tools("control")
     r.check(
