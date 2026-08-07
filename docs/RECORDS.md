@@ -202,9 +202,6 @@ it WARNs; gating on that would make `doctor` read NOT YET on a machine where the
 runs. The `store_fail` guard reaches both the Claude and the opencode tiers, because both inject
 the orientation block.
 
-Doctor rows exit 1 on FAIL. **That is preflight advice and refuses no push**, so it does not
-contradict the advisory posture — say it out loud so nobody reads it as a reversal.
-
 ## 9. What this does not do
 
 **No free probe can prove the memory system improves agent behaviour, and not one assertion in
@@ -223,9 +220,6 @@ empty. The arm factory synthesizes opencode config roots and sets no Claude conf
 Claude-side half has no measurement vehicle at all. And neither driver supports a multi-turn
 study, while the value of a record is realized when a *later* session retrieves it.
 
-The project's one comparable prior is a powered null: 150 rows, both arms delivering 75 of 75,
-exact McNemar p = 1.0.
-
 **Trigger (ii) is proven registered, never proven called.** A free probe proves a well-formed
 schema reaches the agent. Only a model chooses to invoke it. That claim is paid.
 
@@ -235,11 +229,6 @@ hook interface; driving a real SessionStart needs a real session, which the free
 start. Everything on this side of that boundary is tested, including that the hook emits valid
 JSON for prose carrying quotes and newlines. If the contract is wrong, the failure is a session
 that starts without orientation — which is where every session started before this existed.
-
-**It does not replace `NEXT.md`'s `DECIDED` section.** That list is operator-facing, is read by a
-human starting a session, and is deliberately frozen at a constant shape. The store is
-agent-facing, per-project, and lives outside the tree. Whether `DECIDED` retires into it is a
-separate decision with an existing owner, and this phase does not open it.
 
 ## 10. Operator quick reference
 
