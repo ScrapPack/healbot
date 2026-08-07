@@ -66,7 +66,7 @@ TOOLS = ["healbot_list", "healbot_spawn", "healbot_prompt", "healbot_abort", "he
 # the orientation block the capped exception (review finding from the 3441813 push).
 MEMORY_TOOLS = ["healbot_decide", "healbot_recall"]
 
-r = rig.Results(expect=16)
+r = rig.Results(expect=16, skip_max=2)
 server = None
 
 
@@ -75,14 +75,91 @@ def read(path):
         return fh.read()
 
 
-# The ordinary absent-checkout case, caught BEFORE the try so the exit is not swallowed by the
-# finally. Everything past the static rows needs the DERIVED checkout — `rig.serve` boots the
-# server from it and `debug agent` runs through it — so in a fresh clone or a linked worktree
-# this probe CANNOT MEASURE rather than has found something. Without this it timed out for 90s,
-# reported two red rows and one UNEXPECTED EXCEPTION, and exited 1: "a check ran and said no"
-# for a check that could not run, which is the ERROR-versus-BLOCKED collapse the gate's state
-# lattice exists to prevent. `probe_staleness_join.py` was corrected for exactly this and this
-# probe was never backfilled; exit 3 is the cannot-measure verdict and `gate.py` maps it to ERROR.
+_agent_cache, _agent_why = {}, {}
+
+
+def agent_tools(name):
+    """-> {tool: enabled?} for one agent, or None when `debug agent` could not ANSWER.
+
+    Cached, because it shells out and two rows read it.
+
+    THE RETURN VALUE ANSWERS ONE QUESTION AND NEVER THE OTHER: did the command produce a map.
+    What is IN the map is the rows' business. That separation is what `rig.Env` requires — a
+    requirement must be strictly weaker than the check it guards — so a machine where the
+    command answers and the permission is wrong still goes RED, which is the finding, while a
+    machine where it cannot answer declares a NAMED skip instead of a red meaning "wrong
+    machine". The first draft returned None for both cases and discarded `returncode` and
+    stderr, so a provider-auth failure and a genuinely wrong permission printed the same
+    `got None` and both turned the rows red; a timeout raised straight into the UNEXPECTED
+    EXCEPTION row and exit 1 (review finding from the a90dac0 push). `_agent_why` carries the
+    cause into the skip note, because a skip nobody can diagnose is its own dead end.
+    """
+    import subprocess
+
+    if name in _agent_cache:
+        return _agent_cache[name]
+    try:
+        out = subprocess.run(
+            ["/bin/zsh", "-c", f". {rig.ENVSH} && exec {rig.OC} debug agent {name}"],
+            cwd=rig.HEALBOT, capture_output=True, text=True, timeout=180,
+            env={**os.environ, "OPENCODE_DB": rig.db("controlwiring-debug")},
+        )
+    except subprocess.TimeoutExpired:
+        _agent_why[name] = "timed out after 180s"
+        _agent_cache[name] = None
+        return None
+    if out.returncode != 0:
+        tail = (out.stderr or out.stdout).strip().splitlines()[-1:] or [""]
+        _agent_why[name] = f"exit {out.returncode}: {tail[0][:160]}"
+        _agent_cache[name] = None
+        return None
+    found = dict(re.findall(r'"(healbot_[a-z_]+)":\s*(true|false)', out.stdout))
+    if not found:
+        # Exit 0 with no map is its own failure: the command ran and told us nothing, which is
+        # not the same as telling us the tools are disabled.
+        _agent_why[name] = f"exit 0 but no healbot_* map in {len(out.stdout)} B of output"
+        _agent_cache[name] = None
+        return None
+    _agent_cache[name] = {k: v == "true" for k, v in found.items()}
+    return _agent_cache[name]
+
+
+def _debug_agent_ready():
+    """RAISES rather than returning False, so the cause reaches the printed note. `Env.satisfied`
+    catches and renders it as `could not establish: …`; a bare False would print the requirement's
+    name and lose which agent failed and why, which is the diagnosability half of the finding."""
+    missing = [n for n in ("build", "control") if agent_tools(n) is None]
+    if missing:
+        raise RuntimeError("; ".join(f"{n} — {_agent_why.get(n, 'unknown')}" for n in missing))
+    return True
+
+
+DEBUG_AGENT = rig.Env(
+    "debug-agent-answers",
+    "`opencode debug agent` runs and prints a healbot_* permission map — it needs the derived "
+    "opencode/ checkout and a resolvable default model, and it is the one command the two "
+    "permission-result rows read",
+    _debug_agent_ready,
+)
+
+
+# The ordinary absent-checkout case. Without it this probe timed out for 90s, reported red rows
+# and an UNEXPECTED EXCEPTION and exited 1 — "a check ran and said no" for a check that could not
+# run, the ERROR-versus-BLOCKED collapse the gate's state lattice exists to prevent.
+# `probe_staleness_join.py` was corrected for this and this probe was never backfilled; exit 3 is
+# the cannot-measure verdict and `gate.py` maps it to ERROR.
+#
+# IT SITS ABOVE THE SEVEN STATIC ROWS, WHICH DO NOT NEED THE CHECKOUT, and that costs their
+# coverage in a fresh clone or a linked worktree. Deliberate, and the alternatives are worse
+# rather than merely more work (review finding from the a90dac0 push, action no-op). Moving the
+# exit BELOW them hides a red: a static row that failed would be recorded and then buried under
+# exit 3, cannot-measure masking a finding. Hoisting the rows ABOVE the try to keep the exit
+# pre-try loses them the UNEXPECTED EXCEPTION guard, so a `FileNotFoundError` on the config read
+# would traceback out at exit 1 with no row and `Results(expect=)` would never judge it. The
+# principled third option is a `rig.Env` on the server-dependent rows, the way `DEBUG_AGENT`
+# guards the two permission rows above — that recovers the seven and is the right shape, but it
+# restructures the server setup and every runtime row, which is more risk than a no-op finding
+# earns inside a repair. Nothing here is silently wrong: exit 3 says UNMEASURED out loud.
 sys.path.insert(0, os.path.join(rig.HEALBOT, "gate"))
 import citegraph  # noqa: E402
 
@@ -153,24 +230,10 @@ try:
     # with no row anywhere able to see it (review finding from the 3441813 push). The regex rows
     # above cannot: they read the two config files for the SHAPE of the wiring, never its result.
     # -----------------------------------------------------------------------------------------
-    def disabled_set(name):
-        """-> {tool: enabled?} for one agent, or None when the command could not answer."""
-        import subprocess
-        out = subprocess.run(
-            ["/bin/zsh", "-c", f". {rig.ENVSH} && exec {rig.OC} debug agent {name}"],
-            cwd=rig.HEALBOT, capture_output=True, text=True, timeout=180,
-            env={**os.environ, "OPENCODE_DB": rig.db("controlwiring-debug")},
-        )
-        if out.returncode != 0:
-            return None
-        found = dict(re.findall(r'"(healbot_[a-z_]+)":\s*(true|false)', out.stdout))
-        return {k: v == "true" for k, v in found.items()} or None
-
-    build_set, control_set = disabled_set("build"), disabled_set("control")
+    build_set, control_set = agent_tools("build"), agent_tools("control")
     r.check(
         "the BUILD agent holds both memory tools and none of the five fleet tools",
-        bool(build_set)
-        and all(build_set.get(t) is True for t in MEMORY_TOOLS)
+        lambda: all(build_set.get(t) is True for t in MEMORY_TOOLS)
         and all(build_set.get(t) is False for t in TOOLS),
         f"BOTH HALVES, and the split is the whole design. The fleet tools are rent every session "
         f"would pay for a capability only `control` uses; retrieval is not — the recall tool's "
@@ -178,12 +241,14 @@ try:
         f"record decisions it could never read back. The second clause is what keeps this row "
         f"from passing over a blanket `healbot_*: allow` that would put all five definitions in "
         f"every prompt. got {build_set}",
+        needs=DEBUG_AGENT,
     )
     r.check(
         "…and the CONTROL agent holds all seven",
-        bool(control_set) and all(control_set.get(t) is True for t in TOOLS + MEMORY_TOOLS),
+        lambda: all(control_set.get(t) is True for t in TOOLS + MEMORY_TOOLS),
         f"the other side of the same predicate, so a global deny that stopped being allowed back "
         f"anywhere would fail here rather than read as correct scoping. got {control_set}",
+        needs=DEBUG_AGENT,
     )
 
     # -----------------------------------------------------------------------------------------
