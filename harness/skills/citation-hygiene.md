@@ -59,12 +59,7 @@ MEASURED 2026-08-05 over the whole history: 17 chains, median 3 fix-rounds, max 
 sustained entirely by one sentence being re-corrected.
 
 **So delete the sentence, or replace it with something that computes the number. Never correct
-it.** Three sessions found this independently before it reached a skill: `7f5fd69` swapped a
-prose coverage claim for a table a probe computes, after the sentence had been wrong "for the
-fourth consecutive round on this one item"; `4bffec4` removed a self-contradicting round-count
-rather than fixing it, coining "a tally in prose is a number with nothing computing it"; and
-`a68ea71` then found the same tally surviving in a second copy, which is this section's opening
-rule demonstrated on the person writing it.
+it.**
 
 ## Verify
 

@@ -124,7 +124,7 @@ you recognize the red when it fires. HARNESS.md's "Traps" section is the canonic
   incident). Full protocol: the paid-run-protocol skill.
 - **Skill twins sync by hand; sessions load the INSTALLED half.** `harness/skills/<name>.md`
   (tracked) vs `~/.agents/skills/<name>/SKILL.md` (loaded by BOTH harnesses; the `.agents`
-  copy wins name collisions). No installer exists, so a repo edit that skips the copy serves
+  copy wins name collisions). A repo edit that skips `harness/install-skills.py` serves
   every live session a stale skill in green — MEASURED 2026-08-02, two days, on this very
   skill while only firstmate was guarded. A red's direction is a diff's call, never assumed.
   Guard: doctor's `skill twins` row (any machine) and probe_fleet_claude.py's population
