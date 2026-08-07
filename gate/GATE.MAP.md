@@ -44,7 +44,7 @@ legs). The hook refuses either way; the difference is what the record and the re
 ## What it checks
 
 **Tier 1 — static, free, always on** (~0.7s): `probe_rig_contract` (every rig still reports
-failure as failure), `probe_citations` (~930 `file:line` citations still resolve),
+failure as failure), `probe_citations` (every `file:line` citation still resolves),
 `probe_twin` (the `fork/` overlay and the `opencode/` checkout have not drifted),
 `probe_review_parse` (the review stage's reply parser still holds all three live-failure
 shapes).
