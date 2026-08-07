@@ -150,8 +150,8 @@ def scope_error(base, head=None):
     diag = "\n".join(f"git {' '.join(c)} -> exit {r['code']}\n{r['out'].strip()}" for c, r in fails)
     # `cmd` NAMES WHAT FAILED, and is not a literal. A hardcoded "git diff --name-only" here was
     # wrong on the no-base path the moment only `ls-files` failed — the row describing a command
-    # the run did not issue, which is the exact defect `_enum_cmds` was extracted to prevent, one
-    # function below the docstring saying so (review finding from the c5ddaad push).
+    # the run did not issue, which is the exact defect `_enum_cmds` says in its own docstring it
+    # was extracted to prevent (review finding from the c5ddaad push).
     return {
         "check": "change-scope",
         "why": "git could not enumerate the change — every change-scoped check below is "

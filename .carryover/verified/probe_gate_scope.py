@@ -594,9 +594,9 @@ try:
         row_of(b_rec, "change-scope").get("cmd") == "git diff --name-only nosuchref...HEAD",
         f"`cmd` was a hardcoded `git diff --name-only` literal, which is already wrong on the "
         f"no-base path the moment only `ls-files --others` is the call that failed — a row "
-        f"describing a command the run did not issue, which is the defect `_enum_cmds` was "
-        f"extracted to prevent, stated in its docstring one function above the literal (review "
-        f"finding from the c5ddaad push). The range in the expected string is what makes this "
+        f"describing a command the run did not issue, which is the defect `_enum_cmds` says in "
+        f"its own docstring it was extracted to prevent (review finding from the c5ddaad "
+        f"push). The range in the expected string is what makes this "
         f"row fail over the literal rather than over nothing. "
         f"got {row_of(b_rec, 'change-scope').get('cmd')!r}",
     )
