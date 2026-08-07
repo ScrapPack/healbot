@@ -281,8 +281,11 @@ records.
 
 **REPAIRED 2026-08-07, and more broadly than the paragraph above proposes.** A `.gitignore` would
 only ever have covered the residue somebody thought to name. The fix instead removes the mechanism:
-`rig.py` now declares the fixture set once as `FIXTURE_FILES`, and `git_baseline()` adds *only*
-those files rather than `git add -A`. Anything else stays out of the baseline and therefore stays
+`rig.py` now declares the fixture set once as `FIXTURE_FILES`, and `git_baseline()` adds *only
+declared* files rather than `git add -A`. A rig that creates baseline content on purpose declares
+it through `git_baseline(also=)` — `verify_retire_350k.py` passes `chunk*.txt`, because it writes
+70 chunk files before the baseline so a session can read them without every read counting as a
+diff, and deletes `findings.txt` immediately after so that creating it *is* one. Anything undeclared stays out of the baseline and therefore stays
 visible as a change, which is the property this function exists to provide. It also self-heals a
 baseline that is already contaminated — undeclared tracked files are dropped from the index with
 `git rm --cached`, so nothing leaves the disk and a paid run's evidence survives — and it prints

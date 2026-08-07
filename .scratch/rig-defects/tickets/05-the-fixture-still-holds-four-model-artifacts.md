@@ -20,9 +20,11 @@ All four are refusal-study leavings, committed into the fixture's baseline by
 output silently stopped appearing in the next run's diff — the single property that function exists
 to provide.
 
-**The mechanism is already fixed.** `rig.py` now declares the set as `FIXTURE_FILES`, only those
+**The mechanism is already fixed.** `rig.py` now declares the set as `FIXTURE_FILES`, only declared
 files enter the baseline, and anything already tracked but undeclared is dropped from the index with
-`git rm --cached` on the next rig run. Nothing leaves the disk, so a paid run's evidence survives
+`git rm --cached` on the next rig run. A rig that creates baseline content on purpose declares it
+through `git_baseline(also=)`; `verify_retire_350k.py` passes `chunk*.txt` for the 70 files it
+writes before the baseline so a session can read them without every read counting as a diff. Nothing leaves the disk, so a paid run's evidence survives
 and becomes visible as a change again. Residue is printed rather than absorbed.
 
 **What is still open is the disk, and it is an owner call.** The four files are still there. Two

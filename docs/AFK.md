@@ -446,7 +446,8 @@ into `hb/project/.git` on the next install.
 
 **That hole is closed as of 2026-08-07, and this section used to say otherwise.** `git_baseline()`
 no longer runs `git add -A`. `rig.py` declares the fixture set once as `FIXTURE_FILES` and only
-those files enter the baseline, so an install's output cannot be absorbed into it whatever the
+DECLARED files enter the baseline — a rig that creates baseline content on purpose names it via
+`git_baseline(also=)` — so an install's output cannot be absorbed into it whatever the
 files are called — a `.gitignore` would only have covered the residue somebody thought to name.
 See `docs/OUTCOME.md` §7.
 

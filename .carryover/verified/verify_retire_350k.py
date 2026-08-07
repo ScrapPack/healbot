@@ -57,12 +57,11 @@ carries ~350K of prefix. Run it deliberately.
   venv/bin/python verify_retire_350k.py
 """
 
-import json
 import os
 import sys
 import time
 
-from rig import Api, PROJECT, Results, Term, boot, db, fixtures, git_baseline, on_grid, wait_for
+from rig import Api, PROJECT, Results, boot, db, fixtures, git_baseline, on_grid, wait_for
 
 PORT = 4735
 DB = db("retire350")
@@ -169,7 +168,7 @@ def section(document, heading):
     return "\n".join(out)
 
 
-print(f"== fixtures ==", flush=True)
+print("== fixtures ==", flush=True)
 print(f"  generated {make_chunks()} chunk file(s) of {CHUNK_BYTES // 1000} KB", flush=True)
 # findings.txt must NOT exist at baseline, or creating it is not a diff.
 if os.path.exists(f"{PROJECT}/findings.txt"):
@@ -234,7 +233,7 @@ try:
     elapsed = round(time.time() - started)
     r.check(f"occupancy reached the SHIPPED default of {TARGET:,}", occ >= TARGET,
             f"{occ:,} after {count} messages, {elapsed}s")
-    r.check(f"the session exceeded the store's 100-message window", count > MIN_MESSAGES, f"{count} messages")
+    r.check("the session exceeded the store's 100-message window", count > MIN_MESSAGES, f"{count} messages")
     if occ < TARGET or count <= MIN_MESSAGES:
         raise SystemExit(1)
 
