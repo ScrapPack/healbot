@@ -43,14 +43,17 @@ sys.path.insert(0, SP)
 import rig  # noqa: E402
 
 sys.path.insert(0, os.path.join(rig.HEALBOT, "harness"))
+sys.path.insert(0, os.path.join(rig.HEALBOT, "gate"))
+import citegraph  # noqa: E402
 import memory  # noqa: E402
 
 # Re-declared from each phase's first green run rather than kept at the number the plan
 # projected (17, then 26). The plan's own rule: a number written down before the rows are
 # counted is how an unreachable floor gets cited in four documents as exit-gate evidence.
 # Phase 4 closed at 22; phase 5 adds the three triggers and closed at 38; phase 6 adds
-# retrieval and orientation and closes at 55.
-r = rig.Results(expect=55)
+# retrieval and orientation and closed at 55; phase 7 adds backfill, the promotion
+# path and the doctor rows and closes at 68.
+r = rig.Results(expect=68)
 
 STORE = tempfile.mkdtemp(prefix="hb-records-")
 ENV = {"HEALBOT_RECORDS": STORE}
@@ -726,6 +729,194 @@ try:
         f"applied AFTER rendering and truncated on a record boundary, the same rule as the "
         f"orientation block. {len(recall(''))} bytes against a cap of {memory.RECALL_CAP}",
     )
+
+    # =========================================================================================
+    # PHASE 7 — backfill and the promotion path
+    # =========================================================================================
+
+    bf_store = tempfile.mkdtemp(prefix="hb-backfill-")
+    bf_env = {"HEALBOT_RECORDS": bf_store}
+
+    def bytes_of(key):
+        out = {}
+        for path in memory.record_files(key=key, env=bf_env):
+            out[os.path.basename(path)] = open(path, encoding="utf-8").read()
+        return out
+
+    bf_key = memory.project_key(rig.HEALBOT)
+    first_written, _ = memory.backfill(limit=15, start=rig.HEALBOT, env=bf_env)
+    snap = bytes_of(bf_key)
+    memory.backfill(limit=15, start=rig.HEALBOT, env=bf_env)
+    r.check(
+        "two backfill runs produce BYTE-IDENTICAL files",
+        len(first_written) > 5 and bytes_of(bf_key) == snap,
+        f"the id is derived from the commit's own date and sha, so a re-run overwrites rather "
+        f"than duplicating. Without that, backfill is a command nobody can run twice — and it is "
+        f"exactly the command someone re-runs after adding history. {len(first_written)} records",
+    )
+    bf_recs = memory.load_all(key=bf_key, env=bf_env)
+    r.check(
+        "EVERY backfilled record is INFERRED",
+        bf_recs and all(x["classification"] == "INFERRED" for x in bf_recs),
+        "this is the entire safety argument for a lossy free import. A commit message states the "
+        "choice and usually the reasoning; it rarely states the question and almost never states "
+        "the alternatives, so what comes out of one is not a VERIFIED record and must not be "
+        "labelled as one",
+    )
+    r.check(
+        "…so none of them can reach the orientation block",
+        memory.render_orient(bf_recs) == "",
+        "the consequence that makes the row above worth having. 15 records imported without a "
+        "human reading one of them, and standing context is unchanged",
+    )
+    r.check(
+        "supersession is NEVER inferred from commit order",
+        all(x["supersedes"] is None for x in bf_recs),
+        "two commits touching one subject are usually both true. Inferring a chain from "
+        "chronology would silently retire live decisions in bulk, and supersession is the one "
+        "mechanism by which a record dies",
+    )
+    # Object IDENTITY, not a grep for the string "CITE". The claim is that there is one regex,
+    # and only `is` says that — a second copy compiled from the same source would satisfy any
+    # textual check and every equality check, and would then drift on the next repair.
+    r.check(
+        "evidence is extracted by citegraph's OWN regex object, not a second copy of it",
+        any(x["evidence"] for x in bf_recs) and memory._cite() is citegraph.CITE,
+        "that pattern encodes measured decisions — the extension list, the leading-dot "
+        "rejection — each earned by a failure. A copy here would have to re-earn every one of "
+        "them, in a file nothing compares against the original",
+    )
+    hand = dict(bf_recs[0])
+    hand["classification"] = "VERIFIED"
+    memory.write(hand, key=bf_key, env=bf_env)
+    _, skipped = memory.backfill(limit=15, start=rig.HEALBOT, env=bf_env)
+    r.check(
+        "a HAND-AUTHORED record is skipped by backfill and REPORTED",
+        any(rec_id == hand["id"] for rec_id, _ in skipped)
+        and memory.read(memory.path_of(hand["id"], key=bf_key, env=bf_env))[
+            "classification"] == "VERIFIED",
+        "both halves: it is named in the report AND it still reads VERIFIED on disk. A backfill "
+        "that silently downgraded it to INFERRED would remove it from the orientation block, "
+        "which is the one direction this import must never move a record",
+    )
+
+    # --- export: the promotion path, and the two blockers it arms -----------------------------
+    dest = tempfile.mkdtemp(prefix="hb-export-")
+    poison_key = "poison"
+    memory.write(sample(id="20260806-x-clean000", rationale="nothing anchored here"),
+                 key=poison_key, env=ENV)
+    # Assembled at runtime from split literals, exactly as gate.py builds its own controls, so
+    # THIS probe's source carries no anchored home path and the gate stays self-applicable.
+    anchored_path = "/Us" + "ers/" + "somebody/Desktop/healbot/notes.md"
+    memory.write(sample(id="20260806-x-poison00", rationale=f"read {anchored_path} first"),
+                 key=poison_key, env=ENV)
+    exported, blocked = memory.export(dest, key=poison_key, env=ENV)
+    r.check(
+        "export REFUSES a record carrying a machine-anchored home path",
+        [rec_id for rec_id, _ in blocked] == ["20260806-x-poison00"]
+        and [os.path.basename(p) for p in exported] == ["20260806-x-clean000.md"],
+        "both halves in one row: the poisoned record is named and the clean one still lands. A "
+        "scrub that refused everything would pass the first conjunct alone, and one that "
+        "refused nothing would pass neither",
+    )
+    r.check(
+        "…using the GATE'S OWN predicate rather than a second copy",
+        memory._home_predicate() is not None
+        and memory._home_predicate()("x " + anchored_path)
+        and not memory._home_predicate()("./home/footer imports"),
+        "gate.py:256 carries a standing 14-row truth table validated before every scan, and it "
+        "already caught one real bug two ad-hoc controls missed. A re-implementation here would "
+        "start that history over, and the place it would be wrong is a public repository",
+    )
+    # The predicate is REPLACED with one that cannot be reached, and the refusal is observed.
+    # The first draft of this row asserted `_home_predicate` was a function, which is true of
+    # every possible implementation including one that exports everything unscrubbed — an
+    # assertion incapable of failing, which is the defect this suite exists to hunt.
+    # No inner `try/finally`, deliberately: probe_rig_contract asserts that the last statement of
+    # EVERY try/finally in a rig is the verdict exit, so a cleanup `finally` here would turn that
+    # guard red. The restore is an ordinary statement instead, and the outer handler covers the
+    # raising case — this store is a temp directory either way.
+    real_predicate = memory._home_predicate
+    memory._home_predicate = lambda: None
+    try:
+        memory.export(dest, key=poison_key, env=ENV)
+        fail_closed = False
+    except memory.RecordInvalid as exc:
+        fail_closed = "refusing to export" in str(exc)
+    memory._home_predicate = real_predicate
+    r.check(
+        "MUTATION: with the predicate unreachable, export REFUSES rather than scrubbing weakly",
+        fail_closed,
+        "fail-closed, observed by making the predicate unreachable and watching the refusal. A "
+        "lenient fallback would be a silent downgrade of the one check whose job is stopping a "
+        "home path reaching a public repo, and 'we exported it with the weaker scan' is not a "
+        "sentence anyone reads before a push",
+    )
+
+    # --- the doctor rows, exercised in all three states ---------------------------------------
+    def doctor(store):
+        """-> (stdout, the `record store` ROW lines).
+
+        Filtered to lines that START a row, not to every line containing the phrase: the tier
+        block's `need` strings also name the store now, and counting those as rows made the
+        first draft of the next check read 5 where it expected 3.
+        """
+        p = subprocess.run([sys.executable, os.path.join(rig.HEALBOT, "harness", "doctor.py")],
+                           cwd=rig.HEALBOT, capture_output=True, text=True,
+                           env=dict(os.environ, HEALBOT_RECORDS=store))
+        rows = [ln.strip() for ln in p.stdout.split("\n")
+                if ln.strip().startswith("[") and "record store" in ln]
+        return p.stdout, rows
+
+    empty_out, empty_rows = doctor(tempfile.mkdtemp(prefix="hb-docempty-"))
+    r.check(
+        "an EMPTY store WARNs and never FAILs",
+        len(empty_rows) == 3 and not any(ln.startswith("[FAIL]") for ln in empty_rows),
+        f"an empty store is the ordinary state of every fresh clone and of every project nobody "
+        f"has captured a decision in. Gating a tier on that would make doctor read NOT YET on a "
+        f"machine where the whole workflow runs. Rows: {empty_rows}",
+    )
+    # Written under HEALBOT'S OWN project key, because doctor resolves the key from its cwd. The
+    # fixture keys every other row uses ("fixture", "chain", …) are invisible to it, and pointing
+    # this at one of those stores is how the first draft asserted "populated" over an empty
+    # directory and got three WARNs back.
+    full_store = tempfile.mkdtemp(prefix="hb-docfull-")
+    memory.capture(
+        {"question": "Does the doctor see a populated store?",
+         "choice": "Yes, when the record is under the project key doctor resolves",
+         "classification": "VERIFIED", "rationale": "keyed from the cwd", "evidence": []},
+        start=rig.HEALBOT, env={"HEALBOT_RECORDS": full_store},
+    )
+    _, full_rows = doctor(full_store)
+    r.check(
+        "…and a populated store reports its counts and its rendered size",
+        any("record(s)" in ln and ln.startswith("[PASS]") for ln in full_rows)
+        and any("orientation" in ln and ln.startswith("[PASS]") for ln in full_rows),
+        f"the row above passes over a check that emits three WARNs unconditionally. This one "
+        f"does not. Rows: {full_rows}",
+    )
+    shutil.rmtree(full_store, ignore_errors=True)
+    locked = tempfile.mkdtemp(prefix="hb-doclocked-")
+    os.chmod(locked, 0o500)
+    _, bad_rows = doctor(os.path.join(locked, "nope"))
+    os.chmod(locked, 0o700)
+    shutil.rmtree(locked, ignore_errors=True)
+    r.check(
+        "an UNWRITABLE store FAILs, by name",
+        any(ln.startswith("[FAIL]") and "writable" in ln for ln in bad_rows),
+        f"the one state that is a real defect rather than a bare store. This is the row the "
+        f"`store_fail` tier guard exists to catch. Rows: {bad_rows}",
+    )
+    doc_src = open(os.path.join(rig.HEALBOT, "harness", "doctor.py"), encoding="utf-8").read()
+    r.check(
+        "the tier guard matches the FAMILY prefix, not one spelling",
+        'n.startswith("record store")' in doc_src and "s == FAIL and" in doc_src,
+        "these rows name themselves for the state they found, so keying a guard on one spelling "
+        "covers one of the ways it can fail — which is the exact defect the crew-constraints "
+        "guard was corrected for, recorded in this file at that guard",
+    )
+    shutil.rmtree(bf_store, ignore_errors=True)
+    shutil.rmtree(dest, ignore_errors=True)
 
 except SystemExit:
     raise

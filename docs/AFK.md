@@ -350,7 +350,7 @@ caps never fire" is **half right, and the half that is wrong is the more dangero
 - If you **restore** permissions via `agentArgsOverride.claude`, the ask becomes possible again —
   and `stdio[0]` is `"ignore"` (VERIFIED), so nothing can answer it, and there is no timeout
   anywhere (§1.5) to end it. The repo has the same hazard measured on its own harness:
-  HARNESS.md:383 — *"No timeout on a pending permission — a client that ignores `permission.asked`
+  HARNESS.md:385 — *"No timeout on a pending permission — a client that ignores `permission.asked`
   hangs that tool call forever. TESTED: it hangs indefinitely."*
 
 Both branches need the watchdog in §3.6, for opposite reasons. Choose deliberately, and write the
@@ -437,11 +437,11 @@ it a manual check meanwhile.
 
 ### 3.4 No package installs. Ever.
 
-HARNESS.md:352, quoted: *"It now holds **84 entries and 94 MB including `node_modules`** — a model
+HARNESS.md:354, quoted: *"It now holds **84 entries and 94 MB including `node_modules`** — a model
 in some earlier run shelled out to `npm install`."* That same directory produced a turn measuring
 **299,326 tokens**, 71% above the 175,148 on record, which took `probe_turn_growth.py` red.
 
-The repair is on record and so is the live residual risk (HARNESS.md:352): the directory was
+The repair is on record and so is the live residual risk (HARNESS.md:354): the directory was
 **restored at the end of Phase 12, 94 MB → 1.8 MB**, and the removed residue included a
 model-created `.gitignore` holding `node_modules/`. So the protection that was silently absorbing
 this is **gone**: *"a future run that shells out to `npm install` will have `git_baseline()`'s

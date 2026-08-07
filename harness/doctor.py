@@ -634,15 +634,24 @@ def tier_summary():
     # the twins guard: the not-installed WARN is bring-up, not breakage.
     root_fail = any(s == FAIL and n.startswith("claude config-root skills")
                     for s, n, _ in ROWS)
+    # Same family rule again, and FAIL ONLY for a sharper reason than the twins': an EMPTY store
+    # is the ordinary state of every fresh clone and of every project nobody has captured a
+    # decision in, and it WARNs. Gating a tier on that would make doctor read NOT YET on a
+    # machine where the entire workflow runs. It reaches both tiers because both inject the
+    # orientation block — the opencode plugin and the Claude SessionStart hook read the same
+    # rendered file — so a broken store degrades whichever one the operator is using.
+    store_fail = any(s == FAIL and n.startswith("record store") for s, n, _ in ROWS)
     claude_ok = ok("git", "claude", "claude harness settings", "harness claude auth") \
-        and not crew_fail and not twin_fail and not root_fail
+        and not crew_fail and not twin_fail and not root_fail and not store_fail
     tiers.append(("claude code workflow (env.claude.sh + settings pin)",
                   claude_ok, "needs git, claude CLI, settings.json, constraints in sync, "
                              "skill twins in sync, the redirected root's skills surfaced, "
-                             "and that root signed in"))
+                             "that root signed in, and a writable decision-record store"))
     tiers.append(("opencode workflow (env.sh + fork TUI/grid)",
-                  ok("bun", "opencode/ checkout", "opencode harness config") and not twin_fail,
-                  "needs bun + the reconstituted checkout (fork/README.md), skill twins in sync"))
+                  ok("bun", "opencode/ checkout", "opencode harness config")
+                  and not twin_fail and not store_fail,
+                  "needs bun + the reconstituted checkout (fork/README.md), skill twins in "
+                  "sync, and a writable decision-record store"))
     if KIND == "windows":
         tiers.append(("crew fleet (tmux) and rig/suite (pty)", None,
                       "WSL2-only on a PC, by design — not measurable from native Windows"))
@@ -666,6 +675,78 @@ def tier_summary():
     return [state for _, state, _ in tiers]
 
 
+def check_record_store():
+    """The decision-record store: does it resolve, can it be written, does it orient?
+
+    THREE ROWS UNDER ONE FAMILY PREFIX, and only a BROKEN store may FAIL. An EMPTY store is the
+    ordinary state of a project nobody has captured a decision in yet — including every fresh
+    clone — so "no records" is a WARN that gates nothing. Wiring an unconfigured store into a
+    tier verdict would make `doctor` read NOT YET on a machine where the whole workflow runs.
+
+    The family prefix matters for the same reason `check_claude_md`'s does: the row NAME changes
+    with the state found, so the guards below key on `startswith("record store")` rather than on
+    one spelling.
+
+    `harness/memory.py` is imported rather than shelled out to, which is safe precisely because
+    that module was built to run nothing at import — no walk, no git, no `sys.exit`.
+    """
+    sys.path.insert(0, HARNESS)
+    try:
+        import memory
+    except Exception as exc:  # noqa: BLE001 — an unimportable store module is one finding
+        row(FAIL, "record store module", f"harness/memory.py will not import: {exc}")
+        return
+    try:
+        directory = memory.records_dir()
+    except memory.NotAProject:
+        # Not a repository. The store is keyed to a project and there is no project here, which
+        # is a fact about where doctor was run and not a defect in the machine.
+        row(SKIP, "record store", "not inside a git repository, so no project to key a store to")
+        return
+    except Exception as exc:  # noqa: BLE001
+        row(FAIL, "record store unresolvable", str(exc))
+        return
+    try:
+        os.makedirs(directory, exist_ok=True)
+        probe = os.path.join(directory, ".doctor-write-probe")
+        with open(probe, "w", encoding="utf-8") as fh:
+            fh.write("")
+        os.remove(probe)
+    except OSError as exc:
+        row(FAIL, "record store NOT writable", f"{directory}: {exc}")
+        return
+    row(PASS, "record store", directory.replace(os.path.expanduser("~"), "~"))
+
+    recs = memory.load_all()
+    live = memory.heads(recs)
+    if not recs:
+        row(WARN, "record store empty",
+            "no decisions captured yet — healbot_decide, or `memory.py backfill` to seed from "
+            "git history")
+    else:
+        row(PASS, "record store records",
+            f"{len(recs)} record(s), {len(live)} live, {len(recs) - len(live)} superseded")
+
+    try:
+        block = memory.render_orient(recs)
+    except Exception as exc:  # noqa: BLE001 — a renderer that raises breaks session startup
+        row(FAIL, "record store orientation", f"render_orient raised: {exc}")
+        return
+    eligible = [r for r in live if r.get("classification") in ("VERIFIED", "TESTED")]
+    if block:
+        row(PASS, "record store orientation",
+            f"{len(block)} B of {memory.ORIENT_CAP}, {len(eligible)} eligible record(s)")
+    elif eligible:
+        # Records qualify and nothing rendered. That is the one shape here that is a real defect
+        # rather than an empty store, so it is the one that FAILs.
+        row(FAIL, "record store orientation EMPTY",
+            f"{len(eligible)} VERIFIED/TESTED record(s) qualify but the block rendered empty")
+    else:
+        row(WARN, "record store orientation empty",
+            "nothing VERIFIED or TESTED to orient with — backfilled records are INFERRED by "
+            "design and never reach the block")
+
+
 def main():
     print(f"healbot doctor — {KIND} — repo {ROOT}\n")
     if check_repo():
@@ -682,6 +763,7 @@ def main():
         check_skill_twins()
         check_config_root_skills()
         check_fleet_and_rig()
+        check_record_store()
     width = max(len(n) for _, n, _ in ROWS)
     for status, name, detail in ROWS:
         print(f"  [{status}] {name:<{width}}  {detail}")

@@ -21,11 +21,15 @@ This bites two skills directly:
 - **`/grill-with-docs`** creates `CONTEXT.md` and ADRs lazily for the same reason. Same answer.
 
 **What to do instead.** This repo's glossary and its "which file owns this behavior" index are
-both `HARNESS.md`, and its architectural decisions are recorded in two places that already exist:
-the `DECIDED` section of `NEXT.md` for standing decisions, and the dated phase records under
-`docs/` for the evidence behind each one. When a term needs pinning or a decision needs recording,
-put it there. If a glossary file is genuinely wanted later, it needs a name outside the banned
-set and an owner's decision, not a lazy creation mid-session.
+both `HARNESS.md`, and its architectural decisions are recorded in three places that already
+exist: the `DECIDED` section of `NEXT.md` for standing decisions, the dated phase records under
+`docs/` for the evidence behind each one, and since Phase 15 the **decision-record store**, which
+holds the question, the choice, the rejected alternatives and a mandatory classification, keyed
+per project and living outside every repository at `~/.healbot/records/`. Capture into it with
+`healbot_decide` or `harness/memory.py capture`; read it with `harness/memory.py recall`. When a
+term needs pinning or a decision needs recording, put it in one of those three. If a glossary file
+is genuinely wanted later, it needs a name outside the banned set and an owner's decision, not a
+lazy creation mid-session.
 
 ## Before exploring, read these
 
@@ -35,6 +39,10 @@ set and an owner's decision, not a lazy creation mid-session.
   fix. Those entries are closed on purpose and several read as defects to a fresh reader.
 - The **dated phase record** under `docs/` for the area you are touching. `HARNESS.md` indexes
   them newest first and says what each one settles.
+- The **decision records**, before re-opening anything that looks settled:
+  `python3 harness/memory.py recall "<the thing you are about to change>"`. A record that comes
+  back means the choice was deliberate — either its reasoning still holds, or you supersede it.
+  Changing something a live record contradicts, without superseding it, leaves the store lying.
 - **`docs/adr/` does not exist.** Proceed silently; do not flag its absence and do not create it.
 
 ## Use the repo's vocabulary
@@ -44,7 +52,12 @@ it. The load-bearing ones: **retirement** (a session crosses a threshold, finish
 writes a handoff, and a fresh session continues), **the gate** (the per-change check wired into
 `git push`), **a probe** (a free assertion rig with a declared floor), **a rig** (a paid
 measurement), **the fleet** (tmux crew sessions), **captain** and **crewmate**, **the pool**
-(leased worktree slots), and **a twin** (two copies of one file that a checker keeps in sync).
+(leased worktree slots), **a twin** (two copies of one file that a checker keeps in sync), **a
+decision record** (a question, a choice, the rejected alternatives with their reasons, and a
+mandatory classification, anchored to a commit), **the store** (the per-project set of those,
+outside every repository), **supersession** (how a record dies — never a TTL, because time does
+not invalidate a decision and a code change does), and **the orientation block** (the capped
+`VERIFIED`/`TESTED` heads a fresh session is given without asking).
 
 ## Flag contradictions rather than overriding them
 

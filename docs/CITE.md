@@ -184,6 +184,14 @@ that produced something subtly different from the overlay this repo ships. It do
 - **Semantic citation rot is unguarded and unguardable mechanically.** `probe_citations.py` proves a
   citation points *somewhere real*, never that it points at *the right thing*. 930 citations now
   resolve; how many describe what they claim to is not a question a probe can answer.
+  **Narrowed, not closed, in Phase 15.** `gate/staleness.py` now answers the middle question — the
+  pointer still resolves, but did the lines under it move? — and the decision-record store extends
+  the same test to records: `gate/hooks/post-commit` reports any record whose evidence names a file
+  the commit changed. Both say *go and re-read this*; neither says a claim is wrong, and neither
+  ever will. **A record's evidence is swept only once it is exported into the tree** — the store
+  lives outside every repository, so `probe_citations.py` cannot see it, which is deliberate:
+  a tracked record with a rotted pointer turns tier 1 RED and refuses a push, converting a warning
+  into a block. `docs/RECORDS.md` §7.
 - **The 180,000 gate** (~$2.60) and **an external plugin's route** — both unchanged, both declined.
 - **Phase 3's exit gate** — `/code-review ultra`. User-triggered and billed.
 

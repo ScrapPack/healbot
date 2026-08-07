@@ -74,6 +74,21 @@ DECIDED — do not reopen any of these as a defect, and do not "fix" them:
     escalation for planning and long-form-synthesis briefs, never the default. NO retirement
     threshold is verified for any Claude model. Hand off early; do not copy the opencode
     numbers across.
+  - The decision-record store lives OUTSIDE every repository, at ~/.healbot/records/, keyed
+    on the main worktree root. Not gitignored-in-repo (that needs a .gitignore written into
+    a project you do not own) and not XDG (env.sh and arms.py both rewrite XDG_CONFIG_HOME,
+    so it would split per harness root and per A/B arm). It does not travel with a clone;
+    that cost was accepted. docs/RECORDS.md §3.
+  - Every BACKFILLED record is INFERRED, and INFERRED never reaches the orientation block.
+    That pairing is what makes a free lossy import safe. Do not "upgrade" backfilled records
+    in bulk to make them retrievable — they already are, through recall. docs/RECORDS.md §6.
+  - The store WARNS and never blocks. The doctor's three `record store` rows gate a tier on
+    FAIL only, an empty store is a WARN, and no push is ever refused over a record. False
+    positives train the operator toward --no-verify, which also silently disables the
+    evidence publisher. docs/RECORDS.md §8.
+  - NEXT.md's DECIDED section does NOT retire into the store. It is operator-facing and
+    frozen at a constant shape; the store is agent-facing and out of tree. Whether it ever
+    moves is an open decision with an existing owner. Do not open it as part of other work.
 
 YOUR TASK — Phase 15. Everything in the build order is built and every known correctness
 hole is closed. Nothing is blocking you. Do not invent something to build.

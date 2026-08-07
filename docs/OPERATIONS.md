@@ -98,6 +98,23 @@ them; the doctor's skill-twins row is the sync check for the `~/.agents` halves.
 | `tdd` | Red-green-refactor build work |
 | `plainspec` | Writing docs, PR text, or error messages to the controlled prose standard ("STE mode" means strict) |
 | `plaincode` | Writing or reviewing Python to the controlled code standard — PEP 8 at the measured width plus the compaction judgment pass (`docs/PLAINCODE.md` is the measurement record; gate enforcement deliberately not flipped) |
+| `decision-records` | Before re-opening a settled question, and after settling one where real alternatives were rejected |
+
+## Decision records
+
+The per-project store of why a choice went the way it did. It lives **outside every repository**
+at `~/.healbot/records/<project-key>/`, so it does not travel with a clone and needs backing up
+with the rest of the home directory (`docs/RECORDS.md` §3). `~/.healbot/derived/` is disposable.
+
+| Command | What |
+|---|---|
+| `python3 harness/memory.py path` | Where this project's records are. Identical from the main checkout, a linked worktree and a pool slot — that is the point |
+| `python3 harness/memory.py list` | Every record, marked live or superseded |
+| `python3 harness/memory.py recall "<text>"` | Search questions, choices, reasoning and evidence. Add `--all` for superseded records and what replaced them |
+| `python3 harness/memory.py orient` | Exactly what a fresh session on this project is told without asking. Both injection points read this |
+| `python3 harness/memory.py backfill --limit 200` | Seed from git history. Free, mechanical, safe to re-run — every record is `INFERRED`, so none reaches the orientation block |
+| `python3 harness/memory.py export <dir> [<id>…]` | Promote records into a tracked directory. Explicit, one at a time, and it arms two blockers — read `docs/RECORDS.md` §7 first |
+| `HEALBOT_CAPTURE_AT` / `HEALBOT_ORIENT=off` / `HEALBOT_RECORDS` | Nudge fraction of the retirement gate (default 0.5) · skip the Claude-side injection · redirect the store, for fixtures |
 
 ## Troubleshooting, distilled from the traps
 

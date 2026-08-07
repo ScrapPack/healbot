@@ -88,6 +88,25 @@ you recognize the red when it fires. HARNESS.md's "Traps" section is the canonic
 
 - **Never set XDG_DATA_HOME.** auth.json lives there and OpenAI is on oauth; isolate the DB
   only.
+- **XDG_CONFIG_HOME IS NOT A STABLE KEY FOR ANYTHING PER-PROJECT.** Two things rewrite it on
+  purpose — `harness/env.sh:51-52` points it at the harness config root, and `arms.py:256`
+  points it at a materialized A/B arm — so anything keyed on it silently becomes per-harness-
+  root and per-arm. Found while siting the decision-record store, which must SPAN both: a
+  crewmate in a pool slot and the operator in a bare shell are one project. The store is at a
+  fixed `~/.healbot` for that reason. Guard: probe_memory_store.py's one-key-from-every-tree
+  row. Same shape as the XDG_DATA_HOME trap above, one axis over.
+- **`git rev-parse --show-toplevel` ANSWERS WITH THE TREE YOU ARE STANDING IN, and that is
+  almost never the project identity you want.** From a linked worktree or a pool slot it
+  returns that worktree; `git worktree list --porcelain` line 1 returns the main tree from
+  every member of the set. Three of the four store designs reached for `--show-toplevel` and
+  each would have given a crewmate its own private store that the operator could not see —
+  green everywhere, with no error at either end. Guard: probe_memory_store.py runs a
+  `--show-toplevel` resolver as an explicit mutation and requires it to SPLIT.
+- **A git hook that resolves the repo from `$0` sends every crewmate's work to the main
+  checkout.** `core.hooksPath` is `gate/hooks`, which is tracked, so the running hook file can
+  be the main tree's while the tree being committed to is a worktree. Resolve from
+  `git rev-parse --show-toplevel` inside the hook — the one place it IS the right answer.
+  Python comes from PATH there too: the rig venv is gitignored, so worktrees have none.
 - **Environment mutation during a live study voids arms.** Check on-disk study state, not
   process liveness, before any script that touches global config (the apply-symlinks.sh
   incident). Full protocol: the paid-run-protocol skill.

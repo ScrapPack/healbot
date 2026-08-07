@@ -41,7 +41,8 @@ the guards it produced are executable:
 | `opencode/` | *Not in git.* The derived working checkout; `fork/README.md` rebuilds it |
 | `gate/` | The per-change gate, tier-2 runner, model review, evidence publisher |
 | `.carryover/verified/` | The measurement rig: free probes, paid rigs, and the tracked corpus of paid session DBs the thresholds are derived from |
-| `docs/` | Phase docs (the evidence record), plus `OPERATIONS.md` (command cheat sheet), `WINDOWS.md` (PC bring-up), and `AGENT-SETUP.md` (paste-in prompt for agent-driven bring-up) |
+| `docs/` | Phase docs (the evidence record), plus `OPERATIONS.md` (command cheat sheet), `RECORDS.md` (the decision-record store), `WINDOWS.md` (PC bring-up), and `AGENT-SETUP.md` (paste-in prompt for agent-driven bring-up) |
+| `~/.healbot/records/` | *Not in git, and not in any repo.* The decision-record store, keyed per project. Out of the tree on purpose: a record carries verbatim session text, so a `git add -A` in a client repo would commit the operator's prompts. It does not travel with a clone — [docs/RECORDS.md](docs/RECORDS.md) §3 |
 
 **Live surface vs. record**, because `docs/` holds both and the filenames do not say which:
 this README, `docs/OPERATIONS.md`, `docs/WINDOWS.md` and `docs/AGENT-SETUP.md` are what you

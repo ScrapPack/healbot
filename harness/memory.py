@@ -657,6 +657,191 @@ def stamp(sha, changed, start=None, env=None):
 
 
 # ---------------------------------------------------------------------------------------------
+# Backfill
+# ---------------------------------------------------------------------------------------------
+
+# `\x1e` (record separator) and `\x1f` (unit separator) rather than a printable delimiter, because
+# a commit message is arbitrary text and every printable delimiter has already appeared in one.
+LOG_FORMAT = "%H\x1f%aI\x1f%an\x1f%s\x1f%b\x1e"
+
+
+def commits(rev_range=None, limit=None, start=None):
+    """-> [{sha, when, author, subject, body}], newest first."""
+    cmd = ["git", "log", f"--format={LOG_FORMAT}"]
+    if limit:
+        cmd.append(f"-{int(limit)}")
+    if rev_range:
+        cmd.append(rev_range)
+    out = subprocess.run(cmd, cwd=start or os.getcwd(), capture_output=True, text=True)
+    if out.returncode != 0:
+        raise NotAProject(f"git log failed in {start or os.getcwd()}")
+    found = []
+    for chunk in out.stdout.split("\x1e"):
+        parts = chunk.strip("\n").split("\x1f")
+        if len(parts) == 5 and parts[0]:
+            found.append(dict(zip(("sha", "when", "author", "subject", "body"), parts)))
+    return found
+
+
+def _cite():
+    """`citegraph.CITE`, or None. Imported lazily and by path, so `memory.py` keeps working in a
+    project that is not healbot — where `gate/` does not exist and evidence extraction is simply
+    not available. A second copy of that regex is the alternative and it is not an improvement:
+    the pattern encodes measured decisions (the extension list, the leading-dot rejection) that
+    were earned by failures and would be re-earned by a copy."""
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        sys.path.insert(0, os.path.join(here, "gate"))
+        import citegraph
+    except ImportError:
+        return None
+    return citegraph.CITE
+
+
+def as_record(commit, changed, cite=None):
+    """One commit -> one INFERRED record. PURE, so the shape can be asserted without a repository.
+
+    WHAT IS AND IS NOT RECOVERABLE, stated honestly because the whole safety argument rests on it.
+    A commit message states the CHOICE and usually the reasoning. It rarely states the question
+    and ALMOST NEVER states the alternatives, because by the time it is written the rejected
+    options are gone from the author's head. So `alternatives` is always empty here and
+    `classification` is always INFERRED — which means no backfilled record can ever reach the
+    orientation block, which is exactly what makes a lossy free import safe to run over hundreds
+    of commits without reading one of them.
+
+    `supersedes` is ALWAYS None. Commit order is not supersession: two commits touching one
+    subject are usually both true, and inferring a chain from chronology would silently retire
+    live decisions in bulk. A chain is something a human or a capturing session asserts.
+    """
+    sha = commit["sha"]
+    subject = commit["subject"].strip()
+    # This repo's subjects read `<area>: <what changed and why>`, so the area makes the derived
+    # question searchable. The question is DERIVED and says so — writing the subject into it
+    # would state a question the commit never asked.
+    area = subject.split(":", 1)[0].strip() if ":" in subject[:40] else ""
+    question = (f"{area}: what was decided at {sha[:8]}?" if area
+                else f"What was decided at {sha[:8]}?")
+    body = commit["body"].strip()
+    evidence = []
+    if cite is not None:
+        seen = set()
+        for match in cite.finditer(f"{subject}\n{body}"):
+            pointer = f"{match.group(1)}:{match.group(2)}"
+            if pointer not in seen:
+                seen.add(pointer)
+                evidence.append(pointer)
+    return blank(
+        id=f"{commit['when'][:10].replace('-', '')}-b-{sha[:8]}",
+        scope="project",
+        question=question,
+        choice=subject,
+        alternatives=[],
+        rationale=body,
+        evidence=evidence,
+        classification="INFERRED",
+        anchor={"commit_sha": sha, "changed_files": sorted(changed)},
+        supersedes=None,
+        captured_at=commit["when"],
+        captured_by=f"backfill:{commit['author']}",
+    )
+
+
+def backfill(rev_range=None, limit=None, start=None, env=None):
+    """-> (written ids, skipped [(id, why)]). Mechanical, zero model calls, safe to re-run.
+
+    Re-running OVERWRITES rather than duplicating, because the id is deterministic from the
+    commit's own date and sha. A target whose existing classification is NOT `INFERRED` was
+    authored or upgraded by hand, so it is skipped and reported: a backfill that silently
+    downgraded a VERIFIED record to INFERRED would remove it from the orientation block, which is
+    the one direction this import must never move a record.
+    """
+    cite = _cite()
+    written, skipped = [], []
+    for commit in commits(rev_range, limit, start):
+        files = subprocess.run(
+            ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", commit["sha"]],
+            cwd=start or os.getcwd(), capture_output=True, text=True)
+        rec = as_record(commit, files.stdout.split(), cite)
+        existing = read(path_of(rec["id"], start=start, env=env))
+        if existing and existing.get("classification") not in ("", "INFERRED"):
+            skipped.append((rec["id"], f"hand-authored as {existing['classification']}"))
+            continue
+        try:
+            # reorient=False: re-rendering re-reads every record, so N writes at the default is
+            # O(N^2) file reads. Rendered once below instead.
+            write(rec, start=start, env=env, reorient=False)
+            written.append(rec["id"])
+        except RecordInvalid as exc:
+            skipped.append((rec["id"], str(exc)))
+    write_orient(start=start, env=env)
+    return written, skipped
+
+
+# ---------------------------------------------------------------------------------------------
+# Export — the promotion path
+# ---------------------------------------------------------------------------------------------
+
+
+def _home_predicate():
+    """The GATE'S OWN home-path predicate, or None when it cannot be reached.
+
+    Not a second copy. `gate/gate.py:256`'s `_home_anchored` carries a standing 14-row truth
+    table validated before every scan, and it already caught one real bug (the `i == 0`
+    empty-`before` case) that two ad-hoc controls missed. A re-implementation here would start
+    that history over, and the place it would be wrong is a public repository.
+    """
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        sys.path.insert(0, os.path.join(here, "gate"))
+        import gate
+    except Exception:  # noqa: BLE001 — any unreachable gate is the same answer: refuse
+        return None
+    return getattr(gate, "_home_anchored", None)
+
+
+def export(dest, ids=None, key=None, start=None, env=None):
+    """Copy records into a tracked directory. -> (exported paths, refused [(id, line)]).
+
+    PROMOTION IS EXPLICIT AND ONE RECORD AT A TIME, never a default. Two blockers arm the moment
+    a record enters the tree, and both were reasons the store moved out of the repository:
+
+      - A tracked record joins `probe_citations.py`'s sweep, so a rotted evidence pointer turns
+        tier 1 RED and REFUSES the push. That converts "flagged for re-reading" into a hard block,
+        against the settled decision that this system warns and never blocks. So an exported
+        record's evidence is the exporter's problem from then on, and `docs/RECORDS.md` says so.
+      - A tracked record joins the full-tree home-path scan on a public repo. Records carry
+        verbatim session text.
+
+    So the scrub is FAIL-CLOSED: no predicate, no export. A weaker fallback predicate would be a
+    silent downgrade of a check whose entire job is stopping a home path reaching a public
+    repository, and "we exported it with the lenient scan" is not a sentence anyone would read
+    before the push.
+    """
+    anchored = _home_predicate()
+    if anchored is None:
+        raise RecordInvalid(
+            "cannot reach gate._home_anchored, so the home-path scrub cannot run — refusing to "
+            "export rather than promoting records with a weaker check than the gate's own")
+    os.makedirs(dest, exist_ok=True)
+    out, refused = [], []
+    for rec in load_all(key=key, start=start, env=env):
+        if ids and rec.get("id") not in ids:
+            continue
+        text = dumps(rec)
+        hit = next((ln for ln in text.split("\n") if anchored(ln)), None)
+        if hit is not None:
+            refused.append((rec.get("id"), hit.strip()[:120]))
+            continue
+        path = os.path.join(dest, f"{rec['id']}.md")
+        tmp = f"{path}.tmp-{os.getpid()}"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+        out.append(path)
+    return out, refused
+
+
+# ---------------------------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------------------------
 
@@ -822,10 +1007,45 @@ def _cmd_recall(argv, env):
     return 0
 
 
+def _cmd_backfill(argv, env):
+    """`backfill [<rev-range>] [--limit N]`."""
+    limit = None
+    if "--limit" in argv:
+        i = argv.index("--limit")
+        limit = argv[i + 1] if i < len(argv) - 1 else None
+    rev = next((a for a in argv[1:] if not a.startswith("--")
+                and argv[argv.index(a) - 1] not in ("--limit", "--dir")), None)
+    written, skipped = backfill(rev, limit, start=_dir_opt(argv), env=env)
+    print(f"backfilled {len(written)} record(s), all INFERRED")
+    for rec_id, why in skipped:
+        print(f"  skipped {rec_id}: {why}")
+    return 0
+
+
+def _cmd_export(argv, env):
+    """`export <dir> [<id> ...]`."""
+    if len(argv) < 2:
+        print("export needs a destination directory", file=sys.stderr)
+        return 2
+    ids = {a for a in argv[2:] if not a.startswith("--")} or None
+    try:
+        out, refused = export(argv[1], ids, start=_dir_opt(argv), env=env)
+    except RecordInvalid as exc:
+        print(f"export: refused — {exc}", file=sys.stderr)
+        return 2
+    print(f"exported {len(out)} record(s) to {argv[1]}")
+    for rec_id, line in refused:
+        print(f"  REFUSED {rec_id}: carries a machine-anchored home path — {line}",
+              file=sys.stderr)
+    return 1 if refused else 0
+
+
 COMMANDS = {
     "path": _cmd_path,
     "orient": _cmd_orient,
     "recall": _cmd_recall,
+    "backfill": _cmd_backfill,
+    "export": _cmd_export,
     "list": _cmd_list,
     "query": _cmd_query,
     "show": _cmd_show,
