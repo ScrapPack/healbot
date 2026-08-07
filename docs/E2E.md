@@ -441,7 +441,7 @@ mapped every nonzero probe exit to BLOCKED, so for tier-1 probes the interface w
 was cited here by line and GATE.MAP moved under it, so the pointer is by name now). Note the
 rest of the gate does make the
 distinction — a broken truth table, a failed enumeration and an unmatched fork twin all reach
-ERROR on their own (`gate/gate.py:420`, `:439`, `:252`) — which is what makes the tier-1 hole
+ERROR on their own (`gate/gate.py:427`, `gate/gate.py:446`, `gate/gate.py:259`) — which is what makes the tier-1 hole
 narrow enough to be missed. A sentinel exit code for cannot-measure, agreed across the probes,
 would close it.
 

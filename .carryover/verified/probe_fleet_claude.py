@@ -259,7 +259,7 @@ try:
     r.check("the constraints file is TRACKED under the safe name crew-constraints.md",
             "harness/claude/crew-constraints.md" in tracked
             and os.path.isfile(os.path.join(CFG, "crew-constraints.md")),
-            "gate.py:297 bans the real name anywhere in the tracked tree; this is the half git carries")
+            "gate.py:304 bans the real name anywhere in the tracked tree; this is the half git carries")
     r.check("NEGATIVE: the real name is NOT tracked, and is ignored",
             "harness/claude/CLAUDE.md" not in tracked and ignored(rel + "CLAUDE.md"),
             "if this ever goes red the ban is being violated, not worked around")

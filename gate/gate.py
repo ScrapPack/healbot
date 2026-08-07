@@ -144,14 +144,21 @@ def scope_error(base, head=None):
     the record is the artifact that survives the scrollback, and an ERROR whose cause is not in
     it sends the reader back to a terminal they have already closed. Only reached when
     `changed_files` already returned None, so the second call costs nothing on a healthy run."""
-    fails = [(c, sh(["git", "-c", "core.quotePath=false", *c])) for c in _enum_cmds(base, head)]
-    fails = [(c, r) for c, r in fails if r["code"] != 0]
+    attempted = _enum_cmds(base, head)
+    fails = [(c, r) for c, r in ((c, sh(["git", "-c", "core.quotePath=false", *c]))
+                                 for c in attempted) if r["code"] != 0]
     diag = "\n".join(f"git {' '.join(c)} -> exit {r['code']}\n{r['out'].strip()}" for c, r in fails)
+    # `cmd` NAMES WHAT FAILED, and is not a literal. A hardcoded "git diff --name-only" here was
+    # wrong on the no-base path the moment only `ls-files` failed — the row describing a command
+    # the run did not issue, which is the exact defect `_enum_cmds` was extracted to prevent, one
+    # function below the docstring saying so (review finding from the c5ddaad push).
     return {
         "check": "change-scope",
         "why": "git could not enumerate the change — every change-scoped check below is "
                "UNMEASURED, which is not the same fact as clean",
-        "cmd": "git diff --name-only", "code": None, "secs": 0.0,
+        "cmd": (f"git {' '.join(fails[0][0])}" if fails
+                else "; ".join(f"git {' '.join(c)}" for c in attempted)),
+        "code": None, "secs": 0.0,
         "sha256": hashlib.sha256(diag.encode()).hexdigest(),
         "tail": [f"{len(fails)} enumeration(s) failed, first: git {' '.join(fails[0][0])}"
                  if fails else "enumeration failed, then succeeded on re-issue"],

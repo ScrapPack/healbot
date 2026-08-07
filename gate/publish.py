@@ -106,8 +106,17 @@ def build_body(sha, ref, gate_path, review_path):
             continue
         rec, body, full_sha, stripped, truncated = cleaned(path)
         if label == "gate":
-            lines.append(f"**gate:** `{rec.get('verdict', '?')}` · "
-                         f"{len(rec.get('files', []))} changed file(s) · base `{rec.get('base')}`")
+            # `files` is None, not [], when git could not enumerate the change
+            # (`gate.py:120`). `.get(k, default)` returns the STORED None here, because the key
+            # exists — so `len(...)` raised TypeError and the publisher died on exactly the run
+            # whose evidence matters most. TESTED against a fabricated `"files": null` record.
+            # Rendered as UNMEASURED rather than as 0: "0 changed file(s)" is the sentence a
+            # clean empty push produces, and the whole point of the None is that the two are
+            # different facts.
+            files = rec.get("files")
+            scope = "change scope UNMEASURED" if files is None else f"{len(files)} changed file(s)"
+            lines.append(f"**gate:** `{rec.get('verdict', '?')}` · {scope} · "
+                         f"base `{rec.get('base')}`")
             lines.append("")
             lines.append("| check | state | detail | secs |")
             lines.append("|---|---|---|---|")

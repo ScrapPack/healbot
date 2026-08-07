@@ -41,12 +41,15 @@ mutants. That record predates the deletion leg, which reads only the hook and is
 to the range machinery that test reverted.
 
 Commit identities and dates are pinned, so the scratch shas are stable and this probe's
-output is byte-identical across runs: MEASURED 2026-08-03, 4 runs, one sha256 over the full
-output. Tier 2 hashes nothing, so nothing depends on that; it is measured because
-the gate's determinism note says to measure rather than hope, and it is what Tier 1
-membership would require. The row count that used to sit in that sentence is gone rather
-than corrected: it is a number with nothing computing it, so every leg added below rotted
-it, and `Results(expect=N)` already computes and prints it. Needs `ruff` on PATH, the same
+output is byte-identical across runs: RE-MEASURED 2026-08-07 on the probe as it now stands,
+every leg included, 4 runs, one sha256 over the full output. That re-measurement is the
+point of the sentence. The previous one was taken 2026-08-03 on a smaller probe and
+was carried forward across a change that added two scenarios, so the claim covered output
+nobody had hashed — a measurement re-quoted past the thing it measured, which is the same
+defect as the row count deleted from this paragraph (review finding from the c5ddaad push).
+Re-measure here, do not re-date, whenever a leg is added. Tier 2 hashes nothing, so nothing
+depends on it; it is measured because the gate's determinism note says to measure rather
+than hope, and it is what Tier 1 membership would require. Needs `ruff` on PATH, the same
 requirement the gate's own lint stage carries.
 
   venv/bin/python probe_gate_scope.py
@@ -162,6 +165,19 @@ def build_scenario(tmp, plant=PLANT):
     tip = rev(work, "HEAD")
     git(work, "checkout", "-q", "-b", "parked", base)  # park the checkout on the ancestor
     return work, remote, base, tip
+
+
+def gate_module(basename):
+    """Load a `gate/` module by path, for the rows that read one directly rather than through a
+    push. Safe because both gate.py and publish.py are import-free by design — constants and
+    function definitions only, no walk, no git, no sys.exit — the same property
+    `probe_memory_store.py` asserts of memory.py."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(f"_probe_gate_scope_{basename}",
+                                                  f"{ROOT}/gate/{basename}.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def build_odd(tmp):
@@ -280,7 +296,7 @@ def record_scope_ok(rec, work, tip):
             and rec.get("tree") == short(work, "HEAD"))
 
 
-r = Results(expect=30)
+r = Results(expect=32)
 TMP = tempfile.mkdtemp(prefix="probe_gate_scope.")
 try:
     r.check(
@@ -571,6 +587,56 @@ try:
         f"does not read the file list, so it must still measure — a run that reported "
         f"everything unmeasured would pass the first clause and fail here. "
         f"{ {n: row_of(b_rec, n).get('state') for n in ('ruff', 'tsgo', 'oxlint', 'banned-filenames', 'home-paths')} }",
+    )
+
+    r.check(
+        "…and the change-scope row NAMES the enumeration that failed, arguments included",
+        row_of(b_rec, "change-scope").get("cmd") == "git diff --name-only nosuchref...HEAD",
+        f"`cmd` was a hardcoded `git diff --name-only` literal, which is already wrong on the "
+        f"no-base path the moment only `ls-files --others` is the call that failed — a row "
+        f"describing a command the run did not issue, which is the defect `_enum_cmds` was "
+        f"extracted to prevent, stated in its docstring one function above the literal (review "
+        f"finding from the c5ddaad push). The range in the expected string is what makes this "
+        f"row fail over the literal rather than over nothing. "
+        f"got {row_of(b_rec, 'change-scope').get('cmd')!r}",
+    )
+
+    # --- the evidence publisher, which is what a reader outside this machine actually sees ---
+    #
+    # `build_body` had NO probe at all, which is how `len(rec.get("files", []))` survived: the
+    # default is not reached when the key EXISTS holding None, so the publisher raised TypeError
+    # on precisely the record class this change introduced (review finding from the c5ddaad
+    # push). Not reachable through the hook, whose exit-3 refusal precedes the publisher, but
+    # reachable on a hand-run `publish.py`, whose `--since` defaults to 0 and takes the newest
+    # gate record whatever it is.
+    pub = gate_module("publish")
+    pubdir = f"{TMP}/publish"
+    os.makedirs(pubdir)
+
+    def rendered(files):
+        path = f"{pubdir}/20260807-00000{0 if files is None else 1}.json"
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump({"tag": "t", "verdict": "error", "base": "b", "files": files,
+                       "head": "h", "tree": "t", "checks": []}, fh)
+        return pub.build_body("c5ddaad569b1", "refs/heads/main", path, None)
+
+    try:
+        unmeasured = rendered(None)      # build_body returns the comment BODY, one string
+        raised = ""
+    except Exception as exc:  # noqa: BLE001 — the pre-fix TypeError is the thing under test
+        unmeasured, raised = "", f"{type(exc).__name__}: {exc}"
+    empty = rendered([])
+    r.check(
+        "the publisher renders an UNMEASURED scope, and still says 0 for a genuinely empty one",
+        not raised and "change scope UNMEASURED" in unmeasured
+        and "0 changed file(s)" not in unmeasured
+        and "0 changed file(s)" in empty,
+        f"BOTH HALVES. Without the first the publisher dies on the run whose evidence matters "
+        f"most — a pushed commit with no evidence comment is indistinguishable from one pushed "
+        f"with `--no-verify`, which is the claim the comment's own header makes. Without the "
+        f"second the fix could render every scope as unmeasured and still pass, and `files: []` "
+        f"and `files: null` are the two facts this change exists to keep apart. "
+        f"raised={raised!r}",
     )
 
     # --- mutation 3: take the quoting flag back off the shared enumeration ---------------

@@ -814,7 +814,7 @@ def backfill(rev_range=None, limit=None, start=None, env=None):
 def _home_predicate():
     """The GATE'S OWN home-path predicate, or None when it cannot be reached.
 
-    Not a second copy. `gate/gate.py:344`'s `_home_anchored` carries a standing 14-row truth
+    Not a second copy. `gate/gate.py:351`'s `_home_anchored` carries a standing 14-row truth
     table validated before every scan, and it already caught one real bug (the `i == 0`
     empty-`before` case) that two ad-hoc controls missed. A re-implementation here would start
     that history over, and the place it would be wrong is a public repository.

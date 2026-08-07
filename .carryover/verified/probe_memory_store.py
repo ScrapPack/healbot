@@ -80,7 +80,7 @@ def sample(**over):
         ],
         rationale="First paragraph of the reasoning.\n\nSecond paragraph, so the body is proven "
                   "to survive a blank line rather than only a single line.",
-        evidence=["harness/memory.py:1", "gate/gate.py:333"],
+        evidence=["harness/memory.py:1", "gate/gate.py:340"],
         classification="VERIFIED",
         anchor={"commit_sha": "deadbeef", "changed_files": ["harness/memory.py"]},
         supersedes=None,
@@ -892,7 +892,7 @@ try:
         memory._home_predicate() is not None
         and memory._home_predicate()("x " + anchored_path)
         and not memory._home_predicate()("./home/footer imports"),
-        "gate.py:344 carries a standing 14-row truth table validated before every scan, and it "
+        "gate.py:351 carries a standing 14-row truth table validated before every scan, and it "
         "already caught one real bug two ad-hoc controls missed. A re-implementation here would "
         "start that history over, and the place it would be wrong is a public repository",
     )
