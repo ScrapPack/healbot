@@ -1,7 +1,23 @@
 ---
 description: Default agent. Minimal harness prompt — capability constraints only.
 permission:
+  # BOTH memory tools, allowed back past `opencode.jsonc`'s global `healbot_*: deny`. The deny is
+  # about standing token cost and it is right about the FLEET tools — list/spawn/prompt/abort/
+  # retire are rent every session would pay for a capability only `control` uses. Retrieval is
+  # not that. `docs/RECORDS.md` §5 makes `healbot_recall` the PRIMARY mechanism and the
+  # orientation block the capped exception, and the tool's own description names the build
+  # agent's work — before re-opening a settled question, before changing a threshold or a schema
+  # someone chose deliberately. Allowing `healbot_decide` (write) while denying `healbot_recall`
+  # (read) left the default agent able to record decisions it could never read back, with
+  # `harness/skills/decision-records.md` telling it to call the tool it did not have (review
+  # finding from the 3441813 push).
+  #
+  # MEASURED cost of this line: the definition's name, description and argument text total 711 B,
+  # 3.6% of the 19,898 B eleven-tool baseline `trim-tools.ts` measured. The exact wire
+  # serialization is larger by whatever the provider's schema envelope adds, so treat 711 as a
+  # floor rather than the number.
   healbot_decide: allow
+  healbot_recall: allow
 ---
 
 Tooling in this harness:

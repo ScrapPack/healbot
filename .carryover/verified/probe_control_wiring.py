@@ -24,9 +24,15 @@ DISABLED SET is free and deterministic: `opencode debug agent <name>` prints it.
 `resolveTools` (`cli/cmd/debug/agent.handler.ts:88-98`) calls the same `Permission.disabled` over
 the same merged ruleset, and the session-creating branch is gated behind `if (toolID)`
 (`:43-58` → `createToolContext` → `sessionSvc.create` at `:131`), so without `--tool` no session
-is created and no provider call is made. TESTED under this harness with an isolated `OPENCODE_DB`:
-`debug agent build` reports all five `healbot_*` **false**, `debug agent control` reports all five
-**true**, and the DB held 0 sessions afterwards. Only EXECUTION of a tool needs a real turn.
+is created and no provider call is made. Only EXECUTION of a tool needs a real turn.
+
+That disabled set is now COMPUTED by two rows below rather than recorded here as a hand-run
+number. It was prose for a phase, and in that phase `healbot_decide` was allowed back for
+`build` while `healbot_recall` was not — the default agent could write a decision record and
+never read one — with no row anywhere able to see it, because the static rows read the config
+files for the SHAPE of the wiring and never its result (review finding from the 3441813 push).
+A measurement kept in a docstring is a claim about a file at a moment; the rows re-take it on
+every run.
 
 The honest caveat: `agent.handler.ts` is a SEPARATE function calling the same predicate, not the
 request path. The real one (`session/llm/request.ts:208-214`) additionally merges session-level
@@ -39,7 +45,6 @@ under `control` and cannot under `build`.
   venv/bin/python probe_control_wiring.py
 """
 
-import json
 import os
 import re
 import sys
@@ -54,7 +59,14 @@ LOG = f"{rig.WORK}/control-wiring.log"
 CONFIG = f"{rig.HEALBOT}/harness/config/opencode"
 TOOLS = ["healbot_list", "healbot_spawn", "healbot_prompt", "healbot_abort", "healbot_retire"]
 
-r = rig.Results(expect=14)
+# The MEMORY tools, which are a different question from the five above and were covered by
+# nothing. `build` must hold BOTH: `healbot_decide` writes a decision record and `healbot_recall`
+# reads one, and an agent allowed to write what it can never read back is the shape this probe
+# missed for a whole phase — `docs/RECORDS.md` §5 makes recall the PRIMARY retrieval mechanism and
+# the orientation block the capped exception (review finding from the 3441813 push).
+MEMORY_TOOLS = ["healbot_decide", "healbot_recall"]
+
+r = rig.Results(expect=16)
 server = None
 
 
@@ -62,6 +74,21 @@ def read(path):
     with open(path, encoding="utf-8") as fh:
         return fh.read()
 
+
+# The ordinary absent-checkout case, caught BEFORE the try so the exit is not swallowed by the
+# finally. Everything past the static rows needs the DERIVED checkout — `rig.serve` boots the
+# server from it and `debug agent` runs through it — so in a fresh clone or a linked worktree
+# this probe CANNOT MEASURE rather than has found something. Without this it timed out for 90s,
+# reported two red rows and one UNEXPECTED EXCEPTION, and exited 1: "a check ran and said no"
+# for a check that could not run, which is the ERROR-versus-BLOCKED collapse the gate's state
+# lattice exists to prevent. `probe_staleness_join.py` was corrected for exactly this and this
+# probe was never backfilled; exit 3 is the cannot-measure verdict and `gate.py` maps it to ERROR.
+sys.path.insert(0, os.path.join(rig.HEALBOT, "gate"))
+import citegraph  # noqa: E402
+
+if not citegraph.checkout_present():
+    print(f"\n!! {citegraph.CHECKOUT}/.git not found. UNMEASURED, not failed.\n", file=sys.stderr)
+    sys.exit(3)
 
 try:
     # -----------------------------------------------------------------------------------------
@@ -112,6 +139,51 @@ try:
         "the plugin is registered",
         "./plugin/healbot.ts" in config,
         "an unregistered plugin contributes no tools",
+    )
+
+    # -----------------------------------------------------------------------------------------
+    # 1b. THE DISABLED SET, COMPUTED. `opencode debug agent <name>` runs the same
+    # `Permission.disabled` over the same merged ruleset as the request path
+    # (`cli/cmd/debug/agent.handler.ts:88-98`) and creates no session, so this is free.
+    #
+    # THIS PROBE ASSERTED IT IN PROSE AND NOWHERE ELSE. The docstring above recorded "TESTED
+    # under this harness … `debug agent build` reports all five healbot_* false" as a hand-run
+    # measurement, which is a claim about a file at a moment with nothing computing it — and in
+    # the interval `healbot_decide` was allowed back for `build` and `healbot_recall` was not,
+    # with no row anywhere able to see it (review finding from the 3441813 push). The regex rows
+    # above cannot: they read the two config files for the SHAPE of the wiring, never its result.
+    # -----------------------------------------------------------------------------------------
+    def disabled_set(name):
+        """-> {tool: enabled?} for one agent, or None when the command could not answer."""
+        import subprocess
+        out = subprocess.run(
+            ["/bin/zsh", "-c", f". {rig.ENVSH} && exec {rig.OC} debug agent {name}"],
+            cwd=rig.HEALBOT, capture_output=True, text=True, timeout=180,
+            env={**os.environ, "OPENCODE_DB": rig.db("controlwiring-debug")},
+        )
+        if out.returncode != 0:
+            return None
+        found = dict(re.findall(r'"(healbot_[a-z_]+)":\s*(true|false)', out.stdout))
+        return {k: v == "true" for k, v in found.items()} or None
+
+    build_set, control_set = disabled_set("build"), disabled_set("control")
+    r.check(
+        "the BUILD agent holds both memory tools and none of the five fleet tools",
+        bool(build_set)
+        and all(build_set.get(t) is True for t in MEMORY_TOOLS)
+        and all(build_set.get(t) is False for t in TOOLS),
+        f"BOTH HALVES, and the split is the whole design. The fleet tools are rent every session "
+        f"would pay for a capability only `control` uses; retrieval is not — the recall tool's "
+        f"own description names this agent's work, and denying it left the default agent able to "
+        f"record decisions it could never read back. The second clause is what keeps this row "
+        f"from passing over a blanket `healbot_*: allow` that would put all five definitions in "
+        f"every prompt. got {build_set}",
+    )
+    r.check(
+        "…and the CONTROL agent holds all seven",
+        bool(control_set) and all(control_set.get(t) is True for t in TOOLS + MEMORY_TOOLS),
+        f"the other side of the same predicate, so a global deny that stopped being allowed back "
+        f"anywhere would fail here rather than read as correct scoping. got {control_set}",
     )
 
     # -----------------------------------------------------------------------------------------
