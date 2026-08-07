@@ -43,36 +43,41 @@ so the narrowing itself is PRINTED and counted rather than applied in silence.
 
 import os
 import re
-import subprocess
 import sys
-from collections import defaultdict
 
 SP = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SP)
 import rig  # noqa: E402
 
-HB = rig.HEALBOT
-# normpath, not f"{HB}/opencode": HB comes back from os.path.dirname with NATIVE separators, so on
-# Windows the interpolated form is the mixed string `C:\...\healbot/opencode` while every indexed
-# path is normpath'd to all-backslash. `p.startswith(CHECKOUT + os.sep)` — the filter that keeps a
-# citation off the CHECKOUT's copy of a colliding name (resolve(), shared by classify() and
-# the quote leg) — then
-# matched nothing, and bare `PLAN.md` resolved to the checkout's v2/effect/PLAN.md. MEASURED
-# 2026-08-05 on Windows 11. On POSIX normpath here is a no-op, so this changes no Mac behavior.
-CHECKOUT = os.path.normpath(f"{HB}/opencode")
+# RESOLUTION MOVED to gate/citegraph.py. The staleness stage asks the same graph a different
+# question — did this push move the lines a document points at — and it cannot get there by
+# importing this file: everything below `r = rig.Results(...)` runs at module scope and exits
+# from a finally, so importing this probe runs the sweep and kills the importer. What stayed
+# here is the verbatim-quote leg, which is this probe's assertion about how documents quote
+# rather than shared machinery. No sweep behavior changed: the legs below are byte-identical.
+sys.path.insert(0, os.path.join(rig.HEALBOT, "gate"))
+import citegraph  # noqa: E402
+from citegraph import (  # noqa: E402
+    CHECKOUT,
+    CITE,
+    EXCLUDE,
+    HB,
+    build_index,
+    classify,
+    lines_of,
+    rel_posix,
+    resolve,
+    scan,
+    sources,
+)
 
-# `opencode/` is DERIVED and gitignored, so a fresh clone or worktree does not have it. The
-# first thing to touch it here is `git -C` inside owned_set(), whose CalledProcessError
-# (exit 128, not a repository) reaches the gate's citations row as a raw traceback instead
-# of a cause. TESTED 2026-08-02 in a fresh worktree. The check is for `.git`, the thing
-# ls-files actually needs: a half-rebuilt checkout directory without a repository would die
-# the same way a missing one does. Exit 3 since 2026-08-03, the gate's own word for
-# cannot-measure (docs/E2E.md item D): a probe that found its NAMED input absent has left
-# its claim unmeasured, which is a different fact from sweeping and finding rot. The gate
-# maps a tier-1 exit 3 to ERROR; every other nonzero — crashes included — stays BLOCKED.
+# The absent checkout is refused here, not inside citegraph, and the exit code is this probe's
+# to own. Exit 3 is the gate's word for cannot-measure (docs/E2E.md item D): a probe that found
+# its NAMED input absent has left its claim unmeasured, which is a different fact from sweeping
+# and finding rot. The gate maps a tier-1 exit 3 to ERROR; every other nonzero stays BLOCKED.
 # This guard must stay ABOVE the try/finally: a sys.exit inside the try is replaced by the
 # finally's own verdict exit, which would silently rewrite 3 back into a red 1.
-if not os.path.exists(f"{CHECKOUT}/.git"):
+if not citegraph.checkout_present():
     print(
         f"\n!! {CHECKOUT}/.git not found.\n"
         "   `opencode/` is the derived checkout and is gitignored — a fresh clone does not\n"
@@ -80,219 +85,6 @@ if not os.path.exists(f"{CHECKOUT}/.git"):
         file=sys.stderr,
     )
     sys.exit(3)
-
-SKIP = {".git", "node_modules", "venv", "__pycache__", "dist", "build", ".next", "hb"}
-
-# Historical prose, excluded BY NAME rather than by silently narrowing the walk. `REDO-PROMPT.md`
-# is the prompt that started the verified redo and describes a tree that no longer exists; its
-# citations are a record of what was true then, not pointers anyone should follow now.
-EXCLUDE = {".carryover/REDO-PROMPT.md"}
-
-# `:N` or `:N-M` after a path-ish token. The negative lookbehind keeps it from matching the tail of
-# a longer path, and the extension list keeps it off prose like "1.18.5".
-#
-# EXTENSIONLESS DOTFILES ARE OUT OF REACH, and citations into them must not use `file:line`.
-# Two clauses exclude them independently: the extension list has no entry for a bare dotfile,
-# and the first character class `[A-Za-z0-9_]` rejects the leading dot. So a citation written as
-# line 13 of `.gitignore` is not one this probe can see (spelled out, not in live form, per the
-# citation-hygiene skill's first rule). TESTED 2026-08-06 against the regex directly, after three
-# documents were found pointing there for the `hb/*` rule, which has never been on line 13
-# — rot this sweep ran green over every time, because it never matched the string. Widening the
-# pattern is the wrong repair: `.gitignore` has no stable line numbering to cite (one comment
-# added in 43d90b9 moved its `hb/*` rule from 48 to 58), so cite the RULE TEXT instead, the way
-# HARNESS.md, docs/CLONE.md and this directory's README.md now do.
-CITE = re.compile(r"(?<![\w/])([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:ts|tsx|py|sh|jsonc|txt|md)):(\d+)(?:[-–](\d+))?")
-
-
-def rel_posix(path):
-    """Repo-relative path in the DOCUMENTS' notation: forward slashes on every platform.
-
-    Every consumer of these strings speaks POSIX — EXCLUDE, the coverage legs' `docs/` and `fork/`
-    prefixes, the RESOLUTION legs' `endswith("session/prompt.ts")`, and the citations themselves.
-    `os.path.relpath` speaks os.sep, so on Windows each of those compared a backslash path against
-    a forward-slash literal and lost: REDO-PROMPT.md was SWEPT despite being excluded by name, and
-    four legs asserted a string that cannot occur. MEASURED 2026-08-05 on Windows 11 — a silently
-    WIDENED sweep, the same defect class as the narrowing the coverage legs exist to catch, and it
-    reported 10 blank-line and 2 quote findings that are the historical doc's, not the repo's.
-    `os.sep` is "/" on POSIX, so this is a no-op there and no Mac result moves.
-    """
-    return os.path.relpath(path, HB).replace(os.sep, "/")
-
-
-def git_owned(root):
-    """Absolute paths of every file git owns under `root`: tracked, plus untracked and not
-    ignored. Same pair of commands `gate.py:78-91` uses to decide what a change touches.
-
-    TWO repositories are asked, not one. `/opencode/` is gitignored wholesale by this repo
-    (`.gitignore:5`) and is its own checkout, so asking only the outer repo would empty the index
-    of the 6,345 upstream files the maps actually cite.
-
-    An untracked NESTED repository is reported by `ls-files --others` as one `dir/` entry and is
-    never recursed into — which is exactly how an app-created worktree under `.claude/worktrees/`
-    stays out of both the sweep and the index. Those directory entries are dropped here.
-    """
-    owned = set()
-    for args in (("ls-files", "-z"), ("ls-files", "--others", "--exclude-standard", "-z")):
-        out = subprocess.run(
-            ["git", "-C", root, *args], capture_output=True, text=True, check=True
-        ).stdout
-        for rel in out.split("\0"):
-            if rel and not rel.endswith("/"):
-                owned.add(os.path.normpath(os.path.join(root, rel)))
-    return owned
-
-
-_owned = None
-
-
-def owned_set():
-    """Memoized union of both repositories. The absent checkout is refused at startup, by the
-    guard beside CHECKOUT; any git failure past that resolves on first use inside the try, so
-    it surfaces as a failed check row rather than an unframed traceback."""
-    global _owned
-    if _owned is None:
-        _owned = git_owned(HB) | git_owned(CHECKOUT)
-    return _owned
-
-
-def build_index():
-    """-> (index, dropped). `dropped` is what the git scoping removed, so the narrowing is a
-    measured number rather than an invisible one."""
-    index = defaultdict(list)
-    owned = owned_set()
-    seen, dropped = set(), set()
-    for root in (CHECKOUT, f"{HB}/harness", SP, HB):
-        for dirpath, dirnames, filenames in os.walk(root):
-            dirnames[:] = [d for d in dirnames if d not in SKIP]
-            for fn in filenames:
-                full = os.path.normpath(os.path.join(dirpath, fn))
-                if full in seen or full in dropped:  # the four roots overlap
-                    continue
-                if full not in owned:
-                    dropped.add(full)
-                    continue
-                seen.add(full)
-                index[fn].append(full)
-    return index, sorted(dropped)
-
-
-def sources():
-    """The prose that carries citations: this repo's docs and the overlay's maps. -> (srcs, dropped).
-
-    The checkout is skipped — its map copies are byte-identical to `fork/`'s (probe_twin and the
-    drift-mode-1 check both cover that), and walking 6,330 upstream files would drown the result.
-    """
-    owned = owned_set()
-    out, dropped = [], []
-    for dirpath, dirnames, filenames in os.walk(HB):
-        dirnames[:] = [d for d in dirnames if d not in SKIP and d != "opencode"]
-        for fn in filenames:
-            if not fn.endswith(".md"):
-                continue
-            full = os.path.normpath(os.path.join(dirpath, fn))
-            if rel_posix(full) in EXCLUDE:
-                continue
-            if full not in owned:
-                dropped.append(rel_posix(full))
-                continue
-            out.append(full)
-    return sorted(out), sorted(dropped)
-
-
-_cache = {}
-
-
-def lines_of(path):
-    if path not in _cache:
-        try:
-            _cache[path] = open(path, encoding="utf-8", errors="replace").read().split("\n")
-        except Exception:
-            _cache[path] = None
-    return _cache[path]
-
-
-def _tree_rel(path):
-    """-> (tree, directory components) with the tree root stripped. fork/ mirrors the
-    checkout's layout, so proximity must compare LAYOUT positions, not raw prefixes: a
-    map under fork/packages/plugin/src is nearest the checkout's packages/plugin/src,
-    which a raw-prefix rule would score identically to every other checkout file."""
-    for tree, root in (("checkout", CHECKOUT), ("fork", os.path.join(HB, "fork"))):
-        if path.startswith(root + os.sep):
-            rel = path[len(root) + 1:]
-            return tree, [c for c in os.path.dirname(rel).split(os.sep) if c]
-    rel = path[len(HB) + 1:] if path.startswith(HB + os.sep) else path
-    return "repo", [c for c in os.path.dirname(rel).split(os.sep) if c]
-
-
-def nearest_to(src, cands):
-    """The tie-break is a rule, not enumeration order. `(exact or inrange)[0]` was
-    os.walk order: on Windows it resolved four basename-only citations to other
-    packages' same-named files (blank at the cited lines), and on this Mac it sent
-    FEATURE-PLUGINS.MAP.md's and fork/README.md's bare `builtins.ts` to
-    core/src/tool's — the wrong file, silently OK off its non-blank lines (MEASURED
-    2026-08-05, both platforms; NEXT.md "Open on the Mac"). Nearest wins: longest
-    shared root-stripped directory prefix with the citing document, then the
-    document's own tree, then posix-lexicographic, so every filesystem picks the
-    same file for a reason."""
-    if src is None or len(cands) < 2:
-        return cands[0]
-    stree, sdir = _tree_rel(src)
-
-    def key(p):
-        ptree, pdir = _tree_rel(p)
-        shared = 0
-        for a, b in zip(sdir, pdir):
-            if a != b:
-                break
-            shared += 1
-        return (-shared, 0 if ptree == stree else 1, rel_posix(p))
-
-    return min(cands, key=key)
-
-
-def resolve(cited, hi, index, src=None):
-    """-> (suffix, pick). The ONE resolution path — classify() and the quote leg used to
-    carry byte-copies of this block, and the Windows sweep had to fix the separator bug
-    in both. `suffix` is the candidate set after the suffix and .md scoping (empty means
-    NOFILE); `pick` is None when no candidate contains the cited line (PAST_EOF /
-    unresolved), else nearest_to()'s choice."""
-    cands = index.get(os.path.basename(cited), [])
-    # Citations write "/" but the index holds normpath'd paths, which walk os.sep — on
-    # Windows a "/"-needle never matches and the fallback silently widens to every basename
-    # collision. Normalize the needle, which on POSIX is byte-identical to "/" + cited.
-    want = os.sep + cited.replace("/", os.sep)
-    suffix = [p for p in cands if p.endswith(want)] or cands
-    if not suffix:
-        return [], None
-    # `.md` citations mean this repo's docs, not the checkout's copy of some upstream doc — both
-    # trees ship a PLAN.md, and only one of them is the one being cited.
-    if cited.endswith(".md"):
-        own = [p for p in suffix if not p.startswith(CHECKOUT + os.sep)]
-        suffix = own or suffix
-    inrange = [p for p in suffix if (L := lines_of(p)) is not None and hi <= len(L)]
-    if not inrange:
-        return suffix, None
-    exact = [p for p in inrange if p.endswith(want)]
-    return suffix, nearest_to(src, exact or inrange)
-
-
-def classify(cited, lo, hi, index, src=None):
-    """-> (verdict, detail). Verdicts: OK | BLANK | PAST_EOF | NOFILE.
-
-    A candidate must CONTAIN the cited line to be considered. That single rule is what separates a
-    real finding from the 155 this probe's first draft invented. Among surviving candidates,
-    `src` (the citing document) breaks basename ties via nearest_to().
-    """
-    suffix, pick = resolve(cited, hi, index, src)
-    if not suffix:
-        return "NOFILE", cited
-    if pick is None:
-        biggest = max(suffix, key=lambda p: len(lines_of(p) or []))
-        return "PAST_EOF", f"{rel_posix(biggest)} has {len(lines_of(biggest) or [])} lines"
-    if all(not s.strip() for s in lines_of(pick)[lo - 1 : hi]):
-        return "BLANK", rel_posix(pick)
-    return "OK", rel_posix(pick)
-
 
 # A citation that QUOTES its target is a stronger claim than one that merely points at it, and it
 # is the one kind of SEMANTIC rot that is mechanically checkable: the document says what the line
@@ -388,22 +180,8 @@ def scan_quotes(index, srcs):
     return out
 
 
-def scan(index, srcs):
-    rows = []
-    for src in srcs:
-        try:
-            text = open(src, encoding="utf-8").read()
-        except Exception:
-            continue
-        for m in CITE.finditer(text):
-            lo = int(m.group(2))
-            hi = int(m.group(3)) if m.group(3) else lo
-            verdict, detail = classify(m.group(1), lo, hi, index, src)
-            rows.append((rel_posix(src), m.group(1), lo, hi, verdict, detail))
-    return rows
-
-
 r = rig.Results(expect=21)
+vanished = False
 
 try:
     index, idx_dropped = build_index()
@@ -453,7 +231,7 @@ try:
     for label, bad in (("NO SUCH FILE", nofile), ("PAST END OF FILE", past), ("BLANK LINE", blank)):
         if bad:
             print(f"\n  -- {label} --", flush=True)
-            for src, cited, lo, hi, _, detail in bad[:25]:
+            for src, cited, lo, hi, _, detail, _cline in bad[:25]:
                 span = f"{lo}-{hi}" if hi != lo else f"{lo}"
                 print(f"     {src:<52} {cited}:{span}   {detail}", flush=True)
 
@@ -623,11 +401,23 @@ try:
 
 except SystemExit:
     raise
+except citegraph.CheckoutAbsent:
+    # The guard above catches the ordinary case; this catches the checkout going away DURING
+    # the sweep. Without it the exception fell to `except Exception` below, went red, and left
+    # on 1 — reporting "your citations rotted" for a run that never read them. A sys.exit here
+    # would be discarded by the finally, so the verdict travels as a flag instead.
+    vanished = True
+    print(
+        f"\n!! {CHECKOUT}/.git vanished mid-sweep. The claim is UNMEASURED, not failed.\n",
+        file=sys.stderr,
+    )
 except Exception:
     import traceback
 
     traceback.print_exc()
     r.check("UNEXPECTED EXCEPTION", False, "see traceback above")
 finally:
+    if vanished:
+        sys.exit(3)
     ok = r.summary()
     sys.exit(0 if ok else 1)

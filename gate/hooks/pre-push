@@ -50,6 +50,9 @@ fi
 GATE=${HEALBOT_GATE:-"$VENVPY $ROOT/gate/gate.py"}
 REVIEW=${HEALBOT_REVIEW_CMD:-"$VENVPY $ROOT/gate/review.py"}
 PUBLISH=${HEALBOT_PUBLISH_CMD:-"$VENVPY $ROOT/gate/publish.py"}
+# staleness.py is stdlib-only by design, so it would run on a bare interpreter; it takes
+# $VENVPY anyway so every stage on this hook reports from one environment.
+STALE=${HEALBOT_STALE_CMD:-"$VENVPY $ROOT/gate/staleness.py"}
 
 # A missing venv is a named precondition, not an unknown failure: refuse with the remedy,
 # the way doctor.py ("rig venv not built") and hb-fleet preflight ("rig venv absent") name
@@ -125,6 +128,26 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     echo "pre-push gate: REFUSING the push (review exit $rcode under HEALBOT_REVIEW=${HEALBOT_REVIEW:-advisory})." >&2
     echo "pre-push gate: review evidence in gate/runs/*-review.json." >&2
     exit 1
+  fi
+
+  # The citation-staleness stage: which documents point at lines this push moved. It answers
+  # the question review.py cannot, because gate/review.py:75 scopes the reviewer to the change
+  # and a document this change invalidated but did not touch is out of scope by construction.
+  #
+  # SHADOW MODE while the flag rate is being calibrated: it writes gate/runs/*-staleness.json
+  # and prints no FINDINGS. It does print a one-line stderr notice when it could not measure at
+  # all, in every mode, because a failure is not a finding and a stage that quietly stopped
+  # working must not read like a clean one. Two replays of historical pushes disagreed by more
+  # than 4x on the mean, and both used today's corpus against old diffs, so both are lower
+  # bounds. Live records settle it. HEALBOT_STALE_SHOW=1 prints the findings now;
+  # HEALBOT_STALE=off skips the stage.
+  #
+  # It is deliberately NOT allowed to refuse. Range mode only: with no base it returns 0
+  # without measuring, because gate.changed_files unions untracked files in working-tree mode
+  # while `git diff -U0` emits nothing for them, so every citation into a newly added file
+  # would classify as rewritten against an empty old side.
+  if [ -n "$base" ]; then
+    $STALE --base "$base" --head "$local_sha" >&2 < /dev/null || true
   fi
 
   # The evidence flow, detached (the sha exists remotely only after the transfer this hook
