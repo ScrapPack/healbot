@@ -90,20 +90,14 @@ honestly needs; the record stores the CLI's own `total_cost_usd`). This is stand
 accepted by wiring the hook; `HEALBOT_REVIEW=off` revokes it at any time. It is not the
 metered openai/API credit spend that the paid-run-protocol skill's ask-first rule governs.
 
-Activation: the reviewer needs a logged-in `claude` CLI. Until one exists it reports ERROR
-into the record and the advisory push continues. Verified 2026-07-31: the keychain entry
-exists on this machine but is not reachable from a non-interactive child process; one
-interactive `claude -p 'reply ok'` from the owner's terminal settles it.
-
 ## What it deliberately does NOT run
 
 - **Tier 2** — the rest of the free suite: `probe_*.py` minus Tier 1, discovered by
-  subtraction at run time (18 as of 2026-08-02, floor-guarded in `tier2.py`;
+  subtraction at run time (floor-guarded in `tier2.py`;
   `gate/tier2.py --list` enumerates). Free, but minutes not seconds, and the output embeds
   timings, so no byte-stability claim and no per-row hash — deliberately. Run
   `gate/tier2.py` at phase boundaries; the phase-close skill is the trigger and owns the
-  known-red register (as of 2026-07-31: probe_turn_growth's fixture-count drift, accepted
-  pending the owner's doc-refresh decision). Record: `gate/runs/<ts>-tier2.json`; a
+  known-red register. Record: `gate/runs/<ts>-tier2.json`; a
   discovery floor makes "found no probes" ERROR instead of a quiet green.
 
 ### Tier 2 from a pool slot: declared environment skips
@@ -138,63 +132,49 @@ Four rules keep it from being a mute button, and all four are asserted by
   there" — so a corpus with other dotted paths still runs the row, and can still go red.
 
 **A requirement that does not hold where it should is a finding, and the merge-back check is
-per requirement, not per verdict.** Two of the three are checkout-scoped and MUST hold in the
-main checkout — `main-checkout` by definition, and `claude-config-materialized` because
-`env.claude.sh` has been sourced there (VERIFIED 2026-08-01: `harness/claude/CLAUDE.md ->
-crew-constraints.md`). So `probe_fleet_claude` must record `"count": 0` in main, and a skip
-there is a defect, not a status.
-
-The third is not checkout-scoped and saying otherwise would be the same over-claim this
-mechanism exists to remove. `corpus-dotted-path` reads whichever corpus `CLAUDE_CONFIG_DIR`
-selects, so it turns on the SHELL: from a plain shell it resolves to `~/.claude/projects`
-(MEASURED 2026-08-01: 52 project directories, 19 carrying a doubled dash) and the row runs;
-from a shell that has sourced `env.claude.sh` it resolves to `harness/claude/projects`, which
-today holds one directory per checkout and no dotted path, and the row skips — in the main
-checkout too. The honest reading of a main-checkout run is therefore `pass` from a plain
-shell and `declared-skip` naming exactly that one requirement from a harness shell; anything
-else is worth opening the record for.
+per requirement, not per verdict.** Every `rig.Env` carries its own reason string: read that
+and ask where the requirement MUST hold, rather than working from a list here that goes stale
+as requirements are added. A checkout-scoped one must hold in the main checkout —
+`main-checkout` by definition, and `claude-config-materialized` because `env.claude.sh` has
+been sourced there (VERIFIED 2026-08-01) — so a skip there is a defect, not a status. A
+requirement that turns on the SHELL is not, and saying otherwise would be the same over-claim
+this mechanism exists to remove: `corpus-dotted-path` reads whichever corpus
+`CLAUDE_CONFIG_DIR` selects, so from a plain shell it resolves to `~/.claude/projects` and the
+row runs, and from a shell that has sourced `env.claude.sh` it resolves to
+`harness/claude/projects`, which holds no dotted path, and the row skips — in the main checkout
+too (MEASURED 2026-08-01, both directions). The honest reading of a main-checkout run is
+therefore `pass` from a plain shell and `declared-skip` naming exactly that one requirement
+from a harness shell; anything else is worth opening the record for.
 - **Tier 3** — every `verify_*` rig. **PAID.** Owner's go, never automatic.
 
 ## Three decisions worth not re-litigating
 
-**No worktree, and that is deliberate.** The obvious move is to copy the tree somewhere isolated
-first, which is what the external `gated-harness` plugin does (its run worktree is cut at HEAD).
-It is wrong here: this repo gitignores `/opencode/`, `node_modules/` and
-`.carryover/verified/venv/`, so a healbot worktree contains no checkout, no deps and no venv —
-it cannot resolve one `file:line` citation or run one probe. Tier 1 is a pure read of the working
-tree and the working tree is the thing being guarded. Isolation becomes necessary at Tier 3,
-where a rig boots a real server.
+`gate/gate.py`'s module docstring and its typed-state constants own the reasoning. This is the
+index, because other documents point here by name:
 
-**The evidence hash is over RAW output, because determinism was measured.** TESTED 2026-07-31,
-3 runs each on an unchanged tree: every Tier-1 probe was byte-identical *before* any
-canonicalization (the original three, and `probe_review_parse` re-measured the same way when
-it joined the tier). That is why there is no tolerance machinery here. Adding a check whose output
-embeds a time, a temp path, or a filesystem-ordered count is the change that starts this lying —
-re-measure first.
-
-**`error` is not `blocked`, and neither is `pass`.** A check that could not run has left its
-claim unmeasured; a check that ran and said no is a finding for a human. Collapsing them is how
-a suite reports green for a run that died — this project has that exact defect on record in
-`docs/CLONE.md` (three probes exited 0 having proven nothing) and `docs/VERDICT.md` (six paid
-rigs printed a verdict and threw it away). The typed-state vocabulary is borrowed from
-`gated-harness`; its isolation model is not.
-
-`declared-skip` (2026-08-01) is the fifth term and sits alongside them for the same reason.
-It is not `skipped`, which is a scoping decision made before anything ran — no fact about the
-machine could change it. It is a check that reached its own line, found the machine missing a
-fact it had named in advance, and declined to claim a measurement it could not take. Not
-`pass`: the claim is unmeasured. Not `blocked`: nothing said no. Not `error`: the run was
-fine, this machine is not the one holding the evidence. A run that measured 30 of 33 things
-must not report identically to one that measured 33, and the record says which three.
+- **No worktree, and that is deliberate.** This repo gitignores `/opencode/`, `node_modules/`
+  and `.carryover/verified/venv/`, so a healbot worktree contains no checkout, no deps and no
+  venv — it cannot resolve one `file:line` citation or run one probe. Tier 1 is a pure read of
+  the working tree and the working tree is the thing being guarded. Isolation becomes necessary
+  at Tier 3, where a rig boots a real server.
+- **The evidence hash is over RAW output, because determinism was measured.** TESTED
+  2026-07-31, 3 runs each on an unchanged tree: every Tier-1 probe was byte-identical before
+  any canonicalization. That is why there is no tolerance machinery here. Adding a check whose
+  output embeds a time, a temp path, or a filesystem-ordered count is the change that starts
+  this lying — re-measure first.
+- **`error` is not `blocked`, and neither is `pass`** — and `declared-skip` is none of the
+  three. A check that could not run has left its claim unmeasured; a check that ran and said no
+  is a finding for a human; a check that found the machine missing a fact it had named in
+  advance declined to claim a measurement it could not take. Collapsing them is how a suite
+  reports green for a run that died — this project has that exact defect on record in
+  `docs/CLONE.md` (three probes exited 0 having proven nothing) and `docs/VERDICT.md` (six paid
+  rigs printed a verdict and threw it away). A run that measured 30 of 33 things must not
+  report identically to one that measured 33, and the record says which three.
 
 ## Why it exists
 
-`docs/REVIEW.md` is 15 agents and 1,047 tool calls; `docs/HARDEN.md` is 67 agents. That review
-discipline is real, but it is phase-level and hand-driven, and every gate in `NEXT.md` is a
-command somebody has to remember. `fork/README.md` prescribes its drift check the same way —
-and MEASURED on 2026-07-31, that check had been silently **red**: three `.DS_Store` files from a
-Finder visit had taken the overlay from its declared 17 files to 20. Nothing was running it.
-That is the gap this fills.
+`gate/gate.py:7-9` owns this, including the MEASURED 2026-07-31 `.DS_Store` trap that is the
+worked case: a prescribed drift check that had been silently red because nothing ran it.
 
 ## The evidence flow
 
