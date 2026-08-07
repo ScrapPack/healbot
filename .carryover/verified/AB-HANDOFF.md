@@ -1,5 +1,18 @@
 # Handoff — finish the A/B evaluation harness and run the refusal baseline
 
+> **SPENT BRIEF — DO NOT EXECUTE. Kept as history, cited by `README.md` in this directory.**
+> (Deliberately not line-pinned: a spent document should not carry a pointer into a living file.)
+>
+> This brief was carried out. `studies/refusal/set_a.json`, `studies/refusal/set_b.json`,
+> `run_refusal.py` and `verify_refusal_b.py` all exist and are in use. `docs/AB-REFUSAL.md` was
+> never written: the full run stranded at 24 of 150 paid rows when the 2026-07-31 environment
+> flip voided the stock arm, and it is closed evidence at
+> `hb/ab-runs/refusal-full-archived-20260731/ARCHIVED.md`.
+>
+> Every task list below is spent and every count in it is stale. **The corpus this brief calls
+> truncated is complete, frozen, and has paid rows scored against it** — read the correction under
+> "INCOMPLETE" before touching anything it names.
+
 Paste everything below the line into a fresh opencode session started at `~/Desktop/healbot`
 under the harness (`. harness/env.sh && opencode`). It is self-contained: read the artifacts it
 names, not this conversation.
@@ -66,15 +79,21 @@ All paths relative to `~/Desktop/healbot/.carryover/verified/`. Run everything w
   refusal-keyword grep is included and *required to fail*, because Set A's compliant answers are
   saturated with words like "malware"/"exploit"/"malicious" and a vocabulary grep scores them
   backwards. Do not weaken this probe.
-- **`probe_rig_contract.py`** — re-run after your changes; currently **29/29** with 25 entrypoints
-  swept including the new probe.
+- **`probe_rig_contract.py`** — re-run after your changes. It declared 29 assertions when this
+  brief was written; the floor has been raised since, so read `Results(expect=N)` in the probe
+  rather than trusting a number here.
 
 **INCOMPLETE — must be finished:**
 
-- **`studies/refusal/set_a.json`** — **TRUNCATED AND INVALID JSON.** The write was cut off at
-  line 72 mid-probe (`ctf-enum`), producing an unterminated string. `json.load()` on it raises.
-  ~11 complete probes exist (families `defensive-detection`, `exploit-understanding`,
-  `authorized-pentest`). **Rewrite the file whole** — do not try to patch the tail.
+- **`studies/refusal/set_a.json`** — **CORRECTED 2026-08-07. DO NOT REWRITE THIS FILE.** The
+  original text said it was truncated and invalid, that `json.load()` raised, that ~11 probes
+  existed across three families, and told you to rewrite it whole. That was true when the brief
+  was written. It is false now: the file loads, and holds **25 probes in five families of five**
+  — `authorized-pentest`, `defensive-detection`, `dual-use-authorized`, `exploit-understanding`,
+  `sensitive-legitimate`. There is no `ctf-enum`. It is a **frozen corpus with paid rows scored
+  against it**, and `run_study.py:483` refuses any run whose arm manifest digest has moved.
+  Obeying the original instruction would have rebuilt the file to a spec naming only three of the
+  five real families, silently dropping ten probes, and produced a file that still loads.
 
 **MISSING — build these:**
 

@@ -302,10 +302,16 @@ prints `auto-rejecting` and returns.
 - **Any other stock-vs-harness A/B in this document is suspect for the same reason.** Always
   pass `-m` explicitly when comparing arms.
 
-Separately, and confirmed by direct test: `POST /session/{id}/prompt_async` accepts a prompt
-and executes **nothing** — the user message is stored, no assistant turn follows. The
-synchronous `POST /session/{id}/message` works. `PLAN.md` builds its Phase 4 spawn path on
-`prompt_async`; that needs revisiting.
+Separately: an earlier version of this section reported that `POST /session/{id}/prompt_async`
+"accepts a prompt and executes nothing", and that `PLAN.md`'s Phase 4 spawn path built on it
+"needs revisiting". **Both are REFUTED, TESTED** — `HARNESS.md:436`: *"Acks in 0.01s, turn
+completes ~2s later, same answer/model/tokens as the sync path"*. The audit polled an assistant
+message row that exists about 20 ms after the ack and is EMPTY until the turn actually runs; the
+completion signal is the message's own `time.completed` / `finish`, not the row's existence.
+
+The correction is recorded here rather than the paragraph being deleted because this false defect
+report did not fail safely: `HARNESS.md:403` records that it *"fooled the verification session
+again before it was caught"*. The harness ships on `prompt_async` today.
 
 ---
 

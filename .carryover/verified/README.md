@@ -8,10 +8,18 @@ bug in the test, not the code (see below).
 python3 -m venv venv && venv/bin/pip install pyte
 
 # free — no model turns, no API credits.
-# FREE TO RE-RUN, not free to run the FIRST time: all but probe_turn_predicate.py need the
-# gitignored opencode/ checkout (rebuild from fork/README.md), and probe_error_state.py,
-# probe_focus.py and probe_turn_growth.py need hb/*.db, which only the PAID rigs below can
-# create. On a fresh clone this suite does not run — see docs/CLONE.md.
+# TEN OF THESE RUN ON A FRESH CLONE, and the venv above is the only thing they need. MEASURED
+# 2026-08-07 in a worktree with NO opencode/ checkout present: probe_gate_scope (32),
+# probe_memory_store (70), probe_pool (33), probe_refusal_driver (30), probe_refusal_fixtures (9),
+# probe_refusal_scoring (20), probe_review_parse (9), probe_rig_contract (40), probe_study_driver
+# (42) and probe_turn_predicate (18) went 303/303 green. None of the ten reads hb/ at all.
+# WHAT ACTUALLY NEEDS MORE: probe_citations, probe_twin, probe_control_wiring and
+# probe_staleness_join exit 3 without the gitignored opencode/ checkout (rebuild from
+# fork/README.md); probe_error_state, probe_focus and probe_turn_growth need hb/*.db, which only
+# the PAID rigs below can create.
+# An earlier version of this comment said "all but probe_turn_predicate.py need the checkout" and
+# "on a fresh clone this suite does not run". Both were false, and together they discouraged the
+# only free verification a fresh clone has — see docs/CLONE.md.
 venv/bin/python probe_on_grid.py     # 4/4   does the route predicate actually discriminate?
 venv/bin/python probe_fleet.py       # 10/10 does harness/fleet.sh do what it claims?
 venv/bin/python probe_error_state.py # 10/10 does a hard-errored session render ERROR?
