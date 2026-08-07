@@ -68,7 +68,7 @@ from rig import Env, Results, completed  # noqa: E402
 # are scratch tools that make no claims. If this list ever silently narrows, the sweep below
 # passes by measuring nothing — so its size is asserted, and the exclusions are asserted too.
 #
-# THIS FILE IS DELIBERATELY NOT EXEMPT: its own eleven predicates are run over it with the rest.
+# THIS FILE IS DELIBERATELY NOT EXEMPT: its own predicates are run over it with the rest.
 LIB = {"rig.py", "term.py"}
 
 
@@ -88,7 +88,7 @@ def read(name):
 
 
 # ------------------------------------------------------------------------------------------
-# The eleven predicates. All but `records_crash` take SOURCE TEXT, so the mutation checks below
+# The predicates. All but `records_crash` take SOURCE TEXT, so the mutation checks below
 # can hand them a corrupted copy and get the same code path the live sweep gets; `records_crash`
 # and the `_`-prefixed helpers take AST nodes.
 # ------------------------------------------------------------------------------------------

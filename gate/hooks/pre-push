@@ -157,19 +157,33 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # why this reports and never refuses. `--diff-filter=d` drops deletions so a removed document
   # is not handed to the checker as a missing path.
   if [ -n "$base" ] && [ "${HEALBOT_PROSE:-on}" != "off" ]; then
-    md=$(git diff --name-only --diff-filter=d "$base...$local_sha" -- '*.md' \
-         | grep -v '^opencode/' || true)
-    md=$(printf '%s\n' "$md" | while IFS= read -r f; do
-           [ -n "$f" ] && [ -f "$ROOT/$f" ] && printf '%s\n' "$f"
-         done)
-    if [ -n "$md" ]; then
-      echo "-- prose (advisory, working tree): $(echo "$md" | wc -l | tr -d ' ') changed .md" >&2
+    # -z, read into an ARRAY, and quoted at the call. Git QUOTES a path containing a space or a
+    # non-ASCII byte in its default --name-only output, and the old unquoted `$md` expansion then
+    # split that one path into several names matching nothing — the file left the scan in silence.
+    # Third instance of this bug class here, after harness/memory.py and rig.py's ls-files read.
+    md=()
+    while IFS= read -r -d '' f; do
+      case "$f" in opencode/*) continue ;; esac
+      [ -f "$ROOT/$f" ] && md+=("$f")
+    done < <(git diff -z --name-only --diff-filter=d "$base...$local_sha" -- '*.md')
+    if [ ${#md[@]} -gt 0 ]; then
+      echo "-- prose (advisory, working tree): ${#md[@]} changed .md" >&2
       # Density per file only. The full violation list runs to hundreds of lines on a docs push,
       # and a stage that floods stderr is a stage people stop reading. Re-run the checker by hand
       # for the detail: harness/skills/plainspec-check.py --score <file>
+      #
+      # The checker's stderr goes STRAIGHT THROUGH and its exit status is read. The old form piped
+      # `2>&1` into grep and ended in `|| true`, so a checker that crashed printed this stage's
+      # header and then nothing at all: an ERROR rendered as a clean PASS, which is the exact
+      # collapse gate.py's typed states exist to prevent, rebuilt inside the gate.
       # shellcheck disable=SC2086
-      (cd "$ROOT" && $VENVPY harness/skills/plainspec-check.py --score $md 2>&1) \
-        | grep -E "violations per 100 words" | sed 's/^/   /' >&2 || true
+      prose_out=$(cd "$ROOT" && $VENVPY harness/skills/plainspec-check.py --score "${md[@]}")
+      prose_rc=$?
+      if [ "$prose_rc" -ge 2 ]; then
+        echo "   ERROR: plainspec-check exited $prose_rc — prose NOT checked for this push" >&2
+      else
+        printf '%s\n' "$prose_out" | grep -E "violations per 100 words" | sed 's/^/   /' >&2
+      fi
     fi
   fi
 
