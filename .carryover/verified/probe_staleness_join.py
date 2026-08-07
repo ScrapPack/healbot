@@ -108,11 +108,12 @@ try:
     r.check(
         "a NON-ASCII and a SPACED changed path both survive the shipped git path intact",
         _seen == {"café.md", "two words.md", "plain.md"},
-        f"git quotes such a path as a `\\303\\251` escape by default, and an escaped key can "
-        f"never match an index built by walking the filesystem — so the citations into that file "
-        f"are dropped from the join SILENTLY. `hunks()` sets `core.quotePath=false` for exactly "
-        f"this and the --name-only call did not (review finding from the f5c21e9 push). "
-        f"got {sorted(_seen or [])}",
+        f"TWO CAUSES, and the missing entry names which. `café.md` absent: `changed_paths` "
+        f"stopped passing `core.quotePath=false`, so git returned a `\\303\\251` escape — an "
+        f"escaped key can never match an index built by walking the filesystem. `two words.md` "
+        f"absent or fragmented: it stopped routing through `changed_from`, so the output was "
+        f"split on ALL whitespace. Either way the citations into that file are dropped from the "
+        f"join SILENTLY, which reads exactly like a clean run. got {sorted(_seen or [])}",
     )
     shutil.rmtree(_fx, ignore_errors=True)
 
