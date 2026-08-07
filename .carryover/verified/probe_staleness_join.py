@@ -24,6 +24,8 @@ import contextlib
 import glob
 import io
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -42,7 +44,7 @@ DELETE_ABOVE = [(2, 4, 2, 1)]     # four old lines became one
 CHANGE_BELOW = [(50, 2, 50, 9)]   # entirely past any span we cite
 OVERLAP = [(9, 4, 9, 4)]          # rewrites old lines 9-12
 
-r = rig.Results(expect=30)
+r = rig.Results(expect=31)
 
 # The ordinary absent-checkout case, caught BEFORE the try so the exit is not swallowed by the
 # finally. `probe_citations.py:80` does the same thing for the same reason and this probe was
@@ -71,6 +73,34 @@ try:
         "the resulting line number is still a real non-blank line and the citations probe stays "
         "green over it",
     )
+
+    # A fixture repository built to carry exactly the path shape the real one does not have.
+    # Both legs below run the SHIPPED function against it, so removing the quotePath flag or
+    # reverting to whitespace splitting turns one red each.
+    _fx = tempfile.mkdtemp(prefix="hb-quote-")
+    _g = lambda *a: subprocess.run(["git", "-C", _fx, *a], capture_output=True, text=True)  # noqa: E731
+    _g("init", "-q")
+    _g("config", "user.email", "probe@healbot.local")
+    _g("config", "user.name", "probe")
+    open(os.path.join(_fx, "seed.md"), "w", encoding="utf-8").write("x\n")
+    _g("add", "-A")
+    _g("commit", "-q", "-m", "seed")
+    _base = _g("rev-parse", "HEAD").stdout.strip()
+    for _name in ("docs café.md", "plain.md"):
+        open(os.path.join(_fx, _name), "w", encoding="utf-8").write("y\n")
+    _g("add", "-A")
+    _g("commit", "-q", "-m", "a spaced non-ASCII path and a plain one")
+    _seen = staleness.changed_paths(_base, "HEAD", cwd=_fx)
+    r.check(
+        "a changed path that is NON-ASCII arrives as itself, not as octal escapes",
+        _seen == {"docs café.md", "plain.md"},
+        f"git quotes such a path as a `\\303\\251` escape by default, and an escaped key can "
+        f"never match an index built by walking the filesystem — so the citations into that file "
+        f"are dropped from the join SILENTLY. `hunks()` sets `core.quotePath=false` for exactly "
+        f"this and the --name-only call did not (review finding from the f5c21e9 push). "
+        f"got {sorted(_seen or [])}",
+    )
+    shutil.rmtree(_fx, ignore_errors=True)
 
     r.check(
         "MUTATION: a changed path containing a SPACE stays one path",

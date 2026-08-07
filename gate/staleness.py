@@ -62,11 +62,16 @@ RUNS = os.environ.get("HEALBOT_GATE_RUNS", f"{ROOT}/gate/runs")
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 
 
-def _sh(cmd):
+def _sh(cmd, cwd=None):
     """-> stdout, or None when git said no. A missing blob and a missing file are both
     ordinary here (a path created by this push has no base side), so a nonzero exit is data
-    rather than an error."""
-    p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+    rather than an error.
+
+    `cwd` is a parameter for the same reason `join`'s `edited_of` is: so a contract can be
+    asserted against a fixture repository built to exercise it, instead of against whatever
+    this repository's history happens to contain.
+    """
+    p = subprocess.run(cmd, cwd=cwd or ROOT, capture_output=True, text=True)
     return p.stdout if p.returncode == 0 else None
 
 
@@ -165,6 +170,22 @@ def classify_span(old, new, lo, hi, hs):
     # The text under the pointer changed and the original is not at the shifted position
     # either. Rewritten is the honest verdict: a reader must go and look.
     return "rewritten", None, None
+
+
+def changed_paths(base, head, cwd=None):
+    """-> the paths this range changed, or None when git could not answer.
+
+    `core.quotePath=false` FOR THE SAME REASON `hunks()` SETS IT three functions up, and this
+    call was missing it. With quoting on — git's default — a non-ASCII path arrives as
+    `"docs/\303\251.md"`, quotes and octal escapes included, which can never match an index key
+    built by walking the filesystem. The citations into that file are then dropped from the join
+    SILENTLY, which is the same failure the space case had and the same failure a module is most
+    likely to have when it sets a flag on one git call and not on its sibling (review finding
+    from the f5c21e9 push). One rule, both calls.
+    """
+    out = _sh(["git", "-c", "core.quotePath=false", "diff", "--name-only", f"{base}...{head}"],
+              cwd=cwd)
+    return None if out is None else changed_from(out)
 
 
 def changed_from(out):
@@ -327,11 +348,11 @@ def main(argv, env):
             # the standalone invocation, unrelated histories. An unreachable range is
             # UNMEASURED, which is a different fact from a clean one, and keeping the two apart
             # is the same argument gate.py's ERROR-versus-PASS lattice makes.
-            out = _sh(["git", "diff", "--name-only", f"{base}...{head}"])
-            if out is None:
+            got = changed_paths(base, head)
+            if got is None:
                 unmeasured = f"git could not diff {base}...{head}"
             else:
-                changed = changed_from(out)
+                changed = got
                 findings = join(base, head, changed, inv)
     except citegraph.CheckoutAbsent:
         unmeasured, findings = "opencode/ checkout vanished mid-sweep", []
