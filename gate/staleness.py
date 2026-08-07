@@ -276,24 +276,35 @@ def main(argv, env):
     head = head or "HEAD"
 
     t0 = time.time()
-    findings, unmeasured = [], None
-    if not citegraph.checkout_present():
-        unmeasured = "opencode/ checkout absent"
-    else:
-        index, _ = citegraph.build_index()
-        srcs, _ = citegraph.sources()
-        inv = invert(citegraph.scan(index, srcs))
-        # `_sh` returns None on any nonzero git exit — an unfetched base, a typo'd sha on the
-        # standalone invocation, unrelated histories. Unguarded, `.split()` on that raises out
-        # of a stage documented to print nothing, and no record is written at all. An
-        # unreachable range is UNMEASURED, which is a different fact from a clean one, and
-        # keeping the two apart is the same argument gate.py's ERROR-versus-PASS lattice makes.
-        out = _sh(["git", "diff", "--name-only", f"{base}...{head}"])
-        if out is None:
-            unmeasured = f"git could not diff {base}...{head}"
+    findings, unmeasured, inv, changed = [], None, {}, set()
+    # EVERY path out of the measurement is caught, which is what makes the header's "every path
+    # exits 0" true rather than aspirational. The first version of this function guarded only
+    # the _sh() None case, and the review of the 582d06c push pointed out that build_index(),
+    # sources() and scan() sat unguarded ten lines above that comment: the mid-sweep
+    # CheckoutAbsent race probe_citations.py had just learned to catch would traceback straight
+    # out of a stage documented to print nothing, exit 1, and write no record at all. A stage
+    # that cannot measure must still say so; going silent is the failure mode, not the error.
+    try:
+        if not citegraph.checkout_present():
+            unmeasured = "opencode/ checkout absent"
         else:
-            changed = set(out.split())
-            findings = join(base, head, changed, inv)
+            index, _ = citegraph.build_index()
+            srcs, _ = citegraph.sources()
+            inv = invert(citegraph.scan(index, srcs))
+            # `_sh` returns None on any nonzero git exit — an unfetched base, a typo'd sha on
+            # the standalone invocation, unrelated histories. An unreachable range is
+            # UNMEASURED, which is a different fact from a clean one, and keeping the two apart
+            # is the same argument gate.py's ERROR-versus-PASS lattice makes.
+            out = _sh(["git", "diff", "--name-only", f"{base}...{head}"])
+            if out is None:
+                unmeasured = f"git could not diff {base}...{head}"
+            else:
+                changed = set(out.split())
+                findings = join(base, head, changed, inv)
+    except citegraph.CheckoutAbsent:
+        unmeasured, findings = "opencode/ checkout vanished mid-sweep", []
+    except Exception as exc:  # noqa: BLE001 — a stage that cannot measure must still report
+        unmeasured, findings = f"{type(exc).__name__}: {exc}", []
 
     if unmeasured:
         record = {"state": "unmeasured", "why": unmeasured, "base": base, "head": head}
@@ -306,10 +317,17 @@ def main(argv, env):
         }
     record.update({"mode": mode, "secs": round(time.time() - t0, 3), "findings": findings})
 
-    os.makedirs(RUNS, exist_ok=True)
-    path = f"{RUNS}/{time.strftime('%Y%m%d-%H%M%S')}-staleness.json"
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(record, fh, indent=2)
+    # The record is this stage's whole deliverable, and an unwritable runs directory is still
+    # not grounds to refuse a push. Measuring and writing are guarded separately so the failure
+    # is named: "could not measure" and "measured but could not write it down" are different
+    # facts, and a single guard around both would report them identically.
+    try:
+        os.makedirs(RUNS, exist_ok=True)
+        path = f"{RUNS}/{time.strftime('%Y%m%d-%H%M%S')}-staleness.json"
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(record, fh, indent=2)
+    except OSError as exc:
+        print(f"staleness: measured, but could not write its record ({exc})", file=sys.stderr)
 
     # Shadow mode: the record is written, the operator sees nothing. Two independent replays of
     # historical pushes disagreed by more than 4x on the mean, and both used today's corpus

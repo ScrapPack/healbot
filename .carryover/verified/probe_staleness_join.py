@@ -198,7 +198,7 @@ try:
 
     # --- integration against real history --------------------------------------------------
     head = staleness._sh(["git", "rev-parse", "HEAD"]).strip()
-    log = staleness._sh(["git", "rev-list", "--max-count=25", head]).split()
+    log = staleness._sh(["git", "rev-list", "--max-count=60", head]).split()
     found, rng, candidates, reported = [], None, 0, 0
     for sha in log[1:]:
         changed = set((staleness._sh(["git", "diff", "--name-only", f"{sha}...{head}"]) or "").split())
@@ -222,7 +222,7 @@ try:
     )
     r.check(
         f"THE FILTERS SUPPRESS THROUGH THE REAL GIT PATH — {reported} reported of "
-        f"{candidates} citation(s) into files these ranges changed",
+        f"{candidates} citation-range pair(s) over 59 overlapping ranges",
         candidates > reported > 0,
         "the one leg that exercises the filters end to end on real diffs rather than on "
         "fixtures, and DELIBERATELY COARSE: it asserts the filters do something and not "
