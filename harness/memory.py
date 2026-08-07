@@ -294,13 +294,19 @@ def path_of(rec_id, key=None, start=None, env=None):
     return os.path.join(records_dir(key, start, env), f"{rec_id}.md")
 
 
-def write(rec, key=None, start=None, env=None):
+def write(rec, key=None, start=None, env=None, reorient=True):
     """-> the path written. Validates, then replaces atomically.
 
     `os.replace` over a temp file in the SAME directory, because rename is only atomic within a
     filesystem and a temp directory can be on another one. A reader therefore sees either the
     old record or the new one and never a half-written file — which matters here more than it
     usually does, since the readers are other worktrees running concurrently.
+
+    `reorient=False` exists for bulk writers and for one measured reason. Re-rendering the
+    orientation block re-reads every record, so a backfill of N records at the default would do
+    O(N^2) file reads — 500 records is a quarter of a million of them. Bulk callers render once
+    at the end instead. Any single capture keeps the default, because a record that is not in the
+    block yet is a record the next session does not see.
     """
     validate(rec)
     # The tier is the record's own property, so a caller never has to remember to route a
@@ -315,6 +321,8 @@ def write(rec, key=None, start=None, env=None):
     with open(tmp, "w", encoding="utf-8") as fh:
         fh.write(dumps(rec))
     os.replace(tmp, final)
+    if reorient:
+        write_orient(key, start, env)
     return final
 
 
@@ -508,6 +516,80 @@ def query(text="", classification=None, key=None, start=None, env=None):
 
 
 # ---------------------------------------------------------------------------------------------
+# The orientation block
+# ---------------------------------------------------------------------------------------------
+
+# Sized on `MAX_DOCUMENT_TAIL` (`harness/config/opencode/plugin/healbot.ts:151`), which is the
+# number this harness already uses for "how much prose is worth carrying into a fresh context".
+# Reusing it rather than picking a new one, because two caps for one question is how they drift.
+ORIENT_CAP = 2000
+
+ORIENT_HEADER = "Decisions already settled in this project (do not re-litigate without new evidence):"
+
+
+def render_orient(recs, cap=ORIENT_CAP):
+    """-> the block, or "" when nothing qualifies.
+
+    FOUR FILTERS, and each one is load-bearing rather than tidy:
+
+      - HEADS ONLY. A superseded decision is exactly the thing a fresh session must not be
+        anchored to, and it is the one failure mode that would make this block worse than no
+        block at all.
+      - VERIFIED or TESTED ONLY. This is what makes a lossy free backfill safe: every backfilled
+        record is INFERRED, so none can reach standing context however many of them exist. A
+        SUSPECTED record in a system prompt is a hypothesis wearing a fact's clothes.
+      - DETERMINISTIC SORT, so two sessions started a second apart get byte-identical text and
+        the prompt cache is not invalidated for nothing.
+      - TRUNCATION AT A RECORD BOUNDARY. Cutting mid-record would ship half a decision, and half
+        a decision reads as a whole one.
+
+    The cap is applied to the RENDERED text, not by assuming the inputs are small. 500 records
+    of ordinary length is not a pathological store, and a per-record budget computed from a count
+    is a cap that fails exactly when it matters.
+    """
+    picked = [r for r in heads(recs) if r.get("classification") in ("VERIFIED", "TESTED")]
+    picked.sort(key=lambda r: (r.get("id") or ""))
+    out, used = [], len(ORIENT_HEADER) + 1
+    for rec in picked:
+        question = " ".join(str(rec.get("question", "")).split())
+        choice = " ".join(str(rec.get("choice", "")).split())
+        line = f"- {question} -> {choice} [{rec.get('classification')}]"
+        if used + len(line) + 1 > cap:
+            break
+        out.append(line)
+        used += len(line) + 1
+    if not out:
+        return ""
+    return "\n".join([ORIENT_HEADER, *out])
+
+
+def orient_path(key=None, start=None, env=None):
+    return os.path.join(derived_dir(key, start, env), "orient.txt")
+
+
+def write_orient(key=None, start=None, env=None):
+    """Pre-render the block to disk. -> the text written.
+
+    RENDERED IN PYTHON, ON EVERY WRITE, so both injection points reduce to reading one file.
+    The selection rules above are where every mistake would live, and a rule implemented twice —
+    once in the opencode plugin and once in a shell hook — is a rule that will disagree with
+    itself. Here there is one implementation and a probe can assert it.
+    """
+    text = render_orient(load_all(key, start, env))
+    directory = derived_dir(key, start, env)
+    try:
+        os.makedirs(directory, exist_ok=True)
+        path = orient_path(key, start, env)
+        tmp = f"{path}.tmp-{os.getpid()}"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    except OSError:
+        pass  # a derived file is never worth failing a capture over
+    return text
+
+
+# ---------------------------------------------------------------------------------------------
 # Capture
 # ---------------------------------------------------------------------------------------------
 
@@ -674,8 +756,76 @@ def _cmd_stamp(argv, env):
     return 0
 
 
+def _cmd_orient(argv, env):
+    """Print the orientation block, re-rendering it first.
+
+    Both injection points call THIS rather than reading the file, so a store whose derived
+    directory was deleted still orients — the file is a cache of this command's answer, not the
+    answer itself. Prints nothing and exits 0 when nothing qualifies, because an empty store is
+    the ordinary state of a new project and not a condition worth reporting.
+    """
+    try:
+        text = write_orient(start=_dir_opt(argv), env=env)
+    except NotAProject:
+        return 0  # a hook fires wherever the operator happens to be. Silence is the answer.
+    if text:
+        print(text)
+    return 0
+
+
+# The recall response cap. Larger than the orientation block because recall is PULLED — the model
+# asked for it and is spending its own turn on the answer — where the block is standing cost every
+# session pays whether it wanted it or not.
+RECALL_CAP = 6000
+
+
+def _cmd_recall(argv, env):
+    """`recall <query> [--all]`. Rendered here rather than in the plugin, for the same reason
+    `orient` is: the selection and the cap are the rules, and a rule implemented on both sides of
+    a process boundary is a rule that will disagree with itself."""
+    text = argv[1] if len(argv) > 1 else ""
+    every = "--all" in argv
+    try:
+        recs = query(text, start=_dir_opt(argv), env=env)
+    except NotAProject as exc:
+        print(f"memory: {exc}", file=sys.stderr)
+        return 1
+    if not every:
+        recs = heads(recs)
+    if not recs:
+        print("No decision records match that.")
+        return 0
+    dead = superseded_by(recs) if every else {}
+    out, used = [], 0
+    for rec in recs:
+        block = [f"{rec.get('id')}  [{rec.get('classification')}]  {rec.get('question')}",
+                 f"  chose: {rec.get('choice')}"]
+        for alt in rec.get("alternatives", []):
+            if isinstance(alt, dict):
+                block.append(f"  rejected: {alt.get('option')} -- {alt.get('why_rejected')}")
+        if rec.get("rationale"):
+            block.append(f"  why: {' '.join(str(rec['rationale']).split())}")
+        if rec.get("evidence"):
+            block.append(f"  evidence: {', '.join(str(e) for e in rec['evidence'])}")
+        if rec.get("id") in dead:
+            block.append(f"  SUPERSEDED BY: {', '.join(dead[rec['id']])}")
+        chunk = "\n".join(block)
+        # THE CAP IS APPLIED AFTER RENDERING, and truncation lands on a record boundary. A cap
+        # that assumed the inputs were small would be exactly the cap that failed on the store
+        # that had grown enough to need one.
+        if used + len(chunk) + 1 > RECALL_CAP:
+            out.append(f"({len(recs) - len(out)} more not shown — narrow the query)")
+            break
+        out.append(chunk)
+        used += len(chunk) + 1
+    print("\n\n".join(out))
+    return 0
+
+
 COMMANDS = {
     "path": _cmd_path,
+    "orient": _cmd_orient,
+    "recall": _cmd_recall,
     "list": _cmd_list,
     "query": _cmd_query,
     "show": _cmd_show,

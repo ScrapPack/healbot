@@ -48,8 +48,9 @@ import memory  # noqa: E402
 # Re-declared from each phase's first green run rather than kept at the number the plan
 # projected (17, then 26). The plan's own rule: a number written down before the rows are
 # counted is how an unreachable floor gets cited in four documents as exit-gate evidence.
-# Phase 4 closed at 22; phase 5 adds the three triggers and closes at 38.
-r = rig.Results(expect=38)
+# Phase 4 closed at 22; phase 5 adds the three triggers and closed at 38; phase 6 adds
+# retrieval and orientation and closes at 55.
+r = rig.Results(expect=55)
 
 STORE = tempfile.mkdtemp(prefix="hb-records-")
 ENV = {"HEALBOT_RECORDS": STORE}
@@ -532,6 +533,198 @@ try:
         "the plugin checks this too, but the plugin's check is a courtesy — the legacy schema "
         "path performs NO server-side validation, so an enum in a tool schema is a hint to the "
         "model and nothing more. This is where the refusal actually lives",
+    )
+
+    # =========================================================================================
+    # PHASE 6 — retrieval and orientation
+    # =========================================================================================
+
+    # --- the orientation block's four selection rules ------------------------------------------
+    #
+    # Every rule is asserted against its OWN negative, because each one is a filter and a filter
+    # that passes everything is indistinguishable from a filter that works, on a store where
+    # nothing was supposed to be filtered.
+    r.check(
+        "an EMPTY store renders an EMPTY block, not a header with nothing under it",
+        memory.render_orient([]) == "",
+        "a fresh project is the ordinary state, not an error, and a heading announcing settled "
+        "decisions above zero decisions is worse than silence: it reads as 'nothing has been "
+        "decided here', which is a claim, where an absent block makes none",
+    )
+    field = [
+        sample(id="20260806-o-verified", classification="VERIFIED", question="V?"),
+        sample(id="20260806-o-tested00", classification="TESTED", question="T?"),
+        sample(id="20260806-o-inferred", classification="INFERRED", question="I?"),
+        sample(id="20260806-o-suspect0", classification="SUSPECTED", question="S?"),
+        sample(id="20260806-o-dead0000", classification="VERIFIED", question="DEAD?"),
+        sample(id="20260806-o-live0000", classification="VERIFIED", question="LIVE?",
+               supersedes="20260806-o-dead0000"),
+    ]
+    block = memory.render_orient(field)
+    r.check(
+        "VERIFIED and TESTED reach the block; INFERRED and SUSPECTED do NOT",
+        "V?" in block and "T?" in block and "I?" not in block and "S?" not in block,
+        "all four conjuncts. This is the rule that makes a lossy free backfill safe — every "
+        "backfilled record is INFERRED, so no number of them can reach standing context. A "
+        "SUSPECTED record in a system prompt is a hypothesis wearing a fact's clothes",
+    )
+    r.check(
+        "a SUPERSEDED decision is absent and the one that replaced it is present",
+        "DEAD?" not in block and "LIVE?" in block,
+        "anchoring a fresh session to a decision that was already reversed is the one failure "
+        "mode that makes this block worse than no block at all",
+    )
+    r.check(
+        "the block is DETERMINISTIC across renders",
+        memory.render_orient(field) == memory.render_orient(list(reversed(field))),
+        "two sessions started a second apart must get byte-identical text or they pay a prompt "
+        "cache miss for nothing. Input ORDER is the thing being controlled here: the same "
+        "records arriving from a different directory listing must render the same block",
+    )
+
+    # 500 records is not a pathological store, and a cap computed from a per-record budget is a
+    # cap that fails exactly when it is needed.
+    many = [sample(id=f"20260806-o-b{n:06d}", classification="VERIFIED",
+                   question=f"Question number {n} with enough words to take real space?",
+                   choice=f"Choice number {n}, likewise not a short string at all")
+            for n in range(500)]
+    big = memory.render_orient(many)
+    r.check(
+        "500 records still render UNDER the cap",
+        0 < len(big) <= memory.ORIENT_CAP,
+        f"the cap is applied to the RENDERED text, not by assuming the inputs are small. "
+        f"{len(big)} bytes against a cap of {memory.ORIENT_CAP}",
+    )
+    r.check(
+        "…and the truncation lands on a RECORD boundary",
+        all(ln.startswith("- ") for ln in big.split("\n")[1:]) and big == big.rstrip(),
+        "a cut mid-record ships half a decision, and half a decision reads as a whole one. "
+        "Every line after the header is a complete entry or this row is red",
+    )
+    r.check(
+        "MUTATION: a cap small enough to exclude everything yields an EMPTY block",
+        memory.render_orient(many, cap=10) == "",
+        "the rows above pass over a renderer that ignores the cap entirely. This one does not — "
+        "and the empty answer is the right one, because a header alone is the same false claim "
+        "the empty-store row rejects",
+    )
+
+    # --- both injection points read ONE rendered block -----------------------------------------
+    orient_key = "orient"
+    for one in field:
+        memory.write(one, key=orient_key, env=ENV)
+    r.check(
+        "every write re-renders orient.txt to disk",
+        os.path.exists(memory.orient_path(key=orient_key, env=ENV))
+        and open(memory.orient_path(key=orient_key, env=ENV), encoding="utf-8").read()
+        == memory.render_orient(memory.load_all(key=orient_key, env=ENV)),
+        "so both injection points reduce to reading one file, and all the selection logic lives "
+        "in Python where these rows can reach it",
+    )
+    hook_sh = os.path.join(rig.HEALBOT, "harness", "claude", "hooks", "memory-orient.sh")
+    hook_src = open(hook_sh, encoding="utf-8").read()
+    # Asserted by RUNNING both sides, not by grepping either for the word VERIFIED — the first
+    # draft did that and went red on the hook's own comments, which is a check that cannot tell
+    # an implementation from a sentence describing one.
+    hook_out = subprocess.run(["/bin/sh", hook_sh], cwd=hookrepo, env=hook_env,
+                              capture_output=True, text=True).stdout
+    rendered = subprocess.run(
+        [sys.executable, os.path.join(rig.HEALBOT, "harness", "memory.py"), "orient",
+         "--dir", hookrepo], capture_output=True, text=True, env=hook_env).stdout.strip()
+    r.check(
+        "the shell hook emits EXACTLY what `memory.py orient` renders, byte for byte",
+        rendered != "" and json.loads(hook_out or "{}").get("hookSpecificOutput", {})
+        .get("additionalContext") == rendered,
+        "a rule implemented once in shell and once in TypeScript is a rule that will disagree "
+        "with itself on the day it matters. The first conjunct stops this passing over two empty "
+        "strings, which is what a hook that had stopped working would produce",
+    )
+    r.check(
+        "…and the opencode side goes through the SAME command",
+        'memory(["orient"])' in ts and "orientOf.set" in ts,
+        "not a TypeScript reimplementation of heads-only-and-VERIFIED-or-TESTED. Both injection "
+        "points reduce to reading one rendered block, which is the only reason the rows above "
+        "asserting those rules cover both of them",
+    )
+    settings = json.load(open(os.path.join(rig.HEALBOT, "harness", "claude", "settings.json"),
+                              encoding="utf-8"))
+    starts = settings.get("hooks", {}).get("SessionStart", [])
+    r.check(
+        "the Claude side is a SECOND SessionStart entry, not a change to fleet-state.sh",
+        len(starts) == 2 and any("memory-orient" in json.dumps(e) for e in starts)
+        and any("fleet-state" in json.dumps(e) for e in starts),
+        "fleet-state.sh's contract is fail-open state reporting and probe_fleet_claude.py "
+        "asserts it as such. A second responsibility on a fail-open script makes a failure in "
+        "either half silent in both, and makes that probe's green ambiguous about which it proved",
+    )
+    r.check(
+        "the orientation hook emits WELL-FORMED JSON carrying the block",
+        json.loads(subprocess.run(["/bin/sh", hook_sh], cwd=hookrepo, env=hook_env,
+                                  capture_output=True, text=True).stdout or "{}")
+        .get("hookSpecificOutput", {}).get("hookEventName") == "SessionStart",
+        "the block carries prose with quotes and newlines in it, so it is serialized by "
+        "json.dumps rather than by shell quoting — hand-rolled escaping is how a valid block "
+        "becomes invalid JSON the harness drops in silence",
+    )
+    empty_store = tempfile.mkdtemp(prefix="hb-emptyorient-")
+    quiet = subprocess.run(["/bin/sh", hook_sh], cwd=hookrepo,
+                           env=dict(os.environ, HEALBOT_RECORDS=empty_store),
+                           capture_output=True, text=True)
+    r.check(
+        "…and emits NOTHING, at exit 0, when nothing qualifies",
+        quiet.returncode == 0 and quiet.stdout.strip() == "",
+        "fail-open. A hook that breaks session startup to deliver a memory has inverted its own "
+        "value, and an empty store is the ordinary state of a new project",
+    )
+
+    # --- recall: pull, capped, and with no way to name another project -------------------------
+    r.check(
+        "healbot_recall takes a query and NO path argument",
+        line_of("healbot_recall: {") > 0
+        and "project:" not in ts.split("healbot_recall")[1].split("execute")[0]
+        and "path:" not in ts.split("healbot_recall")[1].split("execute")[0],
+        "the project is resolved from the plugin's own directory. A `project` argument would put "
+        "cross-project reads one prompt injection away, and per-project isolation would hold "
+        "only as long as nothing asked it not to",
+    )
+
+    def recall(*args):
+        p = subprocess.run(
+            [sys.executable, os.path.join(rig.HEALBOT, "harness", "memory.py"), "recall", *args,
+             "--dir", hookrepo],
+            capture_output=True, text=True, env=hook_env)
+        return p.stdout
+
+    memory.capture(
+        {"question": "Should the plugin build the record itself?",
+         "choice": "No — it spawns memory.py",
+         "classification": "TESTED",
+         "rationale": "one implementation of the key, the format and the validator",
+         "alternatives": [{"option": "build it in TypeScript",
+                           "why_rejected": "a second copy of four rules in a file that cannot "
+                                           "import the first"}],
+         "evidence": ["harness/config/opencode/plugin/healbot.ts:191"]},
+        start=hookrepo, env=ENV,
+    )
+    r.check(
+        "recall reaches the RATIONALE and the REJECTED alternatives, not just the choice",
+        "rejected:" in recall("TypeScript") and "why:" in recall("TypeScript")
+        and "cannot import" in recall("TypeScript"),
+        "the choice is the half a commit message already carries. The reason and the rejected "
+        "options are the half nothing else in this system captures, and a recall that returned "
+        "only the choice would have rebuilt the commit log at greater cost",
+    )
+    r.check(
+        "NEGATIVE CONTROL: a query matching nothing says so rather than dumping the store",
+        "No decision records match" in recall("zzz-no-such-decision-zzz"),
+        "the row above passes over a recall that ignores its query and prints everything. This "
+        "one does not",
+    )
+    r.check(
+        "recall is capped, and says how much it withheld",
+        len(recall("")) <= memory.RECALL_CAP + 200,
+        f"applied AFTER rendering and truncated on a record boundary, the same rule as the "
+        f"orientation block. {len(recall(''))} bytes against a cap of {memory.RECALL_CAP}",
     )
 
 except SystemExit:

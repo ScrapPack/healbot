@@ -486,6 +486,18 @@ export const Healbot = async (input: PluginInput) => {
   const nudgePending = new Set<string>()
 
   /**
+   * The orientation block, SNAPSHOTTED PER SESSION at its first system prompt.
+   *
+   * Not re-read every turn, and the reason is cost rather than tidiness. `request.ts:74-78`
+   * keeps element 0 of the system array as the cacheable header and joins the rest; a block
+   * whose text changed mid-session because another worktree captured a record would move bytes
+   * inside that joined tail on a turn where nothing else moved, and the session would pay a
+   * cache miss for a decision it had no interest in. A session orients ONCE, from what was
+   * settled when it started, which is also the honest reading of what "orientation" means.
+   */
+  const orientOf = new Map<string, string>()
+
+  /**
    * Serialised deliberately. Each retire spawns one session and archives another; two interleaved
    * would double-spend the gate. Anything skipped while one is in flight is picked up on the next
    * event, because a session over the threshold keeps producing them.
@@ -1072,6 +1084,46 @@ export const Healbot = async (input: PluginInput) => {
         return `Recorded. ${result.out}`
       },
     },
+
+    /**
+     * Retrieval is PULL, and this is the whole retrieval surface.
+     *
+     * WHY PULL AND NOT PUSH. Tool definitions are the largest standing token cost in this
+     * harness — 11 shipped tools measure 19,898 B — so a store that pushed its contents into
+     * every prompt would spend the budget this harness exists to protect on records the session
+     * never asked for. The one exception is the orientation block below, which is capped at
+     * `MAX_DOCUMENT_TAIL` bytes and holds only settled heads.
+     *
+     * THERE IS NO PATH ARGUMENT, deliberately and permanently. The project is resolved from the
+     * plugin's OWN directory, so neither the model nor any instruction reaching it through a
+     * file, a web page or another session's output can name a different project's store. A
+     * `project` argument would make cross-project reads one prompt injection away, and the whole
+     * per-project isolation rule would then hold only as long as nobody asked it not to.
+     */
+    healbot_recall: {
+      description:
+        "Search this project's decision records for why something was decided the way it was, " +
+        "and what was rejected. Use it before re-opening a settled question, before changing a " +
+        "threshold or a schema someone chose deliberately, and when a comment or document says " +
+        "a choice was made but not why. Searches questions, choices, reasoning and evidence. " +
+        "Records are scoped to this project and cannot be read from another one.",
+      args: {
+        query: str("Words to search for. Pass an empty string to list every settled decision."),
+        include_superseded: str(
+          "\"yes\" to include decisions that were later reversed, with what reversed them — use " +
+            "this when you want the history of a choice rather than its current state. " +
+            "\"no\" for only what still stands.",
+        ),
+      },
+      async execute(args: { query?: string; include_superseded?: string }) {
+        const every = (args?.include_superseded ?? "").trim().toLowerCase().startsWith("y")
+        const result = await memory(["recall", args?.query ?? "", ...(every ? ["--all"] : [])])
+        if (result.code !== 0) {
+          return `Could not read the decision records: ${result.err || `exited ${result.code}`}`
+        }
+        return result.out || "No decision records match that."
+      },
+    },
   }
 
   if (AUTO_RETIRE) {
@@ -1113,6 +1165,18 @@ export const Healbot = async (input: PluginInput) => {
     ) => {
       const sessionID = input?.sessionID
       if (!sessionID) return
+
+      // Orientation, once per session. `memory.py orient` renders it — not this file — so the
+      // four selection rules (heads only, VERIFIED|TESTED only, deterministic sort, truncation
+      // at a record boundary) have ONE implementation that a probe can assert, rather than one
+      // here and another in the Claude-side hook that would quietly disagree.
+      if (!orientOf.has(sessionID)) {
+        const result = await memory(["orient"])
+        orientOf.set(sessionID, result.code === 0 ? result.out : "")
+      }
+      const block = orientOf.get(sessionID)
+      if (block) output.system.push(block)
+
       if (nudgePending.delete(sessionID)) {
         output.system.push(
           "You are about halfway through this session's context. If you have settled a question " +

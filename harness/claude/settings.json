@@ -15,6 +15,14 @@
             "command": "\"$CLAUDE_CONFIG_DIR/hooks/fleet-state.sh\" session-start"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_CONFIG_DIR/hooks/memory-orient.sh\""
+          }
+        ]
       }
     ],
     "Stop": [
