@@ -4,12 +4,12 @@ What was built, what it refuses to do, and the three things an operator has to k
 
 ## 1. Why it exists
 
-Retirement carries six fields and drops every reason behind them. `healbot.ts:500-505` filters a
-session's history to text parts, which discards tool calls, tool results and reasoning; `:490`
-deletes completed todos; `:516` and `:520-524` keep one message each. The handoff is never
-written to disk — its only destination is `POST /session/{id}/prompt_async` at `:581`.
+Retirement carries six fields and drops every reason behind them. `healbot.ts:569-574` filters a
+session's history to text parts, which discards tool calls, tool results and reasoning; `:559`
+deletes completed todos; `:585` and `:589-593` keep one message each. The handoff is never
+written to disk — its only destination is `POST /session/{id}/prompt_async` at `:650`.
 
-Worse than the lossiness is the hole at `:550-558`: a session whose `open.length === 0` is
+Worse than the lossiness is the hole at `:619-627`: a session whose `open.length === 0` is
 archived with **no successor and no record at all**. The sessions that finished their work
 cleanly are exactly the ones the store never hears from.
 

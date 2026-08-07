@@ -267,7 +267,7 @@ repaired: the fix is either a layout decision or an upstream width gate, both ow
 Open item C. Closed the same day; item C records the layout choice.
 
 **Where the free path ends, and why it ends there.** The `x` retirement key was NOT pressed.
-VERIFIED at `harness/config/opencode/plugin/healbot.ts:581`: `retire()` seeds the successor
+VERIFIED at `harness/config/opencode/plugin/healbot.ts:650`: `retire()` seeds the successor
 through `prompt_async` with the handoff document, so pressing `x` on a real session buys a
 model turn. Everything up to that keystroke is free and was done; the keystroke itself needs
 the owner's go. Also not reached for the same reason: `a` (answering a block requires a session

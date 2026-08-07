@@ -155,14 +155,14 @@ restatement of the fixture.
 
 The shipped state, VERIFIED by opening each file:
 
-- `finished()` → **`turnFinished()`** (`healbot.ts:346`). It is opencode's own predicate:
+- `finished()` → **`turnFinished()`** (`healbot.ts:386`). It is opencode's own predicate:
   `if (info.error) return true; return Boolean(info.finish && !["tool-calls","unknown"].includes(info.finish))`.
   The reference implementation is `prompt.ts:1295`, named in the docblock.
-- **`time.completed` is deliberately not read**, and the docblock at `healbot.ts:337` says so in
+- **`time.completed` is deliberately not read**, and the docblock at `healbot.ts:377` says so in
   those words. It is the field that looks most authoritative and is the least — `cleanup()` sets it
   per step (`processor.ts:595-596`) — and reading it is what created the original defect.
 - `consider()`'s parameter is **`turnOver`** again and its guard is a plain `if (!turnOver) return`
-  (`healbot.ts:612`, `:622`). No `&& !hard`. The guard is live, not dead: it is the line that makes
+  (`healbot.ts:681`, `:622`). No `&& !hard`. The guard is live, not dead: it is the line that makes
   the gate wait.
 - **`RETIRE_HARD` is deleted, not disabled.** The constant, the `hard` variable, the guard, the env
   var and its half of the arming log line are gone from `healbot.ts` and `healbot.tsx`;
@@ -174,8 +174,8 @@ The shipped state, VERIFIED by opening each file:
   copy at `healbot.tsx:57`. The derivation above travels with it in both.
 - The arming line is now
   `headless retirement armed — gate 180,000 (per-turn, single gate), directory ...`
-  (`healbot.ts:903`). It used to read `soft N, hard N`; there is one gate, and the line says so.
-- `retire()`'s `POST /abort` (`healbot.ts:473`) is a **no-op on the gate path** again, as it was
+  (`healbot.ts:1131`). It used to read `soft N, hard N`; there is one gate, and the line says so.
+- `retire()`'s `POST /abort` (`healbot.ts:542`) is a **no-op on the gate path** again, as it was
   designed to be. It survives for the two paths where it is not: the race, where a turn starts
   between `consider()`'s check and the call, and `healbot_retire`, which the control agent may fire
   at a session that is working right now. For the length of one commit — `5bcdeab` — that abort was

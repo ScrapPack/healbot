@@ -239,7 +239,7 @@ mid-turn on essentially every event the gate ever sees. That is the defect that 
 phases.
 
 Phase 7 fixed the predicate rather than the prose. `turnFinished()`
-(`harness/config/opencode/plugin/healbot.ts:346-349`) is now opencode's own, from `prompt.ts:1295`:
+(`harness/config/opencode/plugin/healbot.ts:386-389`) is now opencode's own, from `prompt.ts:1295`:
 `if (info.error) return true; return Boolean(info.finish && !["tool-calls","unknown"].includes(info.finish))`.
 It deliberately does not read `time.completed`. `consider()`'s parameter is `turnOver` and its
 guard is a plain `if (!turnOver) return` (`:612`, `:622`). **Nothing is aborted on the gate path** —

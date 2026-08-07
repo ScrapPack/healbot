@@ -1,9 +1,9 @@
 """The decision-record store: why a choice went the way it did, and what was rejected.
 
 WHY IT EXISTS. Retirement carries six fields and drops every reason behind them.
-`healbot.ts:500-505` filters a session's history to text parts, discarding tool calls, tool
-results and reasoning; `:490` deletes completed todos; `:516` and `:520-524` keep one message
-each. Worse, `:550-558` archives a session whose `open.length === 0` with NO successor and no
+`healbot.ts:569-574` filters a session's history to text parts, discarding tool calls, tool
+results and reasoning; `:559` deletes completed todos; `:585` and `:589-593` keep one message
+each. Worse, `:619-627` archives a session whose `open.length === 0` with NO successor and no
 record at all, so the sessions that finished cleanly are exactly the ones that record nothing.
 A handoff is never written to disk; its only destination is `POST /session/{id}/prompt_async`.
 So the reasoning that produced a decision survives only as long as the session that made it.

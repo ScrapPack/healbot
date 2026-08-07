@@ -158,7 +158,7 @@ const MAX_DOCUMENT_TAIL = 2000
  * `HEALBOT_RETIRE_AT` would silently end up above it. At the default 0.5 a session is asked at
  * half its context, which leaves it a whole half to answer in.
  *
- * WHY THIS EXISTS AT ALL, and why it is not "capture at retirement". `healbot.ts:550-558`
+ * WHY THIS EXISTS AT ALL, and why it is not "capture at retirement". `healbot.ts:619-627`
  * archives a session whose `open.length === 0` with no successor and no record, so the sessions
  * that finished their work cleanly are exactly the ones that record nothing. Waiting for
  * retirement means the cleanest sessions are the ones the store never hears from. Firing at a

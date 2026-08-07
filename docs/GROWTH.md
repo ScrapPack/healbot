@@ -341,7 +341,7 @@ screen. The harness does not currently pin or reserve the name.
 
 ## 5. The startup sweep — decided, not built
 
-`consider()` (`harness/config/opencode/plugin/healbot.ts:612`) has exactly one call site, there is no
+`consider()` (`harness/config/opencode/plugin/healbot.ts:681`) has exactly one call site, there is no
 polling, and `handled` is per-process and empty on restart. So a server that restarts with a session
 already over the gate does nothing until that session's next event, and then catches it at the **end
 of that turn** — one whole turn of consumption later, since Phase 7 made the predicate per-turn.
