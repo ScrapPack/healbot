@@ -174,8 +174,11 @@ print(f"  generated {make_chunks()} chunk file(s) of {CHUNK_BYTES // 1000} KB", 
 # findings.txt must NOT exist at baseline, or creating it is not a diff.
 if os.path.exists(f"{PROJECT}/findings.txt"):
     os.remove(f"{PROJECT}/findings.txt")
-print(f"  git baseline {git_baseline()} — without an inner repo every file here is gitignored "
-      f"by the parent and produces no diff", flush=True)
+# The chunks are DECLARED baseline: a session reads them all run, and without this every read
+# would land in GET /session/{id}/diff as a changed file. findings.txt is deliberately NOT
+# declared — the block above deletes it so that creating it is a diff.
+print(f"  git baseline {git_baseline(also=('chunk*.txt',))} — without an inner repo every file "
+      f"here is gitignored by the parent and produces no diff", flush=True)
 
 print("== boot (no HEALBOT_RETIRE_AT — the shipped default is the subject) ==", flush=True)
 t = boot(PORT, DB, cols=120, rows=44)

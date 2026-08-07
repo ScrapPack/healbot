@@ -110,9 +110,18 @@ def load_exemptions(cfg):
 
 
 def is_exempt(finding, exemptions):
-    """Does a (rule, severity, line, msg) finding match any exemption key?"""
+    """Does a (rule, severity, line, msg) finding match any exemption key?
+
+    A key is a whole rule ("R8") or a rule plus a message prefix ("R8:em-dash"). The RULE half is
+    compared exactly, never by prefix: this file defines R1 alongside R10 through R15, so a bare
+    `key.startswith("R1")` silently exempted six other rules along with the one asked for.
+    """
     rule, _, _, msg = finding
-    return any(f"{rule}:{msg}".startswith(k) for k in exemptions)
+    for k in exemptions:
+        head, _, tail = k.partition(":")
+        if head == rule and (not tail or msg.startswith(tail)):
+            return True
+    return False
 
 # ------------------------------------------------------------------------------------------
 # Preprocessing — plainspec.md "Running the tests": strip frontmatter, fenced code, inline

@@ -83,9 +83,15 @@ def fixtures():
     return PROJECT
 
 
-def git_baseline():
+def git_baseline(also=()):
     """Make PROJECT its own git repo with the fixtures committed. Call AFTER creating fixtures
     and BEFORE the session runs.
+
+    `also` names files this rig created ON PURPOSE and wants in the BASELINE rather than showing up
+    as changes. `verify_retire_350k.py` is the case that defines it: it writes 70 chunk files at
+    :173 so a session can read them without every read counting as a diff, and deletes
+    findings.txt immediately after so that CREATING findings.txt is a diff. Both halves depend on
+    the baseline being exactly what the rig chose. Accepts names or glob patterns.
 
     Not optional for anything that asserts on changed files. `GET /session/{id}/diff` serves
     `summary.diffs`, which `SessionSummary.summarize` (`summary.ts:102-127`) computes with git
@@ -119,8 +125,13 @@ def git_baseline():
     # -z and a NUL split rather than .split(): git quotes paths with spaces or non-ASCII in its
     # default output, and splitting on whitespace turns one such path into two names that match
     # nothing. That exact bug has been found twice in this repo already.
+    import fnmatch
+
+    def declared(name):
+        return name in FIXTURE_FILES or any(fnmatch.fnmatch(name, p) for p in also)
+
     tracked = [n for n in git("ls-files", "-z").stdout.split("\0") if n]
-    strays = [n for n in tracked if n not in FIXTURE_FILES]
+    strays = [n for n in tracked if not declared(n)]
     if strays:
         # Self-heal a baseline that is ALREADY contaminated. --cached drops them from the index
         # only; nothing leaves the disk, so a paid run's evidence survives and simply becomes
@@ -128,6 +139,10 @@ def git_baseline():
         git("rm", "-q", "--cached", "--", *strays, check=False)
         git("commit", "-q", "-m", "drop undeclared files from the rig baseline", check=False)
     git("add", "--", *FIXTURE_FILES)
+    for pattern in also:
+        # Globs are expanded by git itself against the work tree, so a rig may declare "chunk*.txt"
+        # without knowing the count. A pattern matching nothing is not an error.
+        git("add", "--", pattern, check=False)
     # Nothing to commit is fine and normal on a re-run.
     git("commit", "-q", "-m", "rig baseline", check=False)
 
@@ -135,7 +150,7 @@ def git_baseline():
     # be the evidence. Keeping the fixture clean is the operator's job; noticing that it is not is
     # this function's.
     residue = sorted(
-        n for n in os.listdir(PROJECT) if n not in FIXTURE_FILES and n not in (".git", "__pycache__")
+        n for n in os.listdir(PROJECT) if not declared(n) and n not in (".git", "__pycache__")
     )
     if residue:
         print(f"!! rig fixture NOT CLEAN — {len(residue)} undeclared in {PROJECT}: "

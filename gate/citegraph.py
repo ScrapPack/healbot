@@ -51,11 +51,16 @@ JUNK = {".git", "node_modules", "venv", "__pycache__", "dist", "build", ".next"}
 # therefore guaranteed to rot the first time that file changes for any reason, and repairing it is
 # forbidden. It is outside the citation contract, not merely unswept.
 #
-# MEASURED 2026-08-07: it has already happened. Twenty `PLAN.md:NNN` citations sit in
-# `hb/ab-runs/*/arms/*/files/opencode/plugin/healbot.ts`. `PLAN.md:378` is cited as the build-order
-# step reading "its own session in the ..." and today holds a colour-table row; `:383` and
-# `:369-370` moved the same way, in b83508e, itself a citation-repair commit that correctly left
-# the arms alone.
+# MEASURED 2026-08-07: it has already happened. Twenty PLAN.md citations sit in
+# `hb/ab-runs/*/arms/*/files/opencode/plugin/healbot.ts`. The arms cite PLAN.md line 378 as the
+# build-order step reading "its own session in the ...", and that line today holds a colour-table
+# row; lines 383 and 369-370 moved the same way, in b83508e, itself a citation-repair commit that
+# correctly left the arms alone.
+#
+# Those line numbers are written WITHOUT COLONS on purpose, per docs/CITE.md's editorial rule: a
+# citation quoted as broken must not be spelled like a live pointer, or the sweep cannot tell a
+# specimen from a target. Writing them in live form inside the comment that warns about importing
+# red rows would have imported four more.
 #
 # This matters most for a change nobody has made yet. The sweep is `.md` only (see the walk below),
 # so extending it to source would pull these in and import twenty permanently-red rows on day one.
