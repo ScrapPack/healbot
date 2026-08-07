@@ -20,8 +20,12 @@ the numbers shadow mode exists to replace with live ones.
   venv/bin/python probe_staleness_join.py
 """
 
+import contextlib
+import glob
+import io
 import os
 import sys
+import tempfile
 
 SP = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SP)
@@ -38,7 +42,7 @@ DELETE_ABOVE = [(2, 4, 2, 1)]     # four old lines became one
 CHANGE_BELOW = [(50, 2, 50, 9)]   # entirely past any span we cite
 OVERLAP = [(9, 4, 9, 4)]          # rewrites old lines 9-12
 
-r = rig.Results(expect=23)
+r = rig.Results(expect=29)
 
 try:
     # --- parse_hunks: the one form that breaks a naive parse ------------------------------
@@ -242,6 +246,84 @@ try:
         "one mutation, a join that walked the index instead of the change. It is kept because "
         "that mutation is real and nothing else here would catch it, and it is NOT the leg that "
         "proves the filters work; the one above it is (review finding from the 7e6673b push)",
+    )
+
+    # --- main(): the exit contract, asserted instead of claimed ---------------------------
+    # THIS BLOCK IS THE POINT OF THE WHOLE FILE. Four consecutive reviews caught defects in
+    # main() and this probe caught none of them, because nothing here called it: the header
+    # said "every path exits 0" while three separate paths did not, and each was found by a
+    # reader rather than by a run. A claim about behavior that no assertion touches is prose,
+    # and prose is what wrote the defects. Every path below is EXERCISED, not described.
+    def run_main(args, environ=None, runs=None):
+        """-> (exit code, stderr, records written). Redirects the stage's own output so a
+        failure surfaces as a value rather than as noise in this probe's log.
+
+        NO try/finally, deliberately, and `with` is used instead because it is not an ast.Try.
+        probe_rig_contract's contract 5 requires the verdict exit to be the last statement of
+        EVERY finally in the file, not just the outer one, and it refused this push when a
+        first draft restored state in one. Restoring only on the normal path is also the right
+        behavior here: main() raising is itself a defect, and the outer guard should see it
+        rather than have it tidied away.
+        """
+        prev = staleness.RUNS
+        staleness.RUNS = runs if runs is not None else tempfile.mkdtemp(prefix="stale-")
+        box = io.StringIO()
+        with contextlib.redirect_stderr(box), contextlib.redirect_stdout(io.StringIO()):
+            code = staleness.main(args, environ or {})
+        wrote = glob.glob(f"{staleness.RUNS}/*-staleness.json") if runs is None else []
+        staleness.RUNS = prev
+        return code, box.getvalue(), wrote
+
+    paths = {
+        "no arguments": ([], {}),
+        "trailing --base with no value": (["--base"], {}),
+        "unresolvable sha": (["--base", "deadbeefdeadbeef", "--head", "HEAD"], {}),
+        "a real range": (["--base", rng[0] if rng else "HEAD~1", "--head", head], {}),
+        "HEALBOT_STALE=off": (["--base", "HEAD~1"], {"HEALBOT_STALE": "off"}),
+    }
+    codes = {name: run_main(*a)[0] for name, a in paths.items()}
+    r.check(
+        f"EVERY PATH OUT OF main() EXITS 0 — {len(codes)} exercised",
+        set(codes.values()) == {0},
+        "the stage must never refuse a push, and saying so in a header is not a check. Three "
+        "commits running, that sentence was false in a different place each time: unguarded "
+        "build_index, an unwritable runs directory, and a valueless --base. "
+        + (f"nonzero: {[k for k, v in codes.items() if v]}" if any(codes.values()) else "all 0"),
+    )
+    r.check(
+        "MUTATION: an unwritable runs directory does not make it refuse",
+        run_main(["--base", rng[0] if rng else "HEAD~1", "--head", head],
+                 runs="/dev/null/not-a-directory")[0] == 0,
+        "the second of the three, and the one the review did not reach — it was found only by "
+        "enumerating the paths and running each. os.makedirs raises OSError here",
+    )
+    code, err, wrote = run_main(["--base", "deadbeefdeadbeef", "--head", "HEAD"], {})
+    r.check(
+        "AN UNMEASURED RUN SAYS SO, with no HEALBOT_STALE_SHOW set",
+        "NOT MEASURED" in err and len(wrote) == 1,
+        "shadow mode withholds FINDINGS. It was briefly withholding FAILURES too, which sent "
+        "every defect into a gitignored record nothing printed — a stage that had stopped "
+        "measuring reading exactly like one that measured cleanly, the shape this suite hunts",
+    )
+    code, err, wrote = run_main(["--base", rng[0] if rng else "HEAD~1", "--head", head], {})
+    r.check(
+        "NEGATIVE CONTROL: a run that DID measure stays silent",
+        err == "" and len(wrote) == 1,
+        "the other half, and the one that makes the leg above mean something: if the stage "
+        "printed on every run, 'it printed' would assert nothing about failure",
+    )
+    r.check(
+        "MUTATION: a valueless --base is NOT mistaken for working-tree mode",
+        "NOT MEASURED" in run_main(["--base"], {})[1],
+        "opt() first collapsed absent and valueless into None, so a typo returned 0 in silence "
+        "and was indistinguishable from a deliberate bare invocation (review finding from the "
+        "7e42452 push). Working-tree mode is declined deliberately; a typo is not",
+    )
+    r.check(
+        "HEALBOT_STALE=off writes NO record at all",
+        run_main(["--base", "HEAD~1"], {"HEALBOT_STALE": "off"})[2] == [],
+        "off means off. A stage that still swept and still wrote would cost what the switch "
+        "exists to save, and the switch would look like it worked",
     )
 
 except SystemExit:

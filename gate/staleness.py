@@ -271,10 +271,21 @@ def main(argv, env):
     # contradict "every path exits 0". Parsing is above the try because the try's job is the
     # measurement; this is why it cannot raise instead.
     def opt(name):
-        i = argv.index(name) if name in argv else -1
-        return argv[i + 1] if 0 <= i < len(argv) - 1 else None
+        """-> the value, None when the flag is absent, or "" when it is present with none.
+
+        The three cases must stay distinct. Collapsing the last two into None turned a typo
+        into a silent `return 0` that read exactly like a deliberate working-tree invocation,
+        which is the same failure-looks-like-success shape the guard below exists to prevent.
+        """
+        if name not in argv:
+            return None
+        i = argv.index(name)
+        return argv[i + 1] if i < len(argv) - 1 else ""
 
     base, head = opt("--base"), opt("--head")
+    if base == "" or head == "":
+        print("staleness: NOT MEASURED — --base or --head given with no value", file=sys.stderr)
+        return 0
     if not base:
         return 0  # working-tree mode is out of scope by design; see the header
     head = head or "HEAD"

@@ -135,9 +135,12 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # and a document this change invalidated but did not touch is out of scope by construction.
   #
   # SHADOW MODE while the flag rate is being calibrated: it writes gate/runs/*-staleness.json
-  # and prints nothing. Two replays of historical pushes disagreed by more than 4x on the mean,
-  # and both used today's corpus against old diffs, so both are lower bounds. Live records
-  # settle it. HEALBOT_STALE_SHOW=1 prints the findings now; HEALBOT_STALE=off skips the stage.
+  # and prints no FINDINGS. It does print a one-line stderr notice when it could not measure at
+  # all, in every mode, because a failure is not a finding and a stage that quietly stopped
+  # working must not read like a clean one. Two replays of historical pushes disagreed by more
+  # than 4x on the mean, and both used today's corpus against old diffs, so both are lower
+  # bounds. Live records settle it. HEALBOT_STALE_SHOW=1 prints the findings now;
+  # HEALBOT_STALE=off skips the stage.
   #
   # It is deliberately NOT allowed to refuse. Range mode only: with no base it returns 0
   # without measuring, because gate.changed_files unions untracked files in working-tree mode
