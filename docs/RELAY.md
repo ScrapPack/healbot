@@ -359,7 +359,7 @@ wrong, including the mid-turn tool call that 677 of 733 real messages look like.
 `NEXT.md` step 1 asked for the shipped gate — 256,000 when it was written, 180,000 now — to be
 exercised end to end by running `verify_headless_retire.py` "with no `HEALBOT_RETIRE_AT` override".
 **That was not executable.** The rig hardcodes `THRESHOLD = 20_000` at `:52` and forces it into the
-server's environment at `:86-93`, and `rig.py:282` applies `env_extra` last — there is no override
+server's environment at `:86-93`, and `rig.py:317` applies `env_extra` last — there is no override
 to remove. Editing the constant does not help either: one prompt, one `read` capped at 50 KB by
 `read.ts:16`, measured peak 36,647, and `len(user_turns) == 1` asserted structurally at `:200-204`.
 At either threshold it would have timed out and hard-failed after 15 minutes. The rig's own

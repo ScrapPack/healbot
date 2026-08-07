@@ -279,13 +279,29 @@ to make it declared: `rig.fixtures()` should write the `.gitignore` alongside th
 Not done here for the reason in §7 — `rig.py` is imported by the rigs whose scores this phase
 records.
 
+**REPAIRED 2026-08-07, and more broadly than the paragraph above proposes.** A `.gitignore` would
+only ever have covered the residue somebody thought to name. The fix instead removes the mechanism:
+`rig.py` now declares the fixture set once as `FIXTURE_FILES`, and `git_baseline()` adds *only*
+those files rather than `git add -A`. Anything else stays out of the baseline and therefore stays
+visible as a change, which is the property this function exists to provide. It also self-heals a
+baseline that is already contaminated — undeclared tracked files are dropped from the index with
+`git rm --cached`, so nothing leaves the disk and a paid run's evidence survives — and it prints
+the residue rather than absorbing it. TESTED both ways on an isolated fixture, including a path
+with spaces.
+
+The claim above that `hb/project` is "back to exactly the seven entries the rig declares" was no
+longer true when this was written: the directory held 12 entries and its inner repo tracked four
+undeclared files — `.gitleaks.toml`, `dns_tunnel_detector.py`, `linux_triage.sh` and
+`requirements.txt` — all committed by the old `git add -A`. The next rig run untracks them
+automatically.
+
 ## 8. A third thing, found while diagnosing — `wait_for`'s timeout does not bound
 
 **VERIFIED by reading; NOT TESTED** — it did not fire in either run this phase, and it is recorded
 at the tier it was established at.
 
-`wait_for(fn, timeout, label)` checks its deadline only *between* calls to `fn` (`rig.py:595`), and
-`Api.__call__` defaults to **`timeout=900`** (`rig.py:348`). So:
+`wait_for(fn, timeout, label)` checks its deadline only *between* calls to `fn` (`rig.py:630`), and
+`Api.__call__` defaults to **`timeout=900`** (`rig.py:383`). So:
 
 ```python
 wait_for(lambda: api("GET", "/question"), 300, "question.asked")

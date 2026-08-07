@@ -38,7 +38,32 @@ VERIFIED = f"{HB}/.carryover/verified"
 # normpath here is a no-op, so this changes no Mac behavior.
 CHECKOUT = os.path.normpath(f"{HB}/opencode")
 
-SKIP = {".git", "node_modules", "venv", "__pycache__", "dist", "build", ".next", "hb"}
+# Build output and dependency trees: nothing here is this repo's prose.
+JUNK = {".git", "node_modules", "venv", "__pycache__", "dist", "build", ".next"}
+
+# FROZEN EVIDENCE, and the reason is NOT that it is junk. `hb/` is mostly gitignored working
+# state, but `.gitignore:68` deliberately un-ignores `hb/ab-runs/`, so 62 tracked files live in
+# there: the arm snapshots and metadata of completed paid studies.
+#
+# Their citations CANNOT be repaired, by design. `run_study.py:483` compares each arm's manifest
+# digest against the one recorded at launch and raises rather than run when it has moved, so
+# editing an arm file falsifies the study it belongs to. A snapshot that quotes a living file is
+# therefore guaranteed to rot the first time that file changes for any reason, and repairing it is
+# forbidden. It is outside the citation contract, not merely unswept.
+#
+# MEASURED 2026-08-07: it has already happened. Twenty `PLAN.md:NNN` citations sit in
+# `hb/ab-runs/*/arms/*/files/opencode/plugin/healbot.ts`. `PLAN.md:378` is cited as the build-order
+# step reading "its own session in the ..." and today holds a colour-table row; `:383` and
+# `:369-370` moved the same way, in b83508e, itself a citation-repair commit that correctly left
+# the arms alone.
+#
+# This matters most for a change nobody has made yet. The sweep is `.md` only (see the walk below),
+# so extending it to source would pull these in and import twenty permanently-red rows on day one.
+# Kept as its own named set rather than folded into JUNK so that reorganising the tree cannot
+# silently drop the protection.
+FROZEN = {"hb"}
+
+SKIP = JUNK | FROZEN
 
 # Historical prose, excluded BY NAME rather than by silently narrowing the walk. `REDO-PROMPT.md`
 # is the prompt that started the verified redo and describes a tree that no longer exists; its

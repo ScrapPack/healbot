@@ -49,12 +49,19 @@ def db(name):
     return f"{WORK}/{name}.db"
 
 
+# The declared fixture set, in ONE place so `git_baseline()` can tell a fixture from residue.
+# HARNESS.md's rig-project row asks for exactly this: "the repair is to make it declared".
+FIXTURE_FILES = tuple(f"worker{i}.txt" for i in range(3)) + tuple(f"ledger{i}.txt" for i in range(3))
+
+
 def fixtures():
     """Create the project fixtures the rigs prompt against. Idempotent.
 
     `worker0..2.txt` carry assertable payloads so a tool-using turn can be proven to have
     really read a file; `ledger0..2.txt` are large enough (~130 KB each) that reading them
     moves context occupancy far enough to cross a lowered HEALBOT_RETIRE_AT.
+
+    The set is `FIXTURE_FILES`. Anything else in PROJECT is a session's leavings, not a fixture.
     """
     os.makedirs(PROJECT, exist_ok=True)
     for i in range(3):
@@ -102,9 +109,37 @@ def git_baseline():
         git("init", "-q")
         git("config", "user.email", "rig@healbot.local")
         git("config", "user.name", "healbot rig")
-    git("add", "-A")
+    # ONLY the declared fixtures go into the baseline. `git add -A` used to sweep in whatever a
+    # previous session had left here, and a file that IS in the baseline is not a CHANGE — so one
+    # run's leavings silently stopped showing in the next run's diff, which is the single thing
+    # this function exists to make visible. MEASURED 2026-08-07: hb/project's inner repo was
+    # tracking .gitleaks.toml, dns_tunnel_detector.py, linux_triage.sh and requirements.txt, none
+    # of them declared, all committed by the old `add -A`.
+    #
+    # -z and a NUL split rather than .split(): git quotes paths with spaces or non-ASCII in its
+    # default output, and splitting on whitespace turns one such path into two names that match
+    # nothing. That exact bug has been found twice in this repo already.
+    tracked = [n for n in git("ls-files", "-z").stdout.split("\0") if n]
+    strays = [n for n in tracked if n not in FIXTURE_FILES]
+    if strays:
+        # Self-heal a baseline that is ALREADY contaminated. --cached drops them from the index
+        # only; nothing leaves the disk, so a paid run's evidence survives and simply becomes
+        # visible as a change again.
+        git("rm", "-q", "--cached", "--", *strays, check=False)
+        git("commit", "-q", "-m", "drop undeclared files from the rig baseline", check=False)
+    git("add", "--", *FIXTURE_FILES)
     # Nothing to commit is fine and normal on a re-run.
     git("commit", "-q", "-m", "rig baseline", check=False)
+
+    # Residue is REPORTED, never silently absorbed and never deleted here: mid-run these files can
+    # be the evidence. Keeping the fixture clean is the operator's job; noticing that it is not is
+    # this function's.
+    residue = sorted(
+        n for n in os.listdir(PROJECT) if n not in FIXTURE_FILES and n not in (".git", "__pycache__")
+    )
+    if residue:
+        print(f"!! rig fixture NOT CLEAN — {len(residue)} undeclared in {PROJECT}: "
+              f"{', '.join(residue)}", flush=True)
     return git("rev-parse", "--short", "HEAD", check=False).stdout.strip()
 
 

@@ -78,7 +78,7 @@ exception and the rig reports a green summary of whatever happened to run first 
 `verify_cold.py`, where this guard was written."* It was written in Phase 5, restated in Phase 7,
 and present in exactly **3 of 10** probes. The seven without it were the seven older ones.
 
-**(b) A timeout raises nothing at all.** `wait_for()` (`rig.py:593-604`) prints
+**(b) A timeout raises nothing at all.** `wait_for()` (`rig.py:628-639`) prints
 `!! timed out waiting for …` and returns `None`. No exception, so guard (a) would not have caught
 it either — the probe runs fewer assertions. This is `probe_headless_arm` reporting
 `1/1 passed` and exit 0 after ninety seconds of waiting for a server that could never start.

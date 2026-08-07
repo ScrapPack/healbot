@@ -8,10 +8,23 @@ bug in the test, not the code (see below).
 python3 -m venv venv && venv/bin/pip install pyte
 
 # free — no model turns, no API credits.
-# FREE TO RE-RUN, not free to run the FIRST time: all but probe_turn_predicate.py need the
-# gitignored opencode/ checkout (rebuild from fork/README.md), and probe_error_state.py,
-# probe_focus.py and probe_turn_growth.py need hb/*.db, which only the PAID rigs below can
-# create. On a fresh clone this suite does not run — see docs/CLONE.md.
+# TEN OF THESE RUN ON A FRESH CLONE, and the venv above is the only thing they need. MEASURED
+# 2026-08-07 in a worktree with NO opencode/ checkout present: probe_gate_scope (32),
+# probe_memory_store (70), probe_pool (33), probe_refusal_driver (30), probe_refusal_fixtures (9),
+# probe_refusal_scoring (20), probe_review_parse (9), probe_rig_contract (40), probe_study_driver
+# (42) and probe_turn_predicate (18) went 303/303 green. None of the ten reads hb/ at all.
+# WHAT ACTUALLY NEEDS MORE: probe_citations, probe_twin, probe_control_wiring and
+# probe_staleness_join exit 3 without the gitignored opencode/ checkout (rebuild from
+# fork/README.md); probe_error_state, probe_focus and probe_turn_growth need hb/*.db, which only
+# the PAID rigs below can create.
+# An earlier version of this comment said "all but probe_turn_predicate.py need the checkout" and
+# "on a fresh clone this suite does not run". Both were false, and together they discouraged the
+# only free verification a fresh clone has — see docs/CLONE.md.
+#
+# THE N/N BESIDE EACH PROBE IS ITS DECLARED FLOOR, `Results(expect=N)` in the probe itself, which
+# is the only place that number is true. Four of them had drifted below the live floor when this
+# was written (control_wiring 14, pool 24, arm_factory 19, gate_scope 30), so an operator running
+# pool and seeing 33/33 had a manual telling them to expect 24.
 venv/bin/python probe_on_grid.py     # 4/4   does the route predicate actually discriminate?
 venv/bin/python probe_fleet.py       # 10/10 does harness/fleet.sh do what it claims?
 venv/bin/python probe_error_state.py # 10/10 does a hard-errored session render ERROR?
@@ -34,11 +47,11 @@ venv/bin/python probe_request_channel.py # 9/9 does `x`'s metadata write actuall
                                      #       and retire THAT session and no other? (real server,
                                      #       no model turn — an empty session has no todos, so
                                      #       retire() takes its no-successor branch)
-venv/bin/python probe_control_wiring.py # 14/14 are the control tools and agent registered?
-venv/bin/python probe_pool.py        # 24/24 does harness/pool.py's lease/guard machine refuse
+venv/bin/python probe_control_wiring.py # 16/16 are the control tools and agent registered?
+venv/bin/python probe_pool.py        # 33/33 does harness/pool.py's lease/guard machine refuse
                                      #       what it claims? (miniature pool of real git repos,
                                      #       every refusal exercised with the violating state)
-venv/bin/python probe_arm_factory.py # 19/19 does a synthesized arm hold EXACTLY its declared
+venv/bin/python probe_arm_factory.py # 23/23 does a synthesized arm hold EXACTLY its declared
                                      #       delta? (arms.py: freeze/materialize/tamper-refuse,
                                      #       then boots BOTH arms and diffs GET /skill)
 venv/bin/python probe_citations.py   # 21/21 do this repo's file:line citations still point at
@@ -56,7 +69,7 @@ venv/bin/python probe_rig_contract.py# 40/40 does every rig in this suite still 
                                      #       decides a turn COMPLETED by counting fire()'s box.
                                      #       Six paid rigs failed the fourth and always exited 0;
                                      #       four rows failed the sixth and could not fail at all
-venv/bin/python probe_gate_scope.py  # 30/30 does the pre-push gate gate the PUSHED range, not the
+venv/bin/python probe_gate_scope.py  # 32/32 does the pre-push gate gate the PUSHED range, not the
                                      #       checkout's HEAD, and does it enumerate that range at
                                      #       all? Builds a scratch bare remote plus a
                                      #       work repo, drives a real merge push through the REAL
@@ -609,7 +622,7 @@ and every `not on_grid` assertion passes **vacuously**.
 Two independent routes produce it, which is why the fix is in `Results` and not in a per-probe
 guard. **`sys.exit()` inside a `finally` DISCARDS the in-flight exception** — named at
 `probe_request_channel.py:151-153` since Phase 7, and present in only **3 of 10** probes until Phase
-9 backfilled it. And **a timeout raises nothing at all**: `wait_for()` (`rig.py:593-604`) prints
+9 backfilled it. And **a timeout raises nothing at all**: `wait_for()` (`rig.py:628-639`) prints
 `!!` and returns `None`, so no exception guard can see it and the probe simply runs fewer
 assertions. `Results(expect=N)` now catches both. It is a **floor, not an equality** — adding an
 assertion must not turn a probe red, losing one must. Controlled in both directions: **142/142 on

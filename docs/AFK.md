@@ -439,14 +439,20 @@ HARNESS.md:354, quoted: *"It now holds **84 entries and 94 MB including `node_mo
 in some earlier run shelled out to `npm install`."* That same directory produced a turn measuring
 **299,326 tokens**, 71% above the 175,148 on record, which took `probe_turn_growth.py` red.
 
-The repair is on record and so is the live residual risk (HARNESS.md:354): the directory was
-**restored at the end of Phase 12, 94 MB → 1.8 MB**, and the removed residue included a
-model-created `.gitignore` holding `node_modules/`. So the protection that was silently absorbing
-this is **gone**: *"a future run that shells out to `npm install` will have `git_baseline()`'s
-`git add -A` commit `node_modules` into `hb/project/.git`."*
+The repair is on record (HARNESS.md:354): the directory was **restored at the end of Phase 12,
+94 MB → 1.8 MB**, and the removed residue included a model-created `.gitignore` holding
+`node_modules/`. Losing that left `git_baseline()`'s `git add -A` free to commit `node_modules`
+into `hb/project/.git` on the next install.
 
-An unsupervised loop that runs one package install therefore does three things at once: bloats the
-repo, corrupts the corpus that sizes `RETIRE_AT`, and commits the damage into a git baseline. Every
+**That hole is closed as of 2026-08-07, and this section used to say otherwise.** `git_baseline()`
+no longer runs `git add -A`. `rig.py` declares the fixture set once as `FIXTURE_FILES` and only
+those files enter the baseline, so an install's output cannot be absorbed into it whatever the
+files are called — a `.gitignore` would only have covered the residue somebody thought to name.
+See `docs/OUTCOME.md` §7.
+
+An unsupervised loop that runs one package install still does two things: bloats the repo and
+corrupts the corpus that sizes `RETIRE_AT`. It no longer commits the damage into a git baseline,
+and `git_baseline()` now prints the residue it finds instead of absorbing it silently. Every
 prompt in §2 bans installs by name (`npm`, `pnpm`, `yarn`, `bun`, `pip`, `brew`). If a task
 genuinely needs a dependency, that is an ASK, and the loop must record `success=false`.
 
@@ -565,7 +571,7 @@ Defaults: `STALL_MIN=25`, `MAX_HOURS=8`. Tune the stall window **above** the slo
 single operation. Two documented ones to size against: `verify_question.py` polls three framings at
 300 s each and *"a run where the first two framings do not land takes ~10 minutes before it reaches
 the grid. That is the rig working, not hanging"* (the healbot-traps skill); and `wait_for` in
-`rig.py:595` checks its deadline only between calls to `fn` while `Api.__call__` defaults to
+`rig.py:630` checks its deadline only between calls to `fn` while `Api.__call__` defaults to
 `timeout=900`, so *"a 300s budget can be held for 900"* (the healbot-traps skill). Below ~20 minutes you
 will kill working runs.
 
