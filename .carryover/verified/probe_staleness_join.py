@@ -222,18 +222,18 @@ try:
     )
     r.check(
         f"THE FILTERS SUPPRESS THROUGH THE REAL GIT PATH — {reported} reported of "
-        f"{candidates} citation-range pair(s) over 59 overlapping ranges",
+        f"{candidates} citation-range pair(s)",
         candidates > reported > 0,
         "the one leg that exercises the filters end to end on real diffs rather than on "
         "fixtures, and DELIBERATELY COARSE: it asserts the filters do something and not "
-        "everything. It does NOT isolate a filter, and the first draft of this sentence "
-        "claimed it did. TESTED 2026-08-06 by disabling anchor confirmation: reported went "
-        "61 -> 506 of 679 and this predicate still held, because the other two filters kept "
-        "suppressing; the fixture leg above is what went red. So read the NUMBER in this "
-        "label, not the boolean — an 8x move in it is the calibration signal. What the "
-        "boolean catches is the class no fixture can: all three filters degrading together "
-        "against real git output, in either direction. `reported > 0` is the quieter half, "
-        "and a stage that suppresses everything is the worse failure of the two",
+        "everything. It does NOT isolate a filter, and two earlier drafts of this sentence "
+        "claimed it did and then quoted a ratio to prove it. Both numbers were measured "
+        "against a window this file has since changed, which is why neither is here now "
+        "(citation-hygiene: delete the number, never correct it). Disabling one filter "
+        "leaves the other two suppressing, so this predicate holds and the FIXTURE legs "
+        "above are what go red. What the boolean catches is the class no fixture can: all "
+        "three filters degrading together against real git output. `reported > 0` is the "
+        "quieter half, and a stage that suppresses everything is the worse failure",
     )
     r.check(
         "NEGATIVE CONTROL: with NO changed files the join reports nothing",

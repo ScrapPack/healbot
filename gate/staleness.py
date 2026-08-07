@@ -266,11 +266,15 @@ def main(argv, env):
     mode = env.get("HEALBOT_STALE", "advisory")
     if mode == "off":
         return 0
-    base = head = None
-    if "--base" in argv:
-        base = argv[argv.index("--base") + 1]
-    if "--head" in argv:
-        head = argv[argv.index("--head") + 1]
+    # A trailing `--base` with no value indexed past the end and raised IndexError, which is the
+    # same standalone-invocation typo class the guard below cites and the third path found to
+    # contradict "every path exits 0". Parsing is above the try because the try's job is the
+    # measurement; this is why it cannot raise instead.
+    def opt(name):
+        i = argv.index(name) if name in argv else -1
+        return argv[i + 1] if 0 <= i < len(argv) - 1 else None
+
+    base, head = opt("--base"), opt("--head")
     if not base:
         return 0  # working-tree mode is out of scope by design; see the header
     head = head or "HEAD"
@@ -329,19 +333,24 @@ def main(argv, env):
     except OSError as exc:
         print(f"staleness: measured, but could not write its record ({exc})", file=sys.stderr)
 
-    # Shadow mode: the record is written, the operator sees nothing. Two independent replays of
-    # historical pushes disagreed by more than 4x on the mean, and both used today's corpus
-    # against old diffs, so both are lower bounds. No number goes into a document until live
-    # records produce one.
+    # A FAILURE IS NOT A FINDING, and shadow mode only withholds findings.
+    #
+    # The guard added for the previous review made every defect in the measurement land in a
+    # gitignored record that shadow mode never prints and the hook's `|| true` never surfaces,
+    # so a stage that had stopped measuring looked exactly like one that measured cleanly. That
+    # is the shape this whole suite exists to hunt, and the unguarded version at least printed a
+    # traceback. So the guard stays, because refusing a push is not this stage's job, and the
+    # silence does not: an unmeasured run always says so, in every mode.
+    if unmeasured:
+        print(f"staleness: NOT MEASURED — {unmeasured}", file=sys.stderr)
+        return 0
+
+    # Findings themselves stay quiet while the flag rate is calibrated. Two replays of
+    # historical pushes disagreed by more than 4x on the mean, and both read today's corpus
+    # against old diffs, so both are lower bounds. Live records settle it.
     if env.get("HEALBOT_STALE_SHOW") == "1":
-        if unmeasured:
-            # An unmeasured run must NOT read as a clean one. Rendering "no document points at
-            # a line this change moved" here would collapse exactly the distinction the record
-            # above keeps, and it is the human-facing half that gets believed.
-            print(f"\n-- citation staleness: NOT MEASURED — {unmeasured} --")
-        else:
-            print(f"\n-- citation staleness ({len(findings)} citation(s)) --")
-            print(render(findings))
+        print(f"\n-- citation staleness ({len(findings)} citation(s)) --")
+        print(render(findings))
     return 0
 
 
