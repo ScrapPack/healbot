@@ -150,6 +150,32 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     $STALE --base "$base" --head "$local_sha" >&2 < /dev/null || true
   fi
 
+  # The prose stage: plainspec's machine rules over the changed .md, ADVISORY like staleness.
+  # Blocking is not an option at the measured rate — 2.80 violations per 100 words over the
+  # tracked corpus, 5 of 104 files clean — so a blocking row would refuse every push.
+  # HEALBOT_PROSE=off skips it.
+  #
+  # SCOPE IS THE WORKING TREE, not the pushed blobs: the checker takes file paths. On a push from
+  # a checkout parked elsewhere the density therefore describes the tree, not the range — which is
+  # why this reports and never refuses. `--diff-filter=d` drops deletions so a removed document
+  # is not handed to the checker as a missing path.
+  if [ -n "$base" ] && [ "${HEALBOT_PROSE:-on}" != "off" ]; then
+    md=$(git diff --name-only --diff-filter=d "$base...$local_sha" -- '*.md' \
+         | grep -v '^opencode/' || true)
+    md=$(printf '%s\n' "$md" | while IFS= read -r f; do
+           [ -n "$f" ] && [ -f "$ROOT/$f" ] && printf '%s\n' "$f"
+         done)
+    if [ -n "$md" ]; then
+      echo "-- prose (advisory, working tree): $(echo "$md" | wc -l | tr -d ' ') changed .md" >&2
+      # Density per file only. The full violation list runs to hundreds of lines on a docs push,
+      # and a stage that floods stderr is a stage people stop reading. Re-run the checker by hand
+      # for the detail: harness/skills/plainspec-check.py --score <file>
+      # shellcheck disable=SC2086
+      (cd "$ROOT" && $VENVPY harness/skills/plainspec-check.py --score $md 2>&1) \
+        | grep -E "violations per 100 words" | sed 's/^/   /' >&2 || true
+    fi
+  fi
+
   # The evidence flow, detached (the sha exists remotely only after the transfer this hook
   # precedes; publish.py retries until it appears, and gives up on record if it never does).
   if [ "${HEALBOT_PUBLISH:-on}" != "off" ]; then
