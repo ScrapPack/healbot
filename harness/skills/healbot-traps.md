@@ -107,6 +107,18 @@ you recognize the red when it fires. HARNESS.md's "Traps" section is the canonic
   be the main tree's while the tree being committed to is a worktree. Resolve from
   `git rev-parse --show-toplevel` inside the hook — the one place it IS the right answer.
   Python comes from PATH there too: the rig venv is gitignored, so worktrees have none.
+- **A HOOK ADDED ON A BRANCH DOES NOT RUN IN THAT BRANCH'S WORKTREE. It runs main's copy, or
+  not at all.** MEASURED 2026-08-06: every app-created worktree carries its own
+  `.git/worktrees/<name>/config.worktree` pinning `core.hooksPath` to the **absolute** path of
+  the MAIN checkout's `gate/hooks`, while the main checkout's `.git/config` holds the relative
+  `gate/hooks`. So a worktree runs whatever hooks main is currently on. Found by adding
+  `gate/hooks/post-commit` on a branch and watching it silently not fire — `git commit`
+  succeeded, printed nothing, and anchored nothing; run by hand in the same tree the hook
+  worked and anchored five records. **The same applies to the pre-push staleness stage**: "the
+  hook is tracked so it follows the branch" is true in the main checkout and false in every
+  worktree. Consequence for shadow-mode calibration: staleness records accumulate only from
+  pushes made in a tree whose hooksPath resolves to a `gate/hooks` that HAS the stage.
+  Check with `git config --show-origin core.hooksPath` before concluding a hook is broken.
 - **Environment mutation during a live study voids arms.** Check on-disk study state, not
   process liveness, before any script that touches global config (the apply-symlinks.sh
   incident). Full protocol: the paid-run-protocol skill.

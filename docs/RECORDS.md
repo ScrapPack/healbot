@@ -98,6 +98,15 @@ code it was about does.
 The flag is derived and never written into the record. "Worth re-reading" is a fact the hook can
 establish; "the claim died" is a judgment only a human can make.
 
+**It does not run in a linked worktree until it reaches `main`.** MEASURED 2026-08-06: every
+app-created worktree carries a `config.worktree` pinning `core.hooksPath` to the **absolute** path
+of the main checkout's `gate/hooks`, while the main checkout's own config holds the relative
+`gate/hooks`. A worktree therefore runs whatever hooks `main` is currently on, and a hook added on
+a branch silently does not fire there — `git commit` succeeds, prints nothing and anchors nothing.
+Run by hand in the same tree it works. Until this branch merges, anchor with
+`python3 harness/memory.py stamp`, and check `git config --show-origin core.hooksPath` before
+concluding the hook is broken. The same is true of the pre-push staleness stage.
+
 **(ii) `healbot_decide`.** The only cheap source of `alternatives[]` there will ever be. Every
 argument is required, because the raw-JSON-Schema path marks every property required
 (`tool/registry.ts:365`) and an "optional" field would be a lie the schema does not tell.
