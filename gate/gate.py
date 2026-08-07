@@ -45,11 +45,11 @@ if not os.path.exists(PY) and os.path.exists(f"{VERIFIED}/venv/Scripts/python.ex
     PY = f"{VERIFIED}/venv/Scripts/python.exe"
 RUNS = os.environ.get("HEALBOT_GATE_RUNS", f"{ROOT}/gate/runs")
 
-# Typed terminal states. Borrowed verbatim from gated-harness's lattice
-# (harness/orchestrator.py:547-559), which is the one part of it that transfers cleanly: a check
-# that SAID NO and a check that NEVER RAN are different facts, and collapsing them is how a
-# suite reports green for a run that died. This project has the same defect on record —
-# docs/CLONE.md, three probes exiting 0 having proven nothing.
+# Typed terminal states. The idea comes from the gated-harness plugin — a DIFFERENT REPO, so it is
+# deliberately NOT line-pinned any more: the only copy on this machine is a version-pinned plugin
+# cache (0.14.0) that no checker here sweeps, and its states are scattered string literals, not a
+# block. The old `harness/orchestrator.py:547-559` pointed at an interrupt handler. A check that
+# SAID NO and one that NEVER RAN are different facts — docs/CLONE.md, three probes exiting 0.
 PASS = "pass"          # every check ran and every check agreed
 BLOCKED = "blocked"    # a check ran and said no — a real finding, escalate to a human
 ERROR = "error"        # a check could not run — NOT the same as passing, and not the same as blocked

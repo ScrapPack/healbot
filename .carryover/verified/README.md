@@ -20,6 +20,11 @@ python3 -m venv venv && venv/bin/pip install pyte
 # An earlier version of this comment said "all but probe_turn_predicate.py need the checkout" and
 # "on a fresh clone this suite does not run". Both were false, and together they discouraged the
 # only free verification a fresh clone has — see docs/CLONE.md.
+#
+# THE N/N BESIDE EACH PROBE IS ITS DECLARED FLOOR, `Results(expect=N)` in the probe itself, which
+# is the only place that number is true. Four of them had drifted below the live floor when this
+# was written (control_wiring 14, pool 24, arm_factory 19, gate_scope 30), so an operator running
+# pool and seeing 33/33 had a manual telling them to expect 24.
 venv/bin/python probe_on_grid.py     # 4/4   does the route predicate actually discriminate?
 venv/bin/python probe_fleet.py       # 10/10 does harness/fleet.sh do what it claims?
 venv/bin/python probe_error_state.py # 10/10 does a hard-errored session render ERROR?
@@ -42,11 +47,11 @@ venv/bin/python probe_request_channel.py # 9/9 does `x`'s metadata write actuall
                                      #       and retire THAT session and no other? (real server,
                                      #       no model turn — an empty session has no todos, so
                                      #       retire() takes its no-successor branch)
-venv/bin/python probe_control_wiring.py # 14/14 are the control tools and agent registered?
-venv/bin/python probe_pool.py        # 24/24 does harness/pool.py's lease/guard machine refuse
+venv/bin/python probe_control_wiring.py # 16/16 are the control tools and agent registered?
+venv/bin/python probe_pool.py        # 33/33 does harness/pool.py's lease/guard machine refuse
                                      #       what it claims? (miniature pool of real git repos,
                                      #       every refusal exercised with the violating state)
-venv/bin/python probe_arm_factory.py # 19/19 does a synthesized arm hold EXACTLY its declared
+venv/bin/python probe_arm_factory.py # 23/23 does a synthesized arm hold EXACTLY its declared
                                      #       delta? (arms.py: freeze/materialize/tamper-refuse,
                                      #       then boots BOTH arms and diffs GET /skill)
 venv/bin/python probe_citations.py   # 21/21 do this repo's file:line citations still point at
@@ -64,7 +69,7 @@ venv/bin/python probe_rig_contract.py# 40/40 does every rig in this suite still 
                                      #       decides a turn COMPLETED by counting fire()'s box.
                                      #       Six paid rigs failed the fourth and always exited 0;
                                      #       four rows failed the sixth and could not fail at all
-venv/bin/python probe_gate_scope.py  # 30/30 does the pre-push gate gate the PUSHED range, not the
+venv/bin/python probe_gate_scope.py  # 32/32 does the pre-push gate gate the PUSHED range, not the
                                      #       checkout's HEAD, and does it enumerate that range at
                                      #       all? Builds a scratch bare remote plus a
                                      #       work repo, drives a real merge push through the REAL
