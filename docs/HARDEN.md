@@ -35,9 +35,9 @@ The pattern is stable enough to name: *this project's tests fail by passing.* Ev
 that touches the rig is aimed at that, not at coverage.
 
 **Gate ≠ build order**, and conflating them is the error this project keeps catching in itself.
-The gate names three behaviours and they are met. The build order names seven steps: three
-built, two partial, two absent. Step 5 (the control agent) does not exist; step 4 (focus) is
-three lines of code with no test. Neither is in the gate. `HARNESS.md` was scrupulous about
+The gate names three behaviours and they are met. The build order named seven steps: three
+built, two partial, two absent. **SUPERSEDED 2026-08-07: step 5, the control agent, ships and
+`probe_control_wiring.py` holds it at 16/16; step 4, focus, has `probe_focus.py`.** `HARNESS.md` was scrupulous about
 this distinction; `docs/VERIFY.md` was not, and its top-line Result still declared the handoff
 clause *unbuilt* 310 lines above §10 reporting it built and passing.
 
