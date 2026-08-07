@@ -344,7 +344,13 @@ re-attaches after each compaction, since `extract()` skips compacted parts (`ins
 
 ### Two repos that cannot resolve each other's paths, one of them unbacked
 
-`.gitignore` excludes `/opencode/`. The 14 `*.MAP.md` files and the spike live only in the fork,
+`.gitignore` excludes `/opencode` — **slashless, and that is not a typo to be tidied.** The
+dir-only `/opencode/` form is what this document used to show, and it is a measured trap: it
+matched a DIRECTORY only, so when a worktree bring-up made `opencode` a SYMLINK, `git add -A`
+tracked it, and the next commit turned it into a gitlink naming a submodule this repo does not
+declare. A clone would get an empty directory and `git submodule update --init` would fail with no
+mapping. The rule text at the top of `.gitignore` carries the measurement and the scratch-repo
+test. The 14 `*.MAP.md` files and the spike live only in the fork,
 whose only remote is `https://github.com/sst/opencode` — so branch `healbot` has no valid push
 destination. The 14 links at `HARNESS.md` lines 26-54 all point into the ignored subtree.
 
