@@ -292,19 +292,47 @@ try:
     )
 
     # --- corpora ------------------------------------------------------------------------------
-    seen, rig_rows, real_rows = set(), [], []
+    # hb/ is gitignored working state, not a declared fixture, so anything may drop a file in it.
+    # `sqlite3 <path-that-does-not-exist> .tables` leaves a 0-BYTE file behind, and sqlite opens an
+    # empty file as a valid empty database — so the SELECT in load() raised `no such table:
+    # message` and took this probe from 20/20 to a 3-assertion SHORT RUN. REPRODUCED 2026-08-07 by
+    # doing exactly that. The old behaviour was honest (FAIL, short-run banner, exit 1) but it
+    # reddened on DEBRIS rather than on DRIFT, which is the failure shape probe_twin.py:130-136
+    # records people learning to ignore.
+    #
+    # A 0-byte file is debris and is skipped. A NON-EMPTY database that will not read is
+    # corruption, and still fails — the guard must not become a way for a shrinking corpus to pass
+    # quietly. Both lists are PRINTED either way.
+    seen, rig_rows, real_rows, debris, broken = set(), [], [], [], []
     for name in sorted(os.listdir(HB)):
         if not name.endswith(".db"):
             continue
-        for row in load(f"{HB}/{name}"):
+        path = f"{HB}/{name}"
+        if os.path.getsize(path) == 0:
+            debris.append(name)
+            continue
+        try:
+            loaded = load(path)
+        except sqlite3.Error as e:
+            broken.append(f"{name}: {e}")
+            continue
+        for row in loaded:
             if row["id"] in seen:
                 continue  # the same session appears in several rig DBs (replays)
             seen.add(row["id"])
             rig_rows.append(row)
+    for name in debris:
+        print(f"     0-BYTE FILE, SKIPPED as debris: {name}", flush=True)
+    for item in broken:
+        print(f"     NON-EMPTY DATABASE THAT WILL NOT READ: {item}", flush=True)
     r.check(
-        f"rig corpus loaded from hb/*.db — {len(rig_rows)} deduped messages",
-        len(rig_rows) > 0,
-        "several of these DBs are byte-different copies of the same run; dedup is by message id",
+        f"rig corpus loaded from hb/*.db — {len(rig_rows)} deduped messages"
+        + (f", {len(debris)} 0-byte file(s) skipped" if debris else "")
+        + (f", {len(broken)} UNREADABLE: {', '.join(broken)}" if broken else ""),
+        len(rig_rows) > 0 and not broken,
+        "several of these DBs are byte-different copies of the same run; dedup is by message id. "
+        "0-byte files are skipped as debris, but a non-empty DB that will not read is corruption "
+        "and reddens here rather than silently shrinking the corpus",
     )
 
     have_real = os.path.exists(REAL)
