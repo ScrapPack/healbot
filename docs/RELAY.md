@@ -162,7 +162,7 @@ The shipped state, VERIFIED by opening each file:
   those words. It is the field that looks most authoritative and is the least — `cleanup()` sets it
   per step (`processor.ts:595-596`) — and reading it is what created the original defect.
 - `consider()`'s parameter is **`turnOver`** again and its guard is a plain `if (!turnOver) return`
-  (`healbot.ts:681`, `:622`). No `&& !hard`. The guard is live, not dead: it is the line that makes
+  (`healbot.ts:681`, `:691`). No `&& !hard`. The guard is live, not dead: it is the line that makes
   the gate wait.
 - **`RETIRE_HARD` is deleted, not disabled.** The constant, the `hard` variable, the guard, the env
   var and its half of the arming log line are gone from `healbot.ts` and `healbot.tsx`;
@@ -179,7 +179,7 @@ The shipped state, VERIFIED by opening each file:
   designed to be. It survives for the two paths where it is not: the race, where a turn starts
   between `consider()`'s check and the call, and `healbot_retire`, which the control agent may fire
   at a session that is working right now. For the length of one commit — `5bcdeab` — that abort was
-  usually live and was cancelling turns in flight; the comment at `:471-472` says as much, so the
+  usually live and was cancelling turns in flight; the comment at `:540-541` says as much, so the
   next reader does not have to reconstruct it against this document.
 - Prose corrected in place, **twice**: `HARNESS.md`, `docs/HEADLESS.md`, `docs/HARDEN.md`,
   `opencode.jsonc`, `harness/env.sh`, `PLAN.md`'s errata table and `agent/control.md` were first

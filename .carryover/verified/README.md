@@ -242,8 +242,8 @@ Phase 7 fixed the predicate rather than the prose. `turnFinished()`
 (`harness/config/opencode/plugin/healbot.ts:386-389`) is now opencode's own, from `prompt.ts:1295`:
 `if (info.error) return true; return Boolean(info.finish && !["tool-calls","unknown"].includes(info.finish))`.
 It deliberately does not read `time.completed`. `consider()`'s parameter is `turnOver` and its
-guard is a plain `if (!turnOver) return` (`:612`, `:622`). **Nothing is aborted on the gate path** —
-`retire()` still calls `POST /abort` (`:473`, under the comment at `:458-472`), but on this path it
+guard is a plain `if (!turnOver) return` (`:681`, `:691`). **Nothing is aborted on the gate path** —
+`retire()` still calls `POST /abort` (`:542`, under the comment at `:527-541`), but on this path it
 is a no-op by construction, because `turnFinished()` is what got the call there. It exists for the
 race where a turn starts between the check and the call, and for `healbot_retire` arriving from the
 control agent on a session that is working.

@@ -2,6 +2,14 @@
 # file:line citations. DERIVED, not authoritative — everything this project contributes to
 # it lives in fork/ (17 files + the exact patch against base 7534d23). See fork/README.md
 # to reconstitute this directory from scratch.
+# NO TRAILING SLASH, and that is the whole point of this line. `/opencode/` matches a
+# DIRECTORY only, so when a worktree bring-up made `opencode` a SYMLINK to another tree's
+# checkout, `git add -A` TRACKED it — and the next commit, which replaced the symlink with a
+# real checkout, turned it into a gitlink pointing at a submodule this repo does not declare.
+# A clone would get an empty directory and `git submodule update --init` would fail with no
+# mapping. MEASURED 2026-08-06 by doing exactly that. The slashless form ignores the name
+# whatever it is: file, directory or symlink.
+/opencode
 /opencode/
 
 node_modules/
