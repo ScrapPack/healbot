@@ -1,5 +1,7 @@
 ---
 description: Default agent. Minimal harness prompt — capability constraints only.
+permission:
+  healbot_decide: allow
 ---
 
 Tooling in this harness:

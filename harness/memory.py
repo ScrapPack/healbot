@@ -508,6 +508,73 @@ def query(text="", classification=None, key=None, start=None, env=None):
 
 
 # ---------------------------------------------------------------------------------------------
+# Capture
+# ---------------------------------------------------------------------------------------------
+
+
+def capture(payload, start=None, env=None, when=None):
+    """-> the path written. The ONE way a record enters the store from outside this module.
+
+    Every capture trigger routes through here — the post-commit hook, the plugin's
+    `healbot_decide` tool, and `backfill`. That is deliberate and it is the answer to the
+    question the plan left open about how the plugin should write. The alternative was for the
+    plugin to build the record in TypeScript, and it would have put a second copy of the project
+    key, the frontmatter format, the id rule and the whole validator into a file that cannot
+    import this one. Two implementations of one rule is the failure the plan deletes
+    `harness/records.py` to avoid; it does not stop being that failure when the second copy is
+    in another language.
+
+    `anchor.commit_sha` is left alone when absent. The capturing session does not know the sha
+    of the commit its work will land in — that commit does not exist yet — so stamping is the
+    post-commit hook's job and an unanchored record is a normal intermediate state, not an error.
+    """
+    rec = blank()
+    for field in rec:
+        if field in payload:
+            rec[field] = payload[field]
+    if not rec["captured_at"]:
+        rec["captured_at"] = time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() if when is None else when))
+    if not rec["id"]:
+        rec["id"] = new_id(f"{rec['question']}\0{rec['choice']}\0{rec['captured_at']}", when=when)
+    return write(rec, start=start, env=env)
+
+
+def stamp(sha, changed, start=None, env=None):
+    """Anchor every unanchored record to `sha`, and report the ones this commit may have moved.
+
+    -> (stamped ids, flagged [(id, evidence pointer)]).
+
+    THE FLAG IS DERIVED AND NEVER STORED. A record whose evidence names a file this commit
+    changed is a record worth re-reading, and that is all it is — it is not marked stale on
+    disk, because "stale" is a judgment about whether the claim survived and nothing here can
+    make it. Writing the flag down would also make it wrong the moment somebody repairs the
+    record without clearing a field they do not know exists.
+
+    Revalidation is BY ANCHOR, never by TTL. Time does not invalidate a decision; a change to
+    the code the decision was about does.
+    """
+    changed = set(changed)
+    stamped, flagged = [], []
+    for rec in load_all(start=start, env=env):
+        if not rec.get("anchor", {}).get("commit_sha"):
+            rec["anchor"] = {"commit_sha": sha, "changed_files": sorted(changed)}
+            try:
+                write(rec, start=start, env=env)
+                stamped.append(rec["id"])
+            except RecordInvalid:
+                # A record that cannot be re-validated was hand-edited into an invalid state.
+                # Skipping it is right: a post-commit hook must not refuse, and must not
+                # silently rewrite something a human broke into something it guesses at.
+                continue
+        for pointer in rec.get("evidence", []):
+            target = str(pointer).split(":")[0]
+            if target and target in changed:
+                flagged.append((rec["id"], pointer))
+    return stamped, flagged
+
+
+# ---------------------------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------------------------
 
@@ -554,12 +621,67 @@ def _cmd_reindex(argv, env):
     return 0
 
 
+def _dir_opt(argv):
+    """`--dir <path>`, defaulting to the cwd.
+
+    The plugin needs this and the hook does not. A server process is launched from wherever the
+    fleet launched it and holds sessions for several project directories at once, so "the
+    project" is a per-call fact there, while a git hook always runs with the cwd inside the tree
+    that is committing.
+    """
+    if "--dir" in argv:
+        i = argv.index("--dir")
+        if i < len(argv) - 1:
+            return argv[i + 1]
+    return None
+
+
+def _cmd_capture(argv, env):
+    """Reads ONE json record from stdin. Not from argv: a rationale is prose with newlines and
+    quotes in it, and every shell in the path would get a vote on what it says."""
+    try:
+        payload = json.load(sys.stdin)
+    except (ValueError, TypeError) as exc:
+        print(f"capture: stdin is not one JSON object ({exc})", file=sys.stderr)
+        return 2
+    if not isinstance(payload, dict):
+        print("capture: stdin must be a JSON object", file=sys.stderr)
+        return 2
+    try:
+        print(capture(payload, start=_dir_opt(argv), env=env))
+    except RecordInvalid as exc:
+        print(f"capture: refused — {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def _cmd_stamp(argv, env):
+    """The post-commit trigger's whole body. Prints nothing when there is nothing to say."""
+    start = _dir_opt(argv)
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=start or os.getcwd(),
+                          capture_output=True, text=True)
+    if head.returncode != 0:
+        return 0  # no commits yet; nothing to anchor to
+    sha = head.stdout.strip()
+    files = subprocess.run(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", sha],
+                           cwd=start or os.getcwd(), capture_output=True, text=True)
+    stamped, flagged = stamp(sha, files.stdout.split(), start=start, env=env)
+    if stamped:
+        print(f"decision records: anchored {len(stamped)} to {sha[:8]}", file=sys.stderr)
+    for rec_id, pointer in flagged:
+        print(f"decision records: {rec_id} cites {pointer}, which this commit changed — "
+              f"re-read it", file=sys.stderr)
+    return 0
+
+
 COMMANDS = {
     "path": _cmd_path,
     "list": _cmd_list,
     "query": _cmd_query,
     "show": _cmd_show,
     "reindex": _cmd_reindex,
+    "capture": _cmd_capture,
+    "stamp": _cmd_stamp,
 }
 
 

@@ -151,6 +151,46 @@ const DIFF_FANOUT = 60
 const MAX_DOCUMENT_TAIL = 2000
 
 /**
+ * Capture trigger (iii): the occupancy at which a session is nudged to record its decisions.
+ *
+ * A FRACTION OF THE RETIREMENT GATE, not a number of its own, because the thing it has to stay
+ * below is the gate — and an absolute threshold set beside a gate that moves with
+ * `HEALBOT_RETIRE_AT` would silently end up above it. At the default 0.5 a session is asked at
+ * half its context, which leaves it a whole half to answer in.
+ *
+ * WHY THIS EXISTS AT ALL, and why it is not "capture at retirement". `healbot.ts:550-558`
+ * archives a session whose `open.length === 0` with no successor and no record, so the sessions
+ * that finished their work cleanly are exactly the ones that record nothing. Waiting for
+ * retirement means the cleanest sessions are the ones the store never hears from. Firing at a
+ * fraction closes that hole structurally rather than by asking the agent to remember.
+ *
+ * The 0.5 is a GUESS and is stated as one. Nothing has measured where useful decisions actually
+ * accumulate in a session; it is tunable so the answer can replace it.
+ */
+const CAPTURE_AT = RETIRE_AT * Math.min(1, Math.max(0.05, Number(process.env["HEALBOT_CAPTURE_AT"]) || 0.5))
+
+/**
+ * The decision-record store's one implementation, reached by spawning it.
+ *
+ * WHY A SUBPROCESS AND NOT TYPESCRIPT. The plan called for building the record here. That would
+ * put a second copy of the project-key rule, the id rule, the JSON-frontmatter format and the
+ * whole validator into a file that CANNOT import the first copy — and two implementations of one
+ * rule is the failure the plan deletes `harness/records.py` to avoid. It does not stop being
+ * that failure when the second copy is in another language; it gets harder to notice, because no
+ * probe can diff a TypeScript key function against a Python one by reading either.
+ *
+ * The no-imports rule is untouched: `Bun.spawn` and `import.meta.dir` are runtime globals, not
+ * imports, so the harness config directory still needs no `node_modules`. TESTED 2026-08-06 —
+ * `bun run` reports `Bun.spawn`, `Bun.file`, `Bun.write` and `import.meta.dir` all present, and
+ * a record with multi-paragraph prose round-trips through this path intact.
+ *
+ * In a materialized A/B arm this path does not resolve, because `arms.py` snapshots
+ * `harness/config` alone. The tool then refuses by name, which is the right answer: records must
+ * not leak into a measurement, and an arm that silently wrote them would contaminate one.
+ */
+const MEMORY_PY = `${import.meta.dir}/../../../memory.py`
+
+/**
  * The session-metadata key the grid's `x` writes to ask THIS process to retire a session.
  *
  * THE POINT IS THAT THERE IS NOW EXACTLY ONE RETIRING PROCESS. Until Phase 7 the grid ran its own
@@ -427,6 +467,23 @@ export const Healbot = async (input: PluginInput) => {
    * `message.updated` repeatedly and would spawn a successor per event.
    */
   const handled = new Set<string>()
+
+  /**
+   * The decision-record maps. Same scope, lifetime and restart semantics as `handled` above: a
+   * server restart forgets all three, which for these two means a session gets nudged once more
+   * than it strictly needed. That is the right way round — the alternative is persisting nudge
+   * state, and a nudge that survives a restart can go permanently silent on a session that never
+   * actually captured anything.
+   */
+  const nudged = new Set<string>()
+
+  /** Sessions that have called `healbot_decide`. This is the "uncaptured material" gate: a
+   * session that already recorded a decision is not asked again. */
+  const captured = new Set<string>()
+
+  /** Sessions with a nudge waiting to be delivered on their next system prompt. Delivery costs
+   * ZERO extra turns — it rides the prompt the session was going to send anyway. */
+  const nudgePending = new Set<string>()
 
   /**
    * Serialised deliberately. Each retire spawns one session and archives another; two interleaved
@@ -733,6 +790,33 @@ export const Healbot = async (input: PluginInput) => {
   // -------------------------------------------------------------------------------------------
 
   const str = (description: string) => ({ type: "string", description })
+  const strs = (description: string) => ({ type: "array", items: { type: "string" }, description })
+
+  /**
+   * Run `harness/memory.py` and return `{ code, out, err }`. The record travels on STDIN as one
+   * JSON object, never on argv: a rationale is prose with newlines and quotes in it, and on argv
+   * every shell in the path gets a vote on what it says.
+   *
+   * Never throws. A missing `python3`, an unwritable store and a refused record are all ordinary
+   * here and each becomes a sentence the model reads — a capture tool that throws would fail a
+   * turn over a lost note, which inverts the whole point of the store being advisory.
+   */
+  async function memory(args: string[], stdin?: unknown) {
+    try {
+      const proc = Bun.spawn(["python3", MEMORY_PY, ...args, "--dir", directory], {
+        stdin: stdin === undefined ? "ignore" : new TextEncoder().encode(JSON.stringify(stdin)),
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      const [out, err] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ])
+      return { code: await proc.exited, out: out.trim(), err: err.trim() }
+    } catch (error) {
+      return { code: -1, out: "", err: error instanceof Error ? error.message : String(error) }
+    }
+  }
 
   /** Compact one-line state for a session, from data the control agent would otherwise have to
    * ask for in four separate calls. Occupancy is expressed against the gate because "how close is
@@ -896,6 +980,98 @@ export const Healbot = async (input: PluginInput) => {
         }
       },
     },
+
+    /**
+     * Capture trigger (ii): the only cheap source of `alternatives[]` there will ever be.
+     *
+     * A commit message states the choice and usually the reasoning. It almost never states what
+     * was rejected and why, because by the time it is written the rejected options are gone from
+     * the author's head. Backfill can therefore recover choices and never alternatives, which is
+     * exactly why every backfilled record is INFERRED and this one is not. This tool is the
+     * moment the alternatives still exist.
+     *
+     * EVERY ARGUMENT IS REQUIRED, and that is not a style choice. The raw-JSON-Schema path marks
+     * every property required (`tool/registry.ts:365`), so an "optional" field here would be a
+     * lie the schema does not tell. The model must pass `[]` explicitly for the arrays.
+     *
+     * `execute` validates `classification` itself and does not rely on the schema to do it: the
+     * legacy path performs NO server-side validation, so an enum in the schema is a hint to the
+     * model and nothing more. The real refusal is `memory.py`'s, and this one only exists to give
+     * the model a sentence it can act on without paying for a subprocess round trip first.
+     */
+    healbot_decide: {
+      description:
+        "Record WHY a decision went the way it did, so a later session does not re-litigate it. " +
+        "Use it when you chose between real alternatives — an approach, a schema, a threshold — " +
+        "not for facts, not for progress notes, and not for a choice with one obvious answer. " +
+        "State what was REJECTED and why: that is the half nothing else in this system captures. " +
+        "classification must be VERIFIED (read the code, have file:line), TESTED (ran it), " +
+        "INFERRED (evidence with an unverified link) or SUSPECTED (a hypothesis). Pass [] for " +
+        "an empty list — every argument is required.",
+      args: {
+        question: str("The question that was open, as a question. Not a summary of the answer."),
+        choice: str("What was decided, in one or two sentences."),
+        alternatives: strs(
+          "Each rejected option as `option -- why it was rejected`. The reason is the point; an " +
+            "option with no reason is what a commit message already carries. [] if there were none.",
+        ),
+        rationale: str("The reasoning behind the choice. Prose, as long as it needs to be."),
+        evidence: strs("`file:line` pointers that support this. [] if none."),
+        classification: str("VERIFIED | TESTED | INFERRED | SUSPECTED — see the description."),
+      },
+      async execute(
+        args: {
+          question?: string
+          choice?: string
+          alternatives?: string[]
+          rationale?: string
+          evidence?: string[]
+          classification?: string
+        },
+        context: { sessionID?: string },
+      ) {
+        const classification = (args?.classification ?? "").trim().toUpperCase()
+        if (!["VERIFIED", "TESTED", "INFERRED", "SUSPECTED"].includes(classification)) {
+          return (
+            `Refused: classification ${JSON.stringify(args?.classification ?? "")} is not one of ` +
+            `VERIFIED, TESTED, INFERRED, SUSPECTED. An unclassified claim is how INFERRED gets ` +
+            `read as VERIFIED later, which is the failure the whole field exists to stop.`
+          )
+        }
+        const question = (args?.question ?? "").trim()
+        const choice = (args?.choice ?? "").trim()
+        if (!question || !choice) return "Refused: both question and choice are required."
+
+        // `option -- why` split here rather than asking the model for nested objects: the legacy
+        // schema path flattens anyway, and a one-line-per-alternative shape is what a model
+        // actually produces reliably. An entry with no separator keeps its whole text as the
+        // option and says so, which is visible in the record rather than silently dropped.
+        const alternatives = (args?.alternatives ?? []).map((raw) => {
+          const text = String(raw)
+          const cut = text.indexOf("--")
+          return cut < 0
+            ? { option: text.trim(), why_rejected: "(no reason given)" }
+            : { option: text.slice(0, cut).trim(), why_rejected: text.slice(cut + 2).trim() }
+        })
+
+        const result = await memory(["capture"], {
+          question,
+          choice,
+          alternatives,
+          rationale: (args?.rationale ?? "").trim(),
+          evidence: (args?.evidence ?? []).map((e) => String(e).trim()).filter(Boolean),
+          classification,
+          captured_by: `opencode:${context?.sessionID ?? "unknown"}`,
+        })
+        if (result.code !== 0) {
+          return `Could not record it: ${result.err || `memory.py exited ${result.code}`}. The ` +
+            `decision still stands; only the record was lost.`
+        }
+        if (context?.sessionID) captured.add(context.sessionID)
+        log(`recorded a decision for ${context?.sessionID ?? "unknown"}`)
+        return `Recorded. ${result.out}`
+      },
+    },
   }
 
   if (AUTO_RETIRE) {
@@ -907,8 +1083,46 @@ export const Healbot = async (input: PluginInput) => {
     log(`retirement gate DISABLED (HEALBOT_AUTO_RETIRE=0); control tools still available`)
   }
 
+  // OUTSIDE the branch above, deliberately. Capture is armed whether or not the retirement gate
+  // is, so the line that says so has to print in both states — otherwise the one operator most
+  // likely to wonder whether capture is running (the one who just disabled the gate) is the one
+  // who gets no answer.
+  log(`decision capture armed — nudge at ${CAPTURE_AT.toLocaleString()} of ${RETIRE_AT.toLocaleString()}`)
+
   return {
     tool: tools,
+
+    /**
+     * The nudge's delivery, and it costs ZERO extra turns: it rides the system prompt the
+     * session was going to send anyway.
+     *
+     * `!input.sessionID` IS THE LOAD-BEARING GUARD. There are two dispatch sites and only one of
+     * them is a session. `session/llm/request.ts:68-72` passes `{ sessionID, model }` — that is
+     * the real one. `agent/agent.ts:381` passes `{ model }` alone, with `system` holding
+     * `PROMPT_GENERATE`, because it is generating an agent's description. Appending here without
+     * the guard would push a nudge about decision records into a prompt whose entire job is
+     * writing one sentence about an agent.
+     *
+     * `output.system` is an ARRAY and this appends to it. `request.ts:74-78` keeps element 0 as
+     * the header and joins everything after it, so element 0 — the cacheable part — is untouched
+     * by anything added here.
+     */
+    "experimental.chat.system.transform": async (
+      input: { sessionID?: string; model: unknown },
+      output: { system: string[] },
+    ) => {
+      const sessionID = input?.sessionID
+      if (!sessionID) return
+      if (nudgePending.delete(sessionID)) {
+        output.system.push(
+          "You are about halfway through this session's context. If you have settled a question " +
+            "in it where real alternatives were considered and rejected, record it now with " +
+            "healbot_decide — the reasoning and the rejected options are lost when this session " +
+            "retires, and they are what a later session needs. If nothing qualifies, say nothing " +
+            "and carry on; do not invent a decision to have one to record.",
+        )
+      }
+    },
     /**
      * Driven off `message.updated`, which is the only event that carries the assistant message's
      * own `tokens` — `properties` is `{ sessionID, info: Message }` and `info` is the WHOLE
@@ -929,6 +1143,34 @@ export const Healbot = async (input: PluginInput) => {
           if (!requestedAt(info)) return
           await considerRequest(info.id)
           return
+        }
+
+        // Capture trigger (iii), ABOVE the kill switch on purpose — the same reason the request
+        // relay above it is. `HEALBOT_AUTO_RETIRE=0` disables the automatic RETIREMENT GATE and
+        // nothing else; its documented contract is "the control tools stay". Below this line,
+        // setting it would silently disable decision capture too, with no log line saying so,
+        // and the operator would be measuring a memory system that had been switched off by a
+        // flag about something else. Occupancy is recomputed here rather than reused because
+        // there is nothing above to reuse.
+        if (event.type === "message.updated") {
+          const m = event.properties?.["info"] as MessageInfo | undefined
+          const sid = m?.sessionID ?? (event.properties?.["sessionID"] as string | undefined)
+          if (
+            m?.role === "assistant" &&
+            sid &&
+            // `turnFinished` alone is not enough: it returns TRUE on an errored turn, and a
+            // session whose turn just blew up has no decision to record and no attention to
+            // spare for being asked. Both conjuncts.
+            turnFinished(m) &&
+            !m.error &&
+            occupancyOf(m.tokens) >= CAPTURE_AT &&
+            !nudged.has(sid) &&
+            !captured.has(sid)
+          ) {
+            nudged.add(sid)
+            nudgePending.add(sid)
+            log(`capture nudge armed for ${sid} at ${occupancyOf(m.tokens).toLocaleString()}`)
+          }
         }
 
         if (!AUTO_RETIRE) return

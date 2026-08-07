@@ -45,10 +45,11 @@ import rig  # noqa: E402
 sys.path.insert(0, os.path.join(rig.HEALBOT, "harness"))
 import memory  # noqa: E402
 
-# 22, re-declared from the first green run rather than kept at the 20 the plan projected. The
-# plan's own rule: a number written down before the rows are counted is how an unreachable floor
-# gets cited as exit-gate evidence.
-r = rig.Results(expect=22)
+# Re-declared from each phase's first green run rather than kept at the number the plan
+# projected (17, then 26). The plan's own rule: a number written down before the rows are
+# counted is how an unreachable floor gets cited in four documents as exit-gate evidence.
+# Phase 4 closed at 22; phase 5 adds the three triggers and closes at 38.
+r = rig.Results(expect=38)
 
 STORE = tempfile.mkdtemp(prefix="hb-records-")
 ENV = {"HEALBOT_RECORDS": STORE}
@@ -325,6 +326,212 @@ try:
         "it is imported by a git hook, by the doctor and by this probe. A module that shells "
         "out or exits at import time is not a library — the same finding that turned "
         "probe_citations.py's resolver into gate/citegraph.py",
+    )
+
+    # =========================================================================================
+    # PHASE 5 — the three capture triggers
+    # =========================================================================================
+
+    # --- trigger (i): the post-commit hook ----------------------------------------------------
+    #
+    # Exercised as a SCRIPT against a real scratch repository, not by reading it. The three
+    # claims that matter here — every path exits 0, the root comes from the toplevel rather than
+    # from $0, and the flag is derived — are all claims about what happens when it runs.
+    hookrepo = tempfile.mkdtemp(prefix="hb-hookrepo-")
+    os.makedirs(os.path.join(hookrepo, "harness"))
+    shutil.copy(os.path.join(rig.HEALBOT, "harness", "memory.py"),
+                os.path.join(hookrepo, "harness", "memory.py"))
+    HOOK = os.path.join(rig.HEALBOT, "gate", "hooks", "post-commit")
+
+    def git(*args, cwd=hookrepo):
+        return subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True)
+
+    git("init", "-q")
+    git("config", "user.email", "probe@healbot.local")
+    git("config", "user.name", "probe")
+    with open(os.path.join(hookrepo, "watched.py"), "w", encoding="utf-8") as fh:
+        fh.write("one\ntwo\nthree\n")
+    with open(os.path.join(hookrepo, "ignored.py"), "w", encoding="utf-8") as fh:
+        fh.write("untouched\n")
+    git("add", "-A")
+    git("commit", "-q", "-m", "baseline")
+
+    hook_env = dict(os.environ, HEALBOT_RECORDS=STORE)
+
+    def run_hook():
+        return subprocess.run(["/bin/sh", HOOK], cwd=hookrepo, env=hook_env,
+                              capture_output=True, text=True)
+
+    # A record captured against the SCRATCH repo, so its store key is the scratch project's and
+    # not healbot's — which is also what makes the isolation row above load-bearing rather than
+    # decorative.
+    scratch_key = memory.project_key(hookrepo)
+    memory.capture(
+        {"question": "Does the hook anchor what the session could not know?",
+         "choice": "The hook stamps the sha the session had no way to predict",
+         "classification": "TESTED",
+         "evidence": ["watched.py:2"],
+         "rationale": "captured before the commit exists, which is the normal case"},
+        start=hookrepo, env=ENV,
+    )
+    before = memory.load_all(key=scratch_key, env=ENV)
+    r.check(
+        "a record is captured UNANCHORED, which is the normal intermediate state",
+        len(before) == 1 and before[0]["anchor"]["commit_sha"] is None,
+        "the session capturing a decision cannot know the sha of the commit its work lands in, "
+        "because that commit does not exist yet. Requiring one at capture time would mean "
+        "either asking the agent to predict a sha or capturing after the fact, and capturing "
+        "after the fact is what the store exists to stop relying on",
+    )
+
+    with open(os.path.join(hookrepo, "watched.py"), "w", encoding="utf-8") as fh:
+        fh.write("one\nCHANGED\nthree\n")
+    git("add", "-A")
+    git("commit", "-q", "-m", "move the cited line")
+    done = run_hook()
+    after = memory.load_all(key=scratch_key, env=ENV)
+    head_sha = git("rev-parse", "HEAD").stdout.strip()
+    r.check(
+        "the post-commit hook ANCHORS the record to the commit that just landed",
+        done.returncode == 0 and after and after[0]["anchor"]["commit_sha"] == head_sha,
+        f"capture when the reason is known, anchor when the sha is known. exit={done.returncode}",
+    )
+    r.check(
+        "…and REPORTS the record whose evidence names a file that commit changed",
+        "watched.py:2" in done.stderr and "re-read" in done.stderr,
+        "revalidation BY ANCHOR, which is the same question staleness.py asks of documents asked "
+        "of records: a decision is not invalidated by time, it is invalidated by a change to the "
+        "code it was about",
+    )
+    r.check(
+        "MUTATION: the flag is DERIVED — nothing about staleness is written INTO the record",
+        all(k in memory.blank() for k in after[0]),
+        f"'worth re-reading' is a fact the hook can establish; 'the claim died' is a judgment "
+        f"only a human can make. A stored flag also goes wrong the moment somebody repairs the "
+        f"record without clearing a field they do not know exists. Extra keys: "
+        f"{[k for k in after[0] if k not in memory.blank()]}",
+    )
+    r.check(
+        "NEGATIVE CONTROL: an untouched file's citation is NOT reported",
+        "ignored.py" not in done.stderr,
+        "the row above passes over a hook that reports every record it can see. This one does "
+        "not — `ignored.py` is tracked, is cited by nothing, and was not in the commit",
+    )
+    second = run_hook()
+    r.check(
+        "re-running the hook re-anchors NOTHING and still exits 0",
+        second.returncode == 0 and "anchored" not in second.stderr,
+        "a record already carrying a sha keeps it. Re-stamping would move every record in the "
+        "store onto whatever commit happened last, which is the opposite of an anchor",
+    )
+    bare = tempfile.mkdtemp(prefix="hb-nogit-")
+    outside = subprocess.run(["/bin/sh", HOOK], cwd=bare, env=hook_env,
+                             capture_output=True, text=True)
+    r.check(
+        "the hook exits 0 where there is no repository at all",
+        outside.returncode == 0,
+        "EVERY PATH EXITS 0. The commit has already happened by the time this runs — there is "
+        "nothing left to refuse, and a nonzero exit only prints a scary git warning about a "
+        "hook that failed after the work was already done",
+    )
+
+    # --- trigger (ii): the plugin's tool ------------------------------------------------------
+    #
+    # Read as TEXT, and the limit is stated rather than glossed: this proves the tool is
+    # REGISTERED and well-formed. Whether a model chooses to call it is a paid claim and no
+    # assertion in this file touches it.
+    plug = os.path.join(rig.HEALBOT, "harness", "config", "opencode", "plugin", "healbot.ts")
+    ts = open(plug, encoding="utf-8").read()
+    lines = ts.split("\n")
+
+    def line_of(needle):
+        for i, text in enumerate(lines):
+            if needle in text:
+                return i
+        return -1
+
+    r.check(
+        "the plugin acquired NO import statement",
+        not any(ln.startswith("import ") or ln.startswith("const {") and "require(" in ln
+                for ln in lines),
+        "the harness config directory's node_modules is untracked, so a fresh clone has the "
+        "harness without a dependency tree and an importing plugin fails to load there — "
+        "silently, as a line in a server log. This is the row a builder breaks when they reach "
+        "for a subprocess helper or a hashing library",
+    )
+    r.check(
+        "healbot_decide is registered, with every argument the schema names",
+        line_of("healbot_decide: {") > 0
+        and all(f"        {a}:" in ts for a in
+                ("question", "choice", "alternatives", "rationale", "evidence", "classification")),
+        "the raw-JSON-Schema path marks every property REQUIRED (tool/registry.ts:365), so there "
+        "is no such thing as an optional argument here and a missing one is a schema that lies",
+    )
+    r.check(
+        "the capture NUDGE sits ABOVE the AUTO_RETIRE kill switch",
+        0 < line_of("nudgePending.add(sid)") < line_of("if (!AUTO_RETIRE) return"),
+        "HEALBOT_AUTO_RETIRE=0 disables the automatic retirement gate and nothing else — its "
+        "documented contract is that the control tools stay. Below that line, setting it would "
+        "silently disable decision capture too, with no log line, and an operator would be "
+        "measuring a memory system a flag about something else had switched off",
+    )
+    r.check(
+        "…and the capture threshold is LOGGED in both states of that switch",
+        0 < line_of("retirement gate DISABLED") < line_of("decision capture armed")
+        and lines[line_of("decision capture armed")].startswith("  log("),
+        "outside the branch, at function indentation. The operator most likely to wonder whether "
+        "capture is still running is the one who just disabled the gate, and they are exactly "
+        "the one a log line inside the `if` would not reach",
+    )
+    r.check(
+        "the nudge is gated on a FINISHED, NON-ERRORED turn",
+        "turnFinished(m) &&" in ts and "!m.error &&" in ts,
+        "turnFinished returns TRUE on an errored turn. A session whose turn just blew up has no "
+        "decision to record and no attention to spare for being asked for one, so both conjuncts "
+        "are needed and the predicate alone is not enough",
+    )
+    build_md = open(os.path.join(rig.HEALBOT, "harness", "config", "opencode", "agent",
+                                 "build.md"), encoding="utf-8").read()
+    r.check(
+        "build.md ALLOWS healbot_decide back past the global deny",
+        "healbot_decide: allow" in build_md.split("---")[1],
+        "opencode.jsonc denies `healbot_*` globally, and that deny REMOVES the schema from the "
+        "request payload rather than merely blocking execution. Without this line the capture "
+        "tool is invisible to the one agent that makes decisions, and no amount of nudging "
+        "reaches a tool that is not in the prompt",
+    )
+
+    # --- the capture CLI, which is the surface all three triggers share -----------------------
+    def cli(payload, extra=()):
+        p = subprocess.run(
+            [sys.executable, os.path.join(rig.HEALBOT, "harness", "memory.py"), "capture",
+             "--dir", hookrepo, *extra],
+            input=payload, capture_output=True, text=True, env=hook_env)
+        return p.returncode, p.stdout.strip(), p.stderr.strip()
+
+    good = json.dumps({"question": "q?", "choice": "c", "classification": "INFERRED",
+                       "rationale": "line one\n\nline two", "evidence": [], "alternatives": []})
+    code, out, _ = cli(good)
+    r.check(
+        "the capture CLI reads ONE json record from STDIN and prints the path",
+        code == 0 and out.endswith(".md") and os.path.exists(out),
+        "stdin and not argv: a rationale is prose with newlines and quotes in it, and on argv "
+        "every shell between the plugin and the store gets a vote on what it says",
+    )
+    r.check(
+        "…and multi-paragraph prose survives that trip intact",
+        "line one\n\nline two" in open(out, encoding="utf-8").read(),
+        "the blank line is the part that dies first. This is the leg that fails if the record "
+        "ever starts travelling as an argv string or a single JSON line without escaping",
+    )
+    bad_code, _, bad_err = cli(json.dumps({"question": "q?", "choice": "c",
+                                           "classification": "PROBABLY"}))
+    r.check(
+        "MUTATION: the CLI refuses a bad classification NONZERO and names it",
+        bad_code == 2 and "classification" in bad_err,
+        "the plugin checks this too, but the plugin's check is a courtesy — the legacy schema "
+        "path performs NO server-side validation, so an enum in a tool schema is a hint to the "
+        "model and nothing more. This is where the refusal actually lives",
     )
 
 except SystemExit:

@@ -1,0 +1,42 @@
+#!/bin/sh
+# Capture trigger (i): anchor decision records to the commit that just landed. Zero model calls.
+#
+# A record is captured DURING the work, when the reasoning is still in the session — which is
+# before the commit it belongs to exists. So the record goes in unanchored and this hook stamps
+# `anchor.commit_sha` on everything still waiting. That is the whole mechanism: capture when the
+# reason is known, anchor when the sha is known, and never ask the agent to predict a sha.
+#
+# It also reports records whose evidence names a file this commit changed. That is REVALIDATION
+# BY ANCHOR, and it is the same question `gate/staleness.py` asks of documents, asked of records
+# — a decision is not invalidated by time, it is invalidated by a change to the code it was
+# about. The flag is derived here and never written into the record: "worth re-reading" is a
+# fact this hook can establish, and "the claim died" is a judgment only a human can make.
+#
+# THE ROOT COMES FROM `git rev-parse --show-toplevel`, NOT FROM `$0`. `core.hooksPath` is
+# `gate/hooks`, which is tracked, and git resolves it against the repository — so from a linked
+# worktree the running hook FILE can be the main tree's copy while the tree being committed to
+# is the worktree. `$0` would send every crewmate's commit to the main checkout's memory.py.
+#
+# PYTHON COMES FROM PATH, not from the rig venv. `.carryover/verified/venv/` is gitignored, so a
+# linked worktree and a fresh clone do not have one — and this hook has to work in exactly those
+# places, because that is where crewmates commit. `python3` is the POSIX spelling; Windows
+# installs ship `python`. Same resolution the fleet-state hook uses, for the same reason.
+#
+# EVERY PATH EXITS 0. A commit has already happened by the time this runs — there is nothing
+# left to refuse, and a nonzero exit here only prints a scary git warning about a hook that
+# failed after the work was already done. A lost record is the acceptable failure; a commit that
+# looks broken is not.
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+[ -n "$ROOT" ] || exit 0
+[ -f "$ROOT/harness/memory.py" ] || exit 0
+
+PYBIN="$(command -v python3 2>/dev/null || command -v python 2>/dev/null)"
+[ -n "$PYBIN" ] || exit 0
+
+# Output is NOT swallowed. `stamp` prints only when it has something to say, and what it has to
+# say is the point of the hook — a redirect to /dev/null here would make a hook that had stopped
+# working read exactly like one with nothing to report, which is the failure mode `staleness.py`
+# was corrected for one stage earlier on the same argument. Only the exit code is suppressed.
+"$PYBIN" "$ROOT/harness/memory.py" stamp --dir "$ROOT" || true
+exit 0
