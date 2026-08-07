@@ -256,18 +256,9 @@ now carry a declared environment requirement (`rig.Env`, `gate/GATE.MAP.md` "Tie
 slot"): in a slot they record a counted, named SKIP and the tier's verdict is `declared-skip`;
 in the main checkout the requirements hold, the rows run, and the verdict is a plain `pass`.
 
-The probe is 84 rows now (floor 20 → 33 on 2026-08-01, → 44 on 2026-08-02 with the cockpit build
-(auth preflight + the re-runnable-`start` pane marker), → 50 the same day when the twin check
-generalized from firstmate to the whole skills population, → 52 later that day when the auth
-detector gained the CLI settings-migration containment and its mutation leg, → 53 at the
-2026-08-03 merge when the settings-VALUE hardening from the parallel worktree joined it,
-→ 68 at the 2026-08-03 operator walk (docs/E2E.md §6), → 79 at the same day's open-items
-close (docs/E2E.md §7, items C and E plus the two defects the close's own test measured),
-→ 81 and → 83 at the item-B and item-A closes, → 84 when the close's push review hardened
-two of its own predicates; `skip_max=2` through that whole chain (5 once the 2026-08-05
-tall-pane rows added tmux-gated live legs) — the floor at
-`Results(expect=` in the probe is the only owner of the current number, and the ledger
-comment above it is the trail's continuation), because the first of the two was also split:
+The floor at `Results(expect=` in the probe is the only owner of its current row count, and the
+ledger comment above it is the trail. The probe grew because the first of the two was also
+split:
 
 - **`probe_fleet_claude.py:247`** — *"the banned-filename convention: safe name tracked,
   real name materialized"* — the CLAUDE.md symlink, now four rows, of which only the

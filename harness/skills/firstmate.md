@@ -54,10 +54,7 @@ points here rather than restating these.
    are the human's, put to them a round at a time. A preparation brief says what to find
    and forbids recommending an answer.
 4. **`Assignee:` records intent; the manifest records liveness.** A ticket claimed by a
-   session that died stays claimed. The pool measured that exact failure one level down:
-   its lease first recorded the ACQUIRING process, which exits immediately on every crew
-   spawn, so a live crewmate's slot read as abandoned, and the repair was for the process
-   that outlives the acquire to adopt it. So do NOT put a pid on a claim line — that is a
+   session that died stays claimed. So do NOT put a pid on a claim line — that is a
    second copy of something the manifest already knows, and the second copy is the one
    that goes stale. Cross-reference the manifest, and surface a claim whose crewmate is
    not in it.
@@ -130,13 +127,6 @@ WORKFLOW, not of any one session. MEASURED 2026-08-05 over the whole history: 17
 fix-rounds, max 8. Expect to be in one; the rules below are about leaving it, not about avoiding it.
 
 1. **A prose sentence asserting a computable property gets DELETED or COMPUTED. Never corrected.**
-   This is the rule that terminates chains, and three sessions have now found it independently
-   without it reaching a skill until now. `7f5fd69` (2026-08-04) replaced a prose coverage claim
-   with a table a probe computes, after the sentence had been wrong "for the fourth consecutive
-   round on this one item". `4bffec4` the same day killed a round-count that "contradicted itself
-   three ways in one section" by removing the counting rather than correcting it, and stated the
-   general form: **a tally in prose is a number with nothing computing it.** A 2026-08-05 chain
-   rediscovered the identical move on a different document four rounds later.
 
    Correcting such a sentence produces a new number that the next edit invalidates, which is what
    sustains the chain. Deleting it ends the chain in one round.
@@ -150,14 +140,11 @@ fix-rounds, max 8. Expect to be in one; the rules below are about leaving it, no
 Cost note, not a rule: the advisory review runs on every push at roughly a dollar a run, so batch
 rather than pushing each fix. Do NOT expect batching to shorten a chain. The 2026-08-04 chain
 carried 7, 6, 6, 5, 5, 5 and 4 files across its rounds and still ran six of them; a chain that
-narrowed to one file per round ran four. Batching makes the loop cheaper, not shorter, and an
-earlier draft of this section claimed otherwise on no evidence.
+narrowed to one file per round ran four. Batching makes the loop cheaper, not shorter.
 
 The general form, and the reason these sit in a skill rather than in a commit message: applying a
 method is not the same as the property holding, and only the second is checkable. "I swept it",
-"that is exhaustive" and "I already checked that" are the same shape. Commit messages are where
-this lesson has gone to die three times, `a68ea71` having explicitly tried to leave the reason
-"rather than left for the next reader to rediscover", and the next reader rediscovered it anyway.
+"that is exhaustive" and "I already checked that" are the same shape.
 
 ## Context budget and handoff
 

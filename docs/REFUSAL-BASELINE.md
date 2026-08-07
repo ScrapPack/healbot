@@ -98,13 +98,6 @@ above. **No line clamps content or topic.**
 
 **Every `build.md` span in this document addresses the PROMPT BODY. The YAML frontmatter is out
 of scope** — it carries no model-facing prose and its bytes are not in the ~1,729 B figure above.
-Stated because it is the whole cause of the rot: the body has been byte-identical since
-`94f0600`, and every re-derivation these pointers have needed came from the frontmatter growing
-above it (two lines on 2026-08-06, sixteen on 2026-08-07, both permission-related). The next
-frontmatter edit should be a re-derivation against the quotes each row already carries, not
-another argument about whether a dated record may be repaired. It may: the append rule protects
-what an execution FOUND, and a `file:line` pointer measures nothing — it is an address into a
-file that moved. Every prior repair of this document was in place.
 
 Read in full. Confirms the owner's claim: **no content-policy prose.** Its spans are
 CAPABILITY/FORMAT (tooling prefs `build.md:23-29`, output format `build.md:39-45`, channels `build.md:47-52`) plus one
@@ -275,9 +268,6 @@ already content-policy-clean, so the number already attributes to the model and 
 3. **The real second arm is arm C** (self-hosted), where a non-empty strip *does* exist
    (`default.txt:15` / `trinity.txt:7` refusal-styling for a GLM-routed model; §1h) and where the
    provider floor drops to zero. Its clean-room diff is written in §4.
-
-**Nothing here is applied.** This section is a proposal. No file under `harness/` is edited by
-this phase.
 
 ---
 

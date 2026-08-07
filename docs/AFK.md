@@ -172,9 +172,8 @@ execution mode. Same shape, same conclusion.
 | `--meteor-frequency 9` | `argument '9' is invalid. must be between 0 and 5` · exit 1 |
 | `--worktree --current-branch` | `Cannot combine --current-branch and --worktree.` · exit 1 |
 
-`ensureCleanWorkingTree` is `git status --porcelain` non-empty (VERIFIED). **healbot's tree is
-dirty right now** — 2 modified, 9 untracked including `gate/` and the whole A/B study — so gnhf
-will refuse until §4 step 3 is done.
+`ensureCleanWorkingTree` is `git status --porcelain` non-empty (VERIFIED), so §4 step 3 is a
+precondition and not a courtesy.
 
 ### 1.9 Two package-level facts
 
@@ -418,22 +417,21 @@ untracked) and is the document the study is trying to falsify.
 > Found by the verbatim-quote leg of `probe_citations.py`, which did not exist when this was
 > written.
 
-- **Creating `~/.config/opencode/AGENTS.md` corrupts the stock arm.** TESTED: it does not exist
-  today, and `~/.config/opencode/` currently holds only `opencode.jsonc`, `package.json`,
-  `package-lock.json`, `.gitignore`, `node_modules`. Any agent that "adds project instructions"
-  there silently changes the thing under measurement.
+- **Creating `~/.config/opencode/AGENTS.md` corrupts the stock arm, and it has already been
+  created** — see the correction above. It is a symlink to the owner's canonical global file, so it
+  is now part of the arm: do not add to it, replace it or remove it. §4 steps 5 and 8 assert it is
+  present and carries no healbot instructions.
 - **Adding anything to `~/.agents/skills/` corrupts it too** — the skill count is part of the arm
   definition (confound C3).
 - **Do not `rm -rf ~/.claude/CLAUDE.md`, do not edit it, do not "clean up" `~/.config/opencode`.**
   Their *presence* is the independent variable.
 
-⚠ **Discrepancy the owner must resolve before trusting a stock-arm result.** TESTED:
-`ls ~/.agents/skills | wc -l` returns **16**, not the 18 recorded in `ab.py:80`. Either the arm
-definition is stale, or opencode counts a different set (bundled or project-level skills), or two
-skills were removed since the pilot. I did not determine which. Whichever it is, it demonstrates
-the point: **the stock arm's definition is a claim about a directory outside the repo that nothing
-in the repo checks.** A pre-flight assertion on that count belongs in `ab.py`, and §4 step 5 makes
-it a manual check meanwhile.
+⚠ **Do not read the arm off that string.** **The stock arm's definition is a claim about
+directories outside the repo that nothing in the repo checks**, and `ab.py:89-92` says so about its
+own label: the authority on what an arm actually was is the per-launch `snapshots` block in
+`meta.json`, which records the resolved config, agent list and skill list at boot, while the label
+goes stale the moment the environment moves under it. Read a run's snapshots. §4 step 5 records the
+ambient state by hand before a launch, which is not the same thing and does not replace it.
 
 ### 3.4 No package installs. Ever.
 
@@ -505,8 +503,7 @@ number meant as a token cap, read as dollars, turns a 3,000,000-token ceiling in
 which is no ceiling at all. Its over-counting and the four separate ways it was wrong are recorded
 in the watchdog's own header, next to the code that replaced it.
 
-There is no `REPO` variable. Earlier revisions of the recipes above set one and nothing ever read
-it; the watchdog takes the repo root from `git rev-parse --show-toplevel`.
+There is no `REPO` variable; the watchdog takes the repo root from `git rev-parse --show-toplevel`.
 
 Two consequences of the cap being real money rather than a token count. gnhf's `--max-tokens`
 cannot express a dollar ceiling at all (§1.6: cache reads count at full weight), so the watchdog
@@ -611,24 +608,17 @@ readlink -f "$(command -v gnhf)"
 ```sh
 git status --porcelain     # must be EMPTY
 ```
-On 2026-07-31 it was not: TESTED, 12 entries, 2 modified (`.carryover/verified/probe_twin.py`,
-`.gitignore`) and 10 untracked, including all of `gate/` and the entire A/B study
-(`ab.py`, `run_refusal.py`, `probe_refusal_*.py`, `verify_refusal_*.py`, `studies/`,
-`AB-HANDOFF.md`, `docs/REFUSAL-BASELINE.md`). **Commit them; do not stash.** Stashing pulls the live
-study's files out from under it, and `git stash -u` on an in-flight run is how you lose a
-measurement.
+**If it is not, commit; do not stash.** Stashing pulls the live study's files out from under it,
+and `git stash -u` on an in-flight run is how you lose a measurement.
 
 **Re-run this check after step 4, not only before it.** Steps 3 and 4 contradicted each other
-until 2026-08-06. `probe_error_state.py` and `probe_focus.py` both open with
-`shutil.copyfile(db("retire350"), ...)` (probe_error_state.py:43, probe_focus.py:59) onto
-`hb/errorstate.db` and `hb/focus.db`, two files that were then TRACKED, so walking the checklist
-in its own documented order dirtied the tree at the last moment and gnhf refused with "Working
-tree is not clean" (TESTED 2026-08-05, on the first launch attempt). The recurring diff was one
-cell, `project.time_updated`; no session, message or measurement row ever moved. Both files are
-now untracked (`.gitignore`), and every other name step 4 writes (`probe_on_grid`,
-`controlwiring`, `armdefault`, `armoff`, `armon`, `reqchan`) is ignored as well, so step 4 leaves
-the tree clean. Keep the re-check anyway: it is what catches the next probe that writes to a file
-still in the corpus.
+until `hb/errorstate.db` and `hb/focus.db` became untracked: `probe_error_state.py` and
+`probe_focus.py` both open with `shutil.copyfile(db("retire350"), ...)`
+(probe_error_state.py:43, probe_focus.py:59) onto those two files, so walking the checklist in
+its own documented order dirtied the tree at the last moment and gnhf refused with "Working
+tree is not clean" (TESTED 2026-08-05, on the first launch attempt). Every name step 4 writes is
+ignored now, so step 4 leaves the tree clean. Keep the re-check anyway: it is what catches the
+next probe that writes to a file still in the corpus.
 
 **4 — the free baseline is real, measured now, not quoted**
 ```sh
@@ -648,8 +638,10 @@ disagreement about `probe_turn_growth.py`, and a loop must not be handed an ambi
 ```sh
 pgrep -fl opencode || echo "no opencode process — good"
 ls -la .carryover/verified/hb/ab-refusal-pilot-*.db-wal 2>/dev/null   # any recent mtime = in flight
-test ! -e ~/.config/opencode/AGENTS.md && echo "stock arm: no AGENTS.md — good"
-ls ~/.agents/skills | wc -l          # record it; ab.py:80 says 18, measured today 16 (see 3.3)
+# §3.3: AGENTS.md is REQUIRED present, and must carry no healbot instructions
+test -e ~/.config/opencode/AGENTS.md && test "$(grep -ci healbot ~/.config/opencode/AGENTS.md)" = 0 \
+  && echo "stock arm: AGENTS.md present, no healbot instructions — good"
+ls ~/.agents/skills | wc -l          # record it; the arm's authority is meta.json (see 3.3)
 test -e ~/.claude/CLAUDE.md && echo "stock arm: CLAUDE.md present — required, do not remove"
 git status --porcelain harness/config/opencode/   # must be EMPTY; that is the harness arm
 ```
@@ -684,7 +676,8 @@ grep -c . .gnhf/runs/<runId>/gnhf.log
 .carryover/verified/venv/bin/python gate/gate.py --base main; echo "gate exit=$?"
 git status --porcelain harness/config/opencode/   # still empty?
 ls ~/.agents/skills | wc -l                       # still the number from step 5?
-test ! -e ~/.config/opencode/AGENTS.md && echo "stock arm intact"
+test -e ~/.config/opencode/AGENTS.md && test "$(grep -ci healbot ~/.config/opencode/AGENTS.md)" = 0 \
+  && echo "stock arm intact"                      # present AND carrying no healbot instructions
 du -sh .carryover/verified/hb/project             # 1.8 MB after Phase 12; growth = an install ran
 ls .carryover/verified/hb/*.db                    # same set as before, nothing deleted
 find . -name 'AGENTS.md' -o -name 'CLAUDE.md' -o -name 'CONTEXT.md' -o -name 'SKILL.md' \
@@ -717,10 +710,6 @@ started; no model turn was spent by any command below.
 | `gnhf-watch.sh` stall detector **and its pid scoping** | **2026-08-06, against the same `wayfinder-adoption` copy.** Two fake runs side by side under one `.gnhf/runs/`: `stall-case`, holding a `run:start` line for pid A and an `iteration-*.jsonl` aged 157 minutes; `bootstrap-case`, holding a `run:start` line for pid B and no iteration file at all. A watchdog started on each pid | A resolved `stall-case`, stopped on *"stalled: no iteration write in 25m"*, killed pid A and exited **2**. B resolved `bootstrap-case`, kept polling and left pid B alone: correctly silent on a run that has written nothing yet, **and** on A's stale file, which is the pid scoping doing its job. The 2026-07-31 row measured the same two legs against the scratchpad script, before run directories were pid-scoped, so this supersedes it rather than repeating it |
 | `gnhf-watch.sh` refuses a non-pid | 2026-08-06, three invocations by hand against the tracked script | flags as `$1`, a dead pid, and `BILL_MAX` set each exited **1** with a `FATAL:` line. Transcribed into §3.6 |
 | `gnhf-watch.sh` leftover-process report | **2026-08-06**, end to end: the stalled fixture above, plus one process wearing gnhf's documented arg shape standing in for the detached agent, with this machine's interactive Claude Code sessions live alongside it as distractors | the watchdog stopped the pid, exited **2**, and reported **only** the gnhf-shaped process. Not one interactive session reached the report, though several were running throughout. The `--json-schema` half is what discriminates: the first flag alone is the app's too |
-
-The parse check earned its place: it caught the bash 3.2 heredoc defect described in the §2
-preamble, which changed the design from inline prompts to prompt files. A spec whose commands were
-only eyeballed would have shipped that.
 
 ---
 

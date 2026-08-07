@@ -47,11 +47,7 @@ OVERLAP = [(9, 4, 9, 4)]          # rewrites old lines 9-12
 r = rig.Results(expect=31)
 
 # The ordinary absent-checkout case, caught BEFORE the try so the exit is not swallowed by the
-# finally. `probe_citations.py:80` does the same thing for the same reason and this probe was
-# the one file of the three that had neither this nor the mid-sweep catch below: with opencode/
-# absent it fell to `except Exception`, went red and exited 1, which `gate/tier2.py` maps to
-# BLOCKED — "a check ran and said no" — for a check that could not run at all. Exit 3 is the
-# cannot-measure verdict and `gate.py` maps it to ERROR (review finding from the b480659 push).
+# finally.
 if not citegraph.checkout_present():
     print(f"\n!! {citegraph.CHECKOUT}/.git not found. UNMEASURED, not failed.\n", file=sys.stderr)
     sys.exit(3)
@@ -82,9 +78,6 @@ try:
     #     inlined `set(out.split())` there would bypass the pure leg below entirely, which tests
     #     `changed_from` on a literal and never touches the wiring.
     #
-    # A previous draft dropped the space to make the two legs "fail for different reasons" and
-    # bought that tidiness with the wiring coverage (review finding from the 4c4ff85 push). Both
-    # shapes, one fixture, is strictly stronger than either.
     #
     # `core.quotePath` IS PINNED TRUE, and that pin is load-bearing. It is git's default, so an
     # earlier draft left it ambient — and on a machine that had disabled it globally the leg
@@ -296,10 +289,7 @@ try:
         candidates > reported > 0,
         "the one leg that exercises the filters end to end on real diffs rather than on "
         "fixtures, and DELIBERATELY COARSE: it asserts the filters do something and not "
-        "everything. It does NOT isolate a filter, and two earlier drafts of this sentence "
-        "claimed it did and then quoted a ratio to prove it. Both numbers were measured "
-        "against a window this file has since changed, which is why neither is here now "
-        "(citation-hygiene: delete the number, never correct it). Disabling one filter "
+        "everything. It does NOT isolate a filter. Disabling one filter "
         "leaves the other two suppressing, so this predicate holds and the FIXTURE legs "
         "above are what go red. What the boolean catches is the class no fixture can: all "
         "three filters degrading together against real git output. `reported > 0` is the "
@@ -309,17 +299,10 @@ try:
         "NEGATIVE CONTROL: with NO changed files the join reports nothing",
         staleness.join(rng[0] if rng else "HEAD~1", head, set(), inv) == [],
         "narrow by construction — join's only loop is over `changed`, so this catches exactly "
-        "one mutation, a join that walked the index instead of the change. It is kept because "
-        "that mutation is real and nothing else here would catch it, and it is NOT the leg that "
-        "proves the filters work; the one above it is (review finding from the 7e6673b push)",
+        "one mutation, a join that walked the index instead of the change",
     )
 
     # --- main(): the exit contract, asserted instead of claimed ---------------------------
-    # THIS BLOCK IS THE POINT OF THE WHOLE FILE. Four consecutive reviews caught defects in
-    # main() and this probe caught none of them, because nothing here called it: the header
-    # said "every path exits 0" while three separate paths did not, and each was found by a
-    # reader rather than by a run. A claim about behavior that no assertion touches is prose,
-    # and prose is what wrote the defects. Every path below is EXERCISED, not described.
     def run_main(args, environ=None, runs=None):
         """-> (exit code, stderr, records written). Redirects the stage's own output so a
         failure surfaces as a value rather than as noise in this probe's log.
@@ -360,8 +343,7 @@ try:
         "MUTATION: an unwritable runs directory does not make it refuse",
         run_main(["--base", rng[0] if rng else "HEAD~1", "--head", head],
                  runs="/dev/null/not-a-directory")[0] == 0,
-        "the second of the three, and the one the review did not reach — it was found only by "
-        "enumerating the paths and running each. os.makedirs raises OSError here",
+        "the second of the three. os.makedirs raises OSError here",
     )
     code, err, wrote = run_main(["--base", "deadbeefdeadbeef", "--head", "HEAD"], {})
     r.check(

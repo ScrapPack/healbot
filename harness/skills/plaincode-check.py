@@ -70,9 +70,8 @@ def run_ruff(ruff, select, paths, stdin_text=None, stdin_name=None):
     """-> (findings, hard_error). Findings are ruff's JSON rows. ruff's exit contract is
     0 clean and 1 findings, JSON on stdout either way; any other exit means ruff ITSELF
     broke (usage error, unloadable config) with EMPTY stdout and the reason on stderr —
-    which `json.loads(p.stdout or "[]")` alone would launder into a clean run. The first
-    shipped draft did exactly that and reported a false green on a malformed select
-    (push-review finding, 2026-08-03); the returncode gate below is the repair."""
+    which `json.loads(p.stdout or "[]")` alone would launder into a clean run. The
+    returncode gate below is the repair."""
     cmd = [ruff, "check", "--no-cache", "--line-length", WIDTH,
            "--select", select, "--output-format", "json"]
     if stdin_text is not None:

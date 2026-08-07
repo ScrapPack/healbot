@@ -19,12 +19,7 @@ wherever the hook runs, and a resolver that drags a pyte dependency behind it co
 called from a bare interpreter at all. The repo root is computed the same way `gate.py:39`
 computes it, from this file's own location.
 
-WHAT MOVED AND WHAT DID NOT: resolution moved (the regex, the git-owned scoping, the index,
-the proximity tie-break, the verdicts). The verbatim-quote leg did NOT — it is one probe's
-assertion about how documents quote, not shared machinery, and it stays where it is asserted.
 
-Every measured rationale below was earned by a failure and is kept verbatim from the probe.
-Deleting a comment that records a measurement is deleting the evidence for a rule.
 """
 
 import os
@@ -32,8 +27,6 @@ import re
 import subprocess
 from collections import defaultdict
 
-# Same expression as gate.py:39, for the same reason: this file's location is the only thing
-# that knows where the repo is, and both files sit one directory below the root.
 HB = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VERIFIED = f"{HB}/.carryover/verified"
 
@@ -71,8 +64,6 @@ CITE = re.compile(r"(?<![\w/])([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:ts|tsx|py|sh|jso
 class CheckoutAbsent(Exception):
     """`opencode/` is DERIVED and gitignored, so a fresh clone or worktree does not have it.
 
-    Was a module-level `sys.exit(3)` in the probe. It cannot stay an exit: a module that exits
-    its importer at import time is not a library.
 
     THE EXIT CODE IT STOOD FOR IS THE CALLER'S TO PRESERVE, and preserving it takes real work
     rather than a comment. `probe_citations.py` pre-checks with `checkout_present()` above its

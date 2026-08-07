@@ -68,9 +68,6 @@ in `probe_rig_contract.py` enforces this from source across every rig.
 ## The contract
 
 `probe_rig_contract.py` sweeps every rig entrypoint (itself included; a guard that exempts
-itself is the defect it hunts) and asserts six contracts: a declared assertion floor, that
-floor satisfiable, no `finally` that exits without a crash guard, exit on `summary()`'s
-verdict, that exit last in the `finally`, and no completion claim decided by counting
-`fire()`'s box. A new rig must
+itself is the defect it hunts) and asserts the contracts named in its own source. A new rig must
 satisfy the contract or the probe goes red. Its negative controls are the actual pre-fix
 sources recovered from git history.

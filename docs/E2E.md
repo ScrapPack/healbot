@@ -132,9 +132,7 @@ collides. The sound predicate is the popup's border, which nothing else on that 
 one.** VERIFIED at `harness/hb-fleet.sh`: `hb_header()` prints a line range of the script's own
 header; `usage()`, `hb_help()` and therefore both the popup and the bridge banner all render
 that. TESTED: `hb-fleet.sh help` and the rendered popup carry the same 32 lines. The only text
-not shared is the cockpit key map, which is not a command list and lives nowhere else. No
-divergence to report — this row exists because the assignment asked for the comparison, and
-the answer is that the design forecloses it.
+not shared is the cockpit key map, which is not a command list and lives nowhere else.
 
 **Finding 7 — a fleet session created before the `@hb_role` marker existed gets a duplicate
 pane on its first `start`.** TESTED: the stale 2026-08-01 session's nvim pane carried no
@@ -216,13 +214,6 @@ use, which the push review's own note might suggest: that helper is true for dea
 missing, and a dead-but-present pane is exactly what `kill` exists to reclaim, since
 `remain-on-exit` leaves corpses holding crew slots. Guarded with two mutation legs, one for an
 unguarded `kill-pane` and one for reaching at that helper.
-
-The first version of that guard is worth its own sentence, because it is this project's
-characteristic bug in miniature. It went red against the correct fix — the predicate asserted
-the helper's name was absent from the branch, and the fix's own comment explains which helper
-it avoids, so the check was reading prose that mentions the helper rather than code that calls
-it. Comments are stripped before the predicate runs now. An assertion that its own explanation
-can flip is decoration wearing a load-bearing name.
 
 **Finding 10 — an unexplained line in a crewmate's composer, explained.** `peek` showed
 `❯ fourth probe line` on `alpha` — text nobody had sent. It is not in the transcript, not in
@@ -348,27 +339,11 @@ deliberately left unanswered rather than replied to — an earlier draft wired p
 channel and a stray `6c` was typed into the captain's shell. TESTED after the repair: stock
 `term.py` drives the cockpit and reads its status line.
 
-That repair had to be corrected before this page was true. The first version overrode **two**
-handlers and this paragraph said neither accepted the keyword; the push review checked the
-dependency and the claim was wrong. VERIFIED by reading the installed pyte in the rig venv
-(`Screen.report_device_attributes`, whose own changelog note records the behaviour): it takes
-`**kwargs` and has done nothing when `private` is set since pyte 0.7.0, so only the other
-handler could raise — which is exactly what the captured traceback named. No live `file:line`
-here on purpose: the venv is derived and gitignored, so a citation into it resolves for nobody,
-and the citation sweep said so before this page was pushed. The second override was redundant
-and the prose was a wrong belief about a dependency, held in the file every rig renders
-through. Both removed.
-
 Suite and gate, this change (each exit code captured directly, never through a pipe):
 
 - **Free suite: 22 probes, every one exit 0** — four in the gate's Tier 1 and eighteen in
   tier 2, each against its own declared floor. `probe_fleet_claude.py` finishes this change at
-  68 rows against a floor of 68, all 68 measured and passing. It reached that in two steps —
-  five rows for the cockpit, three more for finding 15 — and the floor caught its own author
-  at each: the first draft declared 66 for five rows and `probe_rig_contract.py` went 39/40 on
-  the unsatisfiable floor before the run did, and the count in this very paragraph was left at
-  the earlier figure until the push review read it back. A recorded score is a claim about a
-  file at a moment, and this page had to be told that twice.
+  68 rows against a floor of 68, all 68 measured and passing.
 - **`gate/gate.py`: exit 0**, on the working tree and again on the pushed range through the
   hook.
 
@@ -437,8 +412,7 @@ before this change keeps its half-width grid until `down` and a fresh `start`.
 **D. Tier 1 cannot distinguish "could not run" from "ran and said no."** Line 124 of
 `gate/gate.py`, as the walk found it,
 mapped every nonzero probe exit to BLOCKED, so for tier-1 probes the interface was coarser than
-`gate/GATE.MAP.md`'s "error is not blocked" paragraph describes (finding 13; the paragraph
-was cited here by line and GATE.MAP moved under it, so the pointer is by name now). Note the
+`gate/GATE.MAP.md`'s "error is not blocked" paragraph describes (finding 13). Note the
 rest of the gate does make the
 distinction — a broken truth table, a failed enumeration and an unmatched fork twin all reach
 ERROR on their own (`gate/gate.py:427`, `gate/gate.py:446`, `gate/gate.py:259`) — which is what makes the tier-1 hole
@@ -452,11 +426,7 @@ declared the same one). The five declared refusals adopted it — `probe_citatio
 recorded transcript, and `probe_focus` with `probe_error_state` on an absent paid corpus,
 all three in tier 2 — and nothing else: crashes and red verdicts stay
 BLOCKED, deliberately, so a broken probe cannot downgrade a real finding to retry-shaped.
-This close first claimed exactly two refusals, then three; two review passes each found
-members the enumeration missed, which is what enumerations deserve, and the count above is
-the sweep's, not memory's.
-The tier-1 mapping and tier2's row mapping each changed in place by one line, which is why
-every `gate/gate.py` citation above still resolves. TESTED end to end through the real hook
+TESTED end to end through the real hook
 by `probe_gate_scope.py`'s two new legs: a tier-1 stub exiting 3 records ERROR and refuses
 at gate exit 3, and the control stub exiting 1 still records BLOCKED at gate exit 2, four
 runs byte-identical at the new 19-row floor. The scope limit, stated plainly: tier 1 now
@@ -511,10 +481,6 @@ measurement. Killing the crew window rather than the session leaves the bridge, 
 therefore the script, alive to finish. Re-MEASURED from the bridge pane after the reorder:
 session gone, slot free.
 
-The general lesson is the one this project keeps re-learning in new clothes: the tests all
-passed because they exercised a path the operator does not use. Five static probe legs
-could not see it, and one of them had the wrong order LOCKED IN as its assertion.
-
 TESTED on a throwaway fleet with its own socket session and state dir (`HB_RUN=hb-downtest`,
 crew panes and manifest rows built to stand in for spawned crewmates, so no crewmate had to
 be paid for): a clean slot released and came back free; a slot holding an uncommitted file
@@ -532,38 +498,6 @@ goes red rather than passing under a sentence. The limit is stated rather than i
 static leg can see a SIGHUP. What the rows lock in is the order the live test proved, and
 the live test is the evidence.
 
-**The review of the repair found the repair's own guard defective, one more green narrower
-than its label.** Both new position legs mutated by
-deleting the same literal, `t kill-window`, so both died on the has-a-crew-kill conjunct
-rather than on the positions they were named for. The leg titled "the measured defect is
-caught" was not catching it by the clause written to catch it, and two conjuncts had no
-exercise at all. The predicate now returns its conjuncts separately and every leg names the
-ones it flips, with the defect leg additionally asserting that the crew kill SURVIVES its
-mutation so it cannot die on that instead. The defect shape is rebuilt by moving the real
-`kill-session` line rather than by deleting a literal.
-
-The review of that repair made the same point one level up: the repair described itself as
-a leg per conjunct while the predicate decided on nine and the legs covered eight, leaving
-*has_session_kill*, a `down` that never kills the session at all, with no exercise. The
-review of THAT found the replacement description wrong too. It said one leg flips two
-conjuncts and the rest are one to one; MEASURED, the defect leg flips four and the
-crew-kill leg flips four, each while naming one. Those legs were sound throughout, because
-each asserts its named key directly and cannot die elsewhere, but the sentence about them
-was not.
-
-That is where the prose stops. The coverage claim is computed by a probe row now rather
-than written, because the ladder is the finding, and the rungs are worth naming without
-numbering them, since a tally in prose is the same rot one level up:
-
-- the fix was dead on the captain's path while claiming to close the strand,
-- two guard legs died on a conjunct neither of them named,
-- one conjunct had no leg at all, under a description saying every conjunct had one,
-- the leg-to-conjunct ratio in the replacement description was wrong,
-- and the first floor written for the computed row was one short of the real count.
-
-Every one was found by a reader comparing a claim against the artifact it was made about.
-None were found by the tests, which were green throughout.
-
 Two consequences of that round are now rules rather than observations. **Nothing follows
 `kill-session` in the branch**, because anything there is dead on the captain's path; the
 two closing notices moved above it and the first reads "taking down", which is what is true
@@ -571,8 +505,7 @@ when it prints. A probe leg asserts the branch ends at that call. And the predic
 on `t kill-session`, the helper invocation, not on the bare verb: the down-notice echo
 contains the words *kill-session is SIGHUP*, so partitioning on the verb split at the
 message and read every later statement as dead code. Comment-stripping cannot reach that
-one, because it is a string. It is the third appearance in this file of prose contaminating
-a positional read, after finding 15's guard and this row's own docstring.
+one, because it is a string.
 
 One residual named rather than guarded, in the branch's own comment: tmux restarts pane ids
 at `%0` with a new server, so a manifest row left by a fleet on an older server can collide

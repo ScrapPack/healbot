@@ -12,11 +12,6 @@
 # So the AFK loop gets wrapped rather than trusted. This is the primary stop condition
 # (docs/AFK.md 3.6), not a backstop.
 #
-# WHY IT IS IN THE REPO. A previous version was written 2026-07-31 into a session scratchpad
-# and never committed. The scratchpad is gone and it had to be written again from the spec,
-# which is the same lesson the review-fix chains keep teaching: a thing that lives only in a
-# session artifact is a thing you will rebuild.
-#
 # USAGE
 #     harness/gnhf-watch.sh <gnhf-pid>            # STALL_MIN and MAX_HOURS via env
 #
@@ -121,20 +116,9 @@ PY
   fi
 
   # SPEND CAP, IN DOLLARS. gnhf's own --max-tokens counts cache reads at FULL weight
-  # (docs/AFK.md 1.6), so it cannot express "spend at most N". The previous version of this
-  # block tried to, in tokens, and was wrong four ways. All four are MEASURED against
-  # .gnhf/runs/you-are-an-unattende-e196d4 on 2026-08-06, where it reported 2,717,201 against a
-  # true $29.92:
-  #
-  #   1. It summed `assistant` EVENTS. Claude Code emits one per content block, all carrying the
-  #      same message id and a byte-identical usage object (50 of 74 ids in iteration 1 repeat,
-  #      one 3x). Raw 1,732,432 vs deduped 742,405 = 2.33x.
-  #   2. It then ALSO summed `result` events, which are each iteration's cumulative total. The
-  #      two together double-count. 1+2 compound to 2.76x.
-  #   3. It globbed every run dir ever created, so a prior run's tokens were charged to this one.
-  #   4. Its formula excluded cache reads on the theory that they were "already paid to write".
-  #      They are not: they bill at 0.1x input, and on this run they were 55% of the real cost
-  #      ($16.32 of $29.92). A cost metric that omits the largest cost component is not one.
+  # (docs/AFK.md 1.6), so it cannot express "spend at most N". A tokens-based version of this
+  # block was wrong four ways at once; harness/gnhf-spend.py's docstring owns that accounting and
+  # records all four against the run it was measured on.
   #
   # So: take gnhf's own total_cost_usd per finished iteration, which is exact and needs no price
   # table, and add a floor for the iteration still running. TESTED both directions.
@@ -183,13 +167,9 @@ fi
 # deciding is better than this script guessing at 3am.
 #
 # Matched on gnhf's OWN flag PAIR, not on the word "claude" and not on the first flag alone.
-# Both earlier versions over-matched. `pgrep -fl claude` came first and was useless: MEASURED, it
-# returned ten Claude.app Electron helpers plus the captain's live crewmate, burying the one line
-# that matters under a page of --field-trial-handle. `--output-format stream-json` alone replaced
-# it and read as narrow, but the comment here claimed a discriminator the pattern did not carry:
-# the reasoning was about that flag TOGETHER WITH --json-schema, and only the first half was in
-# the pgrep. MEASURED 2026-08-06 with no gnhf agent running, it matched five processes and every
-# one was an interactive Claude Code session, which passes --output-format stream-json too.
+# `--output-format stream-json` alone is not a discriminator: MEASURED 2026-08-06 with no gnhf
+# agent running, it matched five processes, every one an interactive Claude Code session, which
+# passes that flag too.
 #
 # The pair is safe to require. buildClaudeArgs (docs/AFK.md 1.7) emits
 # `--output-format stream-json --json-schema <schema>` adjacently and unconditionally, and

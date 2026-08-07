@@ -293,32 +293,22 @@ being discovered by the next person who clones the repo and gets three green exi
 
 ## 7. The method note
 
-Phase 7's characteristic failure was *claims that sounded verified and had only been reasoned*.
+Phase 7's characteristic failure was *claims that sounded verified and had only been reasoned*;
 Phase 8's was *a number is not evidence, and repeating it does not make it more evidence*. Phase 9's
 is one level under both:
 
 **A green run is not evidence that anything ran.**
 
-Every assertion-discipline rule in `README.md` is about whether a predicate can distinguish true from
-false. Not one of them was about whether the predicate **executed**. So the suite grew ten probes,
-each carefully built with negative controls and mutation checks, sitting on a summary function that
-could not tell 2 assertions from 24 — and the first time anything ran it in an environment it had not
-been developed in, three probes said `passed` and exited 0.
+Every assertion-discipline rule in `README.md` asked whether a predicate can distinguish true from
+false. Not one asked whether the predicate **executed** — so ten probes built with negative controls
+and mutation checks sat on a summary function that could not tell 2 assertions from 24, and the first
+time anything ran them somewhere they had not been developed, three said `passed` and exited 0.
 
-The sharper form, because it is what makes it survive review: **the vacuous pass and the missing
-assertion are the same defect wearing different clothes.** This project has hunted the first since
-Phase 4 — `all()` over an empty list, `t.find("Healbot")` true on every screen, `finishes[-1] ==
-"stop"` over a fixture that could not violate it. A probe that never reaches assertion 3 is the
-purest case of it: assertion 3 is `True` on exactly the runs that did not evaluate it. It just did
-not look like one, because the vacuity was in the *control flow* rather than in the predicate, and
-every rule on the books was pointed at predicates.
-
-And §2 is the same thing once more, one level up again: an assertion whose predicate is
-`retire_at + worst_sol < CEILING` cannot fail when `worst_sol` goes to zero, because losing the
-evidence and passing the test are the same event. **When a predicate's inputs come from a corpus,
-the corpus needs a fixture check as much as the predicate needs a mutation check.** The real corpus
-had one, since Phase 8, and it is why the missing-real-DB case fails loudly. The rig corpus did not,
-and it is why the missing-rig-DB case reported 48.2%.
+And §2 is the same shape one level up: an assertion whose predicate is `retire_at + worst_sol <
+CEILING` cannot fail when `worst_sol` goes to zero, because losing the evidence and passing the test
+are the same event. **When a predicate's inputs come from a corpus, the corpus needs a fixture check
+as much as the predicate needs a mutation check.** The real corpus had one since Phase 8, which is
+why the missing-real-DB case fails loudly; the rig corpus did not, and reported 48.2%.
 
 ---
 
@@ -510,30 +500,10 @@ session already writing to HARNESS.md. Named here so it is a task and not a sile
 > paragraph was written; the deferral was protecting nothing. The repair is done, and the
 > re-reading it forced found three more rotted citations and one new probe leg.
 
-The same review also caught `docs/CLONE.md` — this file — being listed as live surface *and*
-excluded from "everything else is a dated phase record"; it is both, and the paragraph now
-says so.
-
-**And the census above took three tries.** First "seventeen citations from `docs/AFK.md` and
-`docs/REVIEW.md`" — a number carried over from a spot-check list run earlier in this session
-for a different question and never re-derived, which is the whole of its provenance; no
-reading of the citations yields it. Then "18 across six files", from a script whose file
-filter (`.md/.py/.ts/.sh`) was real but undeclared, so it silently dropped the patch and
-reported a scoped number as a repo-wide one. **An undeclared filter is an unmeasured claim
-wearing a measurement's clothes** — the same shape as §8.3's `RELEASED build`, in a
-different medium. Both were caught by the push review and neither by the author, in a
-paragraph whose subject is wrong counts.
-
-**And a third, from the push review of this very section.** Two findings, both real. The
-correction added to `fork/README.md` said "all five code paths in the overlay" while naming
-three — a fresh wrong count inside the paragraph that exists to fix a wrong count; the
-overlay is 14 maps plus exactly three non-map files. And the doctor's new `opencode CLI` row
-called anything on `PATH` a RELEASED build, which is an unmeasured claim about a file: a
-`bun link` from the checkout puts a FORK build on `PATH` and would have been reported
-grid-less on the doctor's own authority — §8.3's defect, reintroduced by §8.3's own fix. The
-row now resolves the symlink chain (the one case settleable for free) and states the
-CONDITIONAL for every other, with both branches mutation-controlled. **A pass that corrects
-counts and unmeasured claims is exactly where a new one gets written down.**
+**And the census above took three tries**, the middle one from a script whose file filter
+(`.md/.py/.ts/.sh`) was real but undeclared, so it silently dropped the patch and reported a
+scoped number as a repo-wide one. **An undeclared filter is an unmeasured claim wearing a
+measurement's clothes** — the same shape as §8.3's `RELEASED build`, in a different medium.
 
 ## 9. §8.6's deferred repair, and the blocker that was protecting nothing (added 2026-08-02)
 

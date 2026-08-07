@@ -70,10 +70,3 @@ FLOOR — 677/56/733, the Phase 7 snapshot; growth green, shrinkage red, and the
 in-scope bound rows still treat any moved figure (70,704 / 289,296 / 30.4%) as a FINDING.
 A red probe with no entry here stops the close until a human sees it.
 
-## Why this is a skill and not a hook
-
-The pre-push hook fires per change, and Tier 2 must not (minutes per run; GATE.MAP.md).
-No structural event marks "phase boundary" in this environment, so the trigger is
-procedural — but it is backstopped: gate.py prints the tier-2 pointer on every push, and
-a close without a `-tier2.json` record is visible by absence, the same signal the
-publish flow uses for unverified pushes.

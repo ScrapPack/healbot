@@ -198,9 +198,6 @@ def changed_from(out):
     file is dropped from the join SILENTLY. `gate.py:117` already parses the identical command
     with `splitlines()`; two readings of one command's output is how they disagree.
 
-    Latent today (`git ls-files | grep -c " "` returns 0) and fixed anyway: the cost of the
-    bug is a check that goes quiet about the one file somebody just renamed with a space in it,
-    which is indistinguishable from a clean run.
     """
     return {ln.strip() for ln in (out or "").splitlines() if ln.strip()}
 
@@ -304,10 +301,6 @@ def main(argv, env):
     mode = env.get("HEALBOT_STALE", "advisory")
     if mode == "off":
         return 0
-    # A trailing `--base` with no value indexed past the end and raised IndexError, which is the
-    # same standalone-invocation typo class the guard below cites and the third path found to
-    # contradict "every path exits 0". Parsing is above the try because the try's job is the
-    # measurement; this is why it cannot raise instead.
     def opt(name):
         """-> the value, None when the flag is absent, or "" when it is present with none.
 
@@ -330,13 +323,6 @@ def main(argv, env):
 
     t0 = time.time()
     findings, unmeasured, inv, changed = [], None, {}, set()
-    # EVERY path out of the measurement is caught, which is what makes the header's "every path
-    # exits 0" true rather than aspirational. The first version of this function guarded only
-    # the _sh() None case, and the review of the 582d06c push pointed out that build_index(),
-    # sources() and scan() sat unguarded ten lines above that comment: the mid-sweep
-    # CheckoutAbsent race probe_citations.py had just learned to catch would traceback straight
-    # out of a stage documented to print nothing, exit 1, and write no record at all. A stage
-    # that cannot measure must still say so; going silent is the failure mode, not the error.
     try:
         if not citegraph.checkout_present():
             unmeasured = "opencode/ checkout absent"
@@ -383,13 +369,6 @@ def main(argv, env):
         print(f"staleness: measured, but could not write its record ({exc})", file=sys.stderr)
 
     # A FAILURE IS NOT A FINDING, and shadow mode only withholds findings.
-    #
-    # The guard added for the previous review made every defect in the measurement land in a
-    # gitignored record that shadow mode never prints and the hook's `|| true` never surfaces,
-    # so a stage that had stopped measuring looked exactly like one that measured cleanly. That
-    # is the shape this whole suite exists to hunt, and the unguarded version at least printed a
-    # traceback. So the guard stays, because refusing a push is not this stage's job, and the
-    # silence does not: an unmeasured run always says so, in every mode.
     if unmeasured:
         print(f"staleness: NOT MEASURED — {unmeasured}", file=sys.stderr)
         return 0

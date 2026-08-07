@@ -94,10 +94,7 @@ M4 = ('+ usage.get("cache_read_input_tokens", 0) * rate[2]',
 # requirement, runs the rows and goes red, which is the finding. TESTED against a corpus of the
 # right names holding the wrong iterations.
 #
-# Two requirements rather than one, and the split is not tidiness. The last two rows read
-# iteration 5 specifically; folding that into the requirement above would skip the three anchors
-# on a checkout that still holds them, and a requirement that stops MORE from being measured
-# than it has to is the same defect as one that stops nothing. Each names exactly what its rows
+# Two requirements rather than one. Each names exactly what its rows
 # open, so a partial corpus measures what it can and says what it could not.
 CORPUS = Env(
     "gnhf-run-corpus",

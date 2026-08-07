@@ -76,9 +76,3 @@ this standard's selects would arm it repo-wide, change by change, with no gate e
 That flip is the owner's call: the measured cost sits in docs/PLAINCODE.md, and until
 it is taken this skill governs sessions, not pushes.
 
-## Provenance
-
-Written for healbot on 2026-08-03 beside plainspec, on the same contract. Each rule is
-a move plus a test, and judgment is named as judgment. The checker's selftest carries
-fire and clean legs per rule. PEP 8 is adopted by reference and not reproduced. The
-caps are measured against this repo, and docs/PLAINCODE.md is the measurement record.

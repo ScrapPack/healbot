@@ -42,11 +42,7 @@ to the range machinery that test reverted.
 
 Commit identities and dates are pinned, so the scratch shas are stable and this probe's
 output is byte-identical across runs: RE-MEASURED 2026-08-07 on the probe as it now stands,
-every leg included, 4 runs, one sha256 over the full output. That re-measurement is the
-point of the sentence. The previous one was taken 2026-08-03 on a smaller probe and
-was carried forward across a change that added two scenarios, so the claim covered output
-nobody had hashed — a measurement re-quoted past the thing it measured, which is the same
-defect as the row count deleted from this paragraph (review finding from the c5ddaad push).
+every leg included, 4 runs, one sha256 over the full output.
 Re-measure here, do not re-date, whenever a leg is added. Tier 2 hashes nothing, so nothing
 depends on it; it is measured because the gate's determinism note says to measure rather
 than hope, and it is what Tier 1 membership would require. Needs `ruff` on PATH, the same
@@ -448,11 +444,7 @@ try:
     )
 
     # --- sentinel legs: a tier-1 probe's exit 3 is ERROR, and only 3 is (E2E item D) -----
-    # gate.py's tier-1 mapping used to fold every nonzero probe exit into BLOCKED, so a
-    # probe that started and then found its own named input absent (probe_twin and
-    # probe_citations on a clone without opencode/) reported identically to one that ran
-    # and measured a finding. Exit 3 is the declared cannot-measure refusal now — the same
-    # code the gate itself exits with on ERROR. These legs plant CLEAN source, because the
+    # These legs plant CLEAN source, because the
     # default scenario's F841 would take ruff to BLOCKED and the verdict lattice would
     # bury the ERROR under it.
     CLEAN = "def unplanted():\n    return 2\n"
@@ -483,11 +475,6 @@ try:
 
     # --- the change scope itself: a path git quotes, and a range git cannot resolve ------
     #
-    # Two defects in the one function every change-scoped check reads (review finding from the
-    # 3441813 push). `gate/staleness.py` and `harness/memory.py` both parse this same command's
-    # output correctly and both cite gate.py for `splitlines()` — gate.py was the copy the
-    # other two pointed at and the one still missing `core.quotePath=false`, and it also read
-    # `sh()["out"]` (stderr merged in) without ever reading `["code"]`.
     r.check(
         "the quoting mutation still applies to gate.py, exactly once",
         gate_src.count(OLD_QUOTE) == 1,

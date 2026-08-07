@@ -9,20 +9,6 @@ instrument for outcomes. What is below is MECHANISM: the store addresses one pla
 tree shape, a record survives a round trip field for field, a malformed record is inert rather
 than fatal, the index is genuinely disposable, and a bad record is refused by name on the way in.
 
-THE TWO ROWS THE DESIGN GOT WRONG are replaced here rather than carried, because both could
-pass over any implementation:
-
-  - The round-trip mutation was `read(write(rec)) != {rec minus alternatives}`. Given the live
-    row passes, that reduces to a dict inequality between dicts with DIFFERENT KEY SETS, which
-    is true for every possible writer, including one that writes nothing. It is replaced with
-    `read(write(rec_minus_alternatives)) != rec`, pushed through the same writer and reader the
-    live row calls, which is false exactly when the round trip stops being field-wise.
-  - The project-key mutation was "add a remote to a linked worktree, require the key to change".
-    `git remote add` writes the COMMON config, so the remote appears in the worktree and the
-    main tree alike and any correct repo-identity key moves both sides equally — a correct
-    implementation fails that row. It is replaced with a resolver-corruption leg: a key built on
-    `--show-toplevel` must FAIL the worktree-equality row, which is what makes that row a
-    discriminator rather than a tautology.
 
 EVERY ROW RUNS AGAINST A FIXTURE STORE. `HEALBOT_RECORDS` points at a temp directory for the
 whole run, so nothing here can write into the operator's real records. That override exists for
@@ -50,12 +36,6 @@ import memory  # noqa: E402
 # Re-declared from each phase's first green run rather than kept at the number the plan
 # projected (17, then 26). The plan's own rule: a number written down before the rows are
 # counted is how an unreachable floor gets cited in four documents as exit-gate evidence.
-#
-# The per-phase running tally that used to sit here is DELETED rather than corrected. It was a
-# number with nothing computing it, so every leg added below rotted it — and correcting it
-# produces a new number the next leg invalidates, which is the mechanism that sustains this
-# repo's review-fix chains. The floor is on the next line and the probe prints it; the phase
-# it was raised in is in `git log -p` on that line, which does compute the answer.
 r = rig.Results(expect=70)
 
 STORE = tempfile.mkdtemp(prefix="hb-records-")
@@ -448,11 +428,6 @@ try:
     #   - EITHER fails if `_cmd_stamp` stops routing through `changed_in` and inlines its own
     #     parse again, which is the pair of copies this leg exists over (review finding from the
     #     3441813 push, where both call sites in `memory.py` carried both defects).
-    #
-    # The same construction as `probe_staleness_join.py`'s fixture for the sibling module, and
-    # for its reason: a previous draft there dropped the space to make two legs "fail for
-    # different reasons" and bought that tidiness with the wiring coverage (review finding from
-    # the 4c4ff85 push).
     odd_path = memory.capture(
         {"question": "Does the anchor survive a path git would mangle?",
          "choice": "The changed set is parsed once, with quoting off and on line boundaries",
@@ -896,10 +871,6 @@ try:
         "already caught one real bug two ad-hoc controls missed. A re-implementation here would "
         "start that history over, and the place it would be wrong is a public repository",
     )
-    # The predicate is REPLACED with one that cannot be reached, and the refusal is observed.
-    # The first draft of this row asserted `_home_predicate` was a function, which is true of
-    # every possible implementation including one that exports everything unscrubbed — an
-    # assertion incapable of failing, which is the defect this suite exists to hunt.
     # No inner `try/finally`, deliberately: probe_rig_contract asserts that the last statement of
     # EVERY try/finally in a rig is the verdict exit, so a cleanup `finally` here would turn that
     # guard red. The restore is an ordinary statement instead, and the outer handler covers the
