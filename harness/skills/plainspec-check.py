@@ -81,8 +81,10 @@ def load_exemptions(cfg):
     """Read `[plainspec] disable = [...]` into a set of "RULE" / "RULE:message-prefix" keys.
 
     A key is a whole rule ("R8") or a rule plus a message prefix ("R8:em-dash"). The RULE half is
-    matched EXACTLY and only the message half by prefix — see `is_exempt`, which had to stop
-    prefix-matching the whole string once R1 was found exempting R10 through R15. The spec file
+    matched EXACTLY and only the message half by prefix — see `is_exempt`. An earlier draft
+    prefix-matched the whole key, so a disable list holding "R1" WOULD have exempted R10 through
+    R15 as well. Latent, never fired: the only list in this repo has ever held "R8:em-dash". The
+    bug was found by reading the code, not by it going wrong. The spec file
     stays authoritative about what the rules ARE; this only records that one repo has decided one
     of them does not apply to it.
 

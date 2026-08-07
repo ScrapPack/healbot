@@ -24,8 +24,14 @@ python3 -m venv venv && venv/bin/pip install pyte
 # probe_arm_factory, probe_fleet and probe_on_grid depend on ambient state rather than on the
 # checkout — a Claude Code transcript for THIS checkout (probe_backend exits 3 without one, its
 # own declared cannot-measure sentinel, not an environment skip), a live server, or a skip budget.
-# Two sweeps an hour apart gave different exit codes for three of them, so any fixed list here
-# would be a number that rots between runs. Run them and read the probe's own output.
+# MEASURED 2026-08-07, two sweeps about an hour apart in a checkout-free worktree: probe_backend
+# went rc=0 (0 skips) then rc=1, stable at rc=1 over three consecutive re-runs; probe_fleet went
+# 5/8 then 8/10. Its exit 3 is the no-transcript path and is NOT what moved here. probe_arm_factory and
+# probe_on_grid also differed, but that one is MY artifact, not theirs — the second sweep used a
+# 120s cap where the first used 180s, and both need a server boot. Stated separately because a
+# measurement that blames the subject for the instrument is the error this file keeps finding.
+# Two probes moving on their own is enough: a fixed list here would rot between runs. Run them
+# and read the probe's own output.
 # An earlier version of this comment said "all but probe_turn_predicate.py need the checkout" and
 # "on a fresh clone this suite does not run". Both were false, and together they discouraged the
 # only free verification a fresh clone has — see docs/CLONE.md.
