@@ -12,20 +12,30 @@ Blocked by: -
 escalation to `gate/`, `fork/` and `.carryover/verified/probe_*`, dropping plain `harness/`
 because it fired on 25 of the last 60 commits.
 
-**The narrowing went the wrong way: it dropped the narrower path and kept the wider one.**
-Measured in ticket 12's own unit, commits that touch the path, over one identical 60-commit
-window:
+**Ticket 12's criterion was semantic and is not in dispute here.** It narrowed "to what can make
+the measurement lie", and `gate/`, `fork/` and `probe_*` genuinely are those things while
+`harness/` is not. The 25-of-60 figure was context, not the rule.
+
+**What is in dispute is that the narrowing did not narrow.** Ticket 12 recorded, as a concern in
+its own words, that "the path escalation fires on the majority of healbot work": 33 of the last 60
+commits at its close touched the union `harness/` | `gate/` | `fork/`. Measured in that same unit
+over `1373e1d..05ff622`:
 
 | escalation set | commits touched |
 |---|---|
-| `gate/` \| `fork/` \| `probe_*` — the set ticket 12 KEPT | **33/60 (55%)** |
-| `harness/` — the set ticket 12 DROPPED for firing too often | 19/60 (32%) |
+| `gate/` \| `fork/` \| `probe_*` — the set ticket 12 KEPT | **37/60 (62%)** |
+| `harness/` — the set ticket 12 dropped | 22/60 (37%) |
 
-Both rows are printed by [21-push-exit-backtest.py](../research/21-push-exit-backtest.py). An
-earlier draft of this ticket claimed 38% against 42%, which compared a share of pushes where a
-finding LANDED on an escalation path against a share of commits that TOUCH one — two different
-quantities. The model review of the 4c60a9e push caught it. The corrected comparison is the
-stronger claim, not a weaker one.
+So the rule now fires on MORE of healbot's work than the union it replaced, because
+`.carryover/verified/probe_*` is touched more often than `harness/` was. The semantic narrowing
+widened the blast radius, against a concern the same ticket raised.
+
+Both rows are printed by [21-push-exit-backtest.py](../research/21-push-exit-backtest.py), which
+records the window's anchor so a later reader can tell drift from a defect. Two earlier drafts of
+this paragraph were wrong and the model review caught both: the first compared a share of pushes
+where a finding LANDED on a path against a share of commits that TOUCH one, and the second counted
+with `git show --name-only`, which prints nothing at all for a merge and undercounted both rows
+asymmetrically (55%/32% instead of 62%/37%).
 
 That is tolerable on a push opening new surface. On a push whose entire content is a correction of
 the previous review it is the loop:

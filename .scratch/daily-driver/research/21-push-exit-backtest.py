@@ -170,21 +170,31 @@ def main():
     # WHERE A FINDING LANDED on an escalation path — two different quantities, caught by the
     # model review of the 4c60a9e push. Both rows below are the same measurement over the same
     # 60 commits, so they are comparable to each other and to ticket 12's figure.
-    print("\nescalation width, in ticket 12's unit (commits that TOUCH the path):")
     shas = subprocess.run(["git", "log", "-60", "--format=%H", "main"],
                           cwd=a.repo, capture_output=True, text=True).stdout.split()
+    anchor = f"{shas[-1][:7]}..{shas[0][:7]}" if shas else "?"
+    print(f"\nescalation width, in ticket 12's unit (commits that TOUCH the path), {anchor}:")
+
+    # DIFF AGAINST THE FIRST PARENT, never `git show --name-only`. For a merge, git shows the
+    # COMBINED diff, which lists only files differing from ALL parents — so a merge that brings
+    # the path in cleanly prints NOTHING and counts as a miss. Measured on f58ec71: `--name-only`
+    # prints zero files while the first-parent diff shows 35, of which 5 are gate/ and 8 are
+    # harness/. Five of the 60 commits in this window are merges, and the undercount was
+    # asymmetric between the two rows (55%/32% wrong, 62%/37% right). Found by the model review
+    # of the 3f36dce push, in the fix for the previous round's finding.
     for paths, label in ((ESCALATION, "gate/ | fork/ | probe_*  (the set ticket 12 KEPT)"),
                          (("harness/",), "harness/                 (the set ticket 12 DROPPED)")):
         hits = 0
         for sha in shas:
-            out = subprocess.run(["git", "show", "--pretty=", "--name-only", sha],
+            out = subprocess.run(["git", "diff", "--name-only", f"{sha}^1", sha],
                                  cwd=a.repo, capture_output=True, text=True).stdout
             if any(ln.startswith(paths) for ln in out.splitlines() if ln.strip()):
                 hits += 1
         print(f"   {hits:3d}/{len(shas)} ({100 * hits / (len(shas) or 1):2.0f}%)  {label}")
 
     # Do findings recur? If they did, the exit would need a dedup ledger keyed on finding
-    # identity. Measured: they do not, which is why ticket 22 carries no such ledger.
+    # identity. The answer ticket 22 relies on comes from the JACCARD pass below, not from the
+    # exact-key count above it.
     #
     # THE EXACT-KEY TEST ALONE CANNOT CARRY THAT CLAIM and must not be quoted as if it did.
     # Keying on the reviewer's free-text summary means two reports of the SAME defect worded
@@ -213,10 +223,12 @@ def main():
     for items in by_file.values():
         for i in range(len(items)):
             for j in range(i + 1, len(items)):
-                (ts_a, a), (ts_b, b) = items[i], items[j]
-                if ts_a == ts_b or not a or not b:
+                # NOT `a` for the left-hand tokens: `a` is the argparse namespace bound above,
+                # and rebinding it here worked only because this was the last block in main().
+                (ts_x, x), (ts_y, y) = items[i], items[j]
+                if ts_x == ts_y or not x or not y:
                     continue          # same review is not a recurrence
-                if len(a & b) / len(a | b) >= 0.5:
+                if len(x & y) / len(x | y) >= 0.5:
                     near += 1
     print(f"near-duplicates: {near} cross-review pairs on the same file with Jaccard >= 0.5")
 
