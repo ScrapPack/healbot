@@ -12,30 +12,18 @@ Blocked by: -
 escalation to `gate/`, `fork/` and `.carryover/verified/probe_*`, dropping plain `harness/`
 because it fired on 25 of the last 60 commits.
 
-**Ticket 12's criterion was semantic and is not in dispute here.** It narrowed "to what can make
-the measurement lie", and `gate/`, `fork/` and `probe_*` genuinely are those things while
-`harness/` is not. The 25-of-60 figure was context, not the rule.
+**Ticket 12's narrowing is not in dispute and this ticket does not reopen it.** Its criterion was
+semantic — "narrowed to what can make the measurement lie" — and measured over the same window by
+the same method, it did narrow: the union it replaced touches 39 of 60 commits, the set it kept
+touches 37. [21-push-exit-backtest.py](../research/21-push-exit-backtest.py) prints both rows.
 
-**What is in dispute is that the narrowing did not narrow.** Ticket 12 recorded, as a concern in
-its own words, that "the path escalation fires on the majority of healbot work": 33 of the last 60
-commits at its close touched the union `harness/` | `gate/` | `fork/`. Measured in that same unit
-over `1373e1d..05ff622`:
-
-| escalation set | commits touched |
-|---|---|
-| `gate/` \| `fork/` \| `probe_*` — the set ticket 12 KEPT | **37/60 (62%)** |
-| `harness/` — the set ticket 12 dropped | 22/60 (37%) |
-
-So the rule now fires on MORE of healbot's work than the union it replaced, because
-`.carryover/verified/probe_*` is touched more often than `harness/` was. The semantic narrowing
-widened the blast radius, against a concern the same ticket raised.
-
-Both rows are printed by [21-push-exit-backtest.py](../research/21-push-exit-backtest.py), which
-records the window's anchor so a later reader can tell drift from a defect. Two earlier drafts of
-this paragraph were wrong and the model review caught both: the first compared a share of pushes
-where a finding LANDED on a path against a share of commits that TOUCH one, and the second counted
-with `git show --name-only`, which prints nothing at all for a merge and undercounted both rows
-asymmetrically (55%/32% instead of 62%/37%).
+*Three earlier drafts of this paragraph claimed the narrowing failed, each with a different wrong
+number, and the model review refuted all three: a share of pushes compared against a share of
+commits; then `git show --name-only`, which prints nothing for a merge; then a fresh measurement
+compared against ticket 12's historical figure from another window. The claim is deleted rather
+than corrected a fourth time, per the citation-hygiene rule that a number nothing computes should
+be removed and not repaired. It was never load-bearing — what this ticket turns on is the finding
+split and the discharge lift below, and neither moved across any of those rounds.*
 
 That is tolerable on a push opening new surface. On a push whose entire content is a correction of
 the previous review it is the loop:

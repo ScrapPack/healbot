@@ -172,7 +172,10 @@ def main():
     # 60 commits, so they are comparable to each other and to ticket 12's figure.
     shas = subprocess.run(["git", "log", "-60", "--format=%H", "main"],
                           cwd=a.repo, capture_output=True, text=True).stdout.split()
-    anchor = f"{shas[-1][:7]}..{shas[0][:7]}" if shas else "?"
+    # `shas[-1]^..`, not `shas[-1]..`: the two-dot range EXCLUDES its left endpoint, so the
+    # obvious spelling names 59 of the 60 commits actually measured and a reader replaying the
+    # stated anchor cannot reproduce the rows.
+    anchor = f"{shas[-1][:7]}^..{shas[0][:7]}" if shas else "?"
     print(f"\nescalation width, in ticket 12's unit (commits that TOUCH the path), {anchor}:")
 
     # DIFF AGAINST THE FIRST PARENT, never `git show --name-only`. For a merge, git shows the
@@ -182,13 +185,20 @@ def main():
     # harness/. Five of the 60 commits in this window are merges, and the undercount was
     # asymmetric between the two rows (55%/32% wrong, 62%/37% right). Found by the model review
     # of the 3f36dce push, in the fix for the previous round's finding.
-    for paths, label in ((ESCALATION, "gate/ | fork/ | probe_*  (the set ticket 12 KEPT)"),
-                         (("harness/",), "harness/                 (the set ticket 12 DROPPED)")):
+    for paths, label in ((("harness/", "gate/", "fork/"), "harness/ | gate/ | fork/  (the union ticket 12 REPLACED)"),
+                         (ESCALATION, "gate/ | fork/ | probe_*   (the set it KEPT)"),
+                         (("harness/",), "harness/                  (the path it dropped)")):
         hits = 0
         for sha in shas:
-            out = subprocess.run(["git", "diff", "--name-only", f"{sha}^1", sha],
-                                 cwd=a.repo, capture_output=True, text=True).stdout
-            if any(ln.startswith(paths) for ln in out.splitlines() if ln.strip()):
+            p = subprocess.run(["git", "diff", "--name-only", f"{sha}^1", sha],
+                               cwd=a.repo, capture_output=True, text=True)
+            if p.returncode != 0:
+                # A root commit has no first parent. Empty stdout would otherwise count as a
+                # miss, which is the same silent-empty-output failure the merge fix above
+                # repairs — so say it rather than absorb it.
+                print(f"   WARNING: no first-parent diff for {sha[:7]}, excluded from this row")
+                continue
+            if any(ln.startswith(paths) for ln in p.stdout.splitlines() if ln.strip()):
                 hits += 1
         print(f"   {hits:3d}/{len(shas)} ({100 * hits / (len(shas) or 1):2.0f}%)  {label}")
 
