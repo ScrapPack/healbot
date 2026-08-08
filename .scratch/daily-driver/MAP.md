@@ -125,6 +125,40 @@ Domain, and the standing preferences every session on this map must consult:
   $0.94 for an 878-byte diff, which is why the bound is reviews times roughly one dollar and not a
   function of diff size).
 
+- **The push exit needs a checkout counter, and the review is not what has to change.** Measured
+  2026-08-08 over the 73-record window, replay in
+  [21-push-exit-backtest.py](research/21-push-exit-backtest.py): **77% of every reviewed push is a
+  repair of a prior review**, no substantive push in the window came back clean (0 of 17), and the
+  expected chain is 4.0 repairs. The mechanism is that a repair commit is itself full-bar
+  reviewable surface, so each repair buys fresh obligations; findings do NOT recur (148 findings,
+  148 distinct keys, zero repeats), so this is generation and not nagging. The reviewer's quota
+  cannot be argued down, so the intervention is on what the quota OBLIGATES, which is a pure
+  function over the record and therefore replayable and probe-able. Two captain rulings 2026-08-08:
+  non-blocking findings leave as **proposed stubs promoted by firstmate**, preserving the
+  firstmate-only-writer contract; and the checkout stage lands **advisory**, leaving the `blocking`
+  ruling where ticket 13 carries it. Tickets:
+  [a push declares what it closes](tickets/22-a-push-declares-what-it-closes.md),
+  [a non-blocking finding leaves as a proposed stub](tickets/23-findings-leave-as-stubs.md), and the
+  one open decision,
+  [does the path escalation apply to a push that only closes findings](tickets/21-escalation-on-a-closing-push.md)
+  — ticket 12's narrowed escalation set still touches 38% of pushes and, on a repair push,
+  obligates 4.25x more work than severity does.
+- **Three more push-exit stages are unowned, and one of them is ready to close.** Found 2026-08-08
+  while ticketing the checkout counter.
+  [Chain state has nowhere to live](tickets/24-chain-state-has-nowhere-to-live.md): the attempt cap
+  ticket 22 inherits from ticket 12 cannot count, because the records it would count are gitignored
+  and a pool slot's copy is empty, so a record-counting cap counts to one forever in exactly the
+  environment the fleet runs in. **The commits already carry the answer** via the `Review-chain:`
+  trailer.
+  [The gate blocks on documentation position, not behaviour](tickets/25-the-gate-blocks-on-position-not-behaviour.md):
+  four Tier-1 rows refuse every push while the only judge of behaviour is advisory, so a citation
+  moved one line refuses and a flagged logic defect ships — an accident of two reasonable choices
+  that nobody has ratified as a principle, and the blocking row is itself blind to source files.
+  [The staleness stage never left shadow mode](tickets/26-staleness-never-left-shadow-mode.md): its
+  calibration was answerable all along — **26 live records, silent on 58% of pushes, bimodal, median
+  0.21 s**, which is a detector rather than a generator and is the natural Tier-1 candidate ticket
+  25 needs.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket.
