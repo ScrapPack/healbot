@@ -13,10 +13,16 @@ commit subject via CLOSING below. That regex is a PROXY and it is not exact: an 
 version required the plural "findings" and silently filed every singular "review finding
 from the X push" as new surface, which moved the headline rate by more than 20 points before
 it was caught by reading the classification instead of trusting it. `--show-class` prints
-every subject with its class so the next reader can audit it the same way. One subject is
-known to classify wrongly today ("the second 3441813 finding": three tokens sit between
-"the" and "finding"), and hybrid commits that do substantive work AND close findings have no
-correct answer at all. Treat the rates as accurate to a few points, not to the digit.
+every subject with its class so the next reader can audit it the same way.
+
+Known misses today, found by the model review of the 4c60a9e push rather than by this
+docstring's author: a repair whose subject leads with something else ("afk: the review's two
+auto-fix findings, ...") matches no alternative and files as new surface. Hybrid commits that
+do substantive work AND close findings have no correct answer at all. An earlier draft of
+this paragraph also claimed "the second 3441813 finding" misclassifies; it does not, because
+the `{1,3}` repetition matches it — that caveat was true of the one-token version of the
+regex and was carried forward unchecked after the regex was widened. Treat the rates as
+accurate to a few points, not to the digit.
 
 WHY THE RECORDS ARE READ FROM A PATH RATHER THAN FOUND. The `gate/runs/` rule in .gitignore
 means a worktree's own copy is empty, so a replay run from a pool slot would otherwise print
@@ -158,16 +164,61 @@ def main():
     for k, v in cat.most_common():
         print(f"   {v:3d} ({100 * v / tot:2.0f}%)  {k}")
 
+    # How wide is the narrowed escalation set, in ticket 12's OWN unit? Ticket 12 dropped plain
+    # `harness/` because it "fired on 25 of the last 60 commits", which is a share of COMMITS
+    # THAT TOUCH A PATH. An earlier draft of ticket 21 compared that against a share of PUSHES
+    # WHERE A FINDING LANDED on an escalation path — two different quantities, caught by the
+    # model review of the 4c60a9e push. Both rows below are the same measurement over the same
+    # 60 commits, so they are comparable to each other and to ticket 12's figure.
+    print("\nescalation width, in ticket 12's unit (commits that TOUCH the path):")
+    shas = subprocess.run(["git", "log", "-60", "--format=%H", "main"],
+                          cwd=a.repo, capture_output=True, text=True).stdout.split()
+    for paths, label in ((ESCALATION, "gate/ | fork/ | probe_*  (the set ticket 12 KEPT)"),
+                         (("harness/",), "harness/                 (the set ticket 12 DROPPED)")):
+        hits = 0
+        for sha in shas:
+            out = subprocess.run(["git", "show", "--pretty=", "--name-only", sha],
+                                 cwd=a.repo, capture_output=True, text=True).stdout
+            if any(ln.startswith(paths) for ln in out.splitlines() if ln.strip()):
+                hits += 1
+        print(f"   {hits:3d}/{len(shas)} ({100 * hits / (len(shas) or 1):2.0f}%)  {label}")
+
     # Do findings recur? If they did, the exit would need a dedup ledger keyed on finding
     # identity. Measured: they do not, which is why ticket 22 carries no such ledger.
+    #
+    # THE EXACT-KEY TEST ALONE CANNOT CARRY THAT CLAIM and must not be quoted as if it did.
+    # Keying on the reviewer's free-text summary means two reports of the SAME defect worded
+    # differently produce different keys, so "every key distinct" is close to guaranteed by
+    # construction. The model review of the 4c60a9e push caught this shipping as the sole
+    # evidence for "findings do not recur". The Jaccard pass below is what actually tests it:
+    # same file, different reviews, token overlap of the summaries. That is a weak semantic
+    # test rather than no test, and the claim rests on IT, not on the key count.
+    def norm(s):
+        return " ".join(re.sub(r"[^a-z]+", " ", (s or "").lower()).split())
+
     seen = collections.Counter()
     for r in recs:
         for f in r["findings"]:
-            norm = re.sub(r"[^a-z]+", " ", re.sub(r"\d+", "#", (f.get("summary") or "").lower()))
-            seen[(f.get("file"), " ".join(norm.split()))] += 1
+            seen[(f.get("file"), norm(f.get("summary")))] += 1
     total = sum(seen.values())
     print(f"\nfinding identity: {total} findings, {len(seen)} distinct (file, normalised summary) keys, "
-          f"{sum(1 for v in seen.values() if v > 1)} keys seen more than once")
+          f"{sum(1 for v in seen.values() if v > 1)} exact keys seen more than once")
+
+    STOP = {"the", "a", "of", "to", "is", "in", "and", "that", "it", "for", "on", "this"}
+    by_file = collections.defaultdict(list)
+    for r in recs:
+        for f in r["findings"]:
+            by_file[f.get("file")].append((r["ts"], set(norm(f.get("summary")).split()) - STOP))
+    near = 0
+    for items in by_file.values():
+        for i in range(len(items)):
+            for j in range(i + 1, len(items)):
+                (ts_a, a), (ts_b, b) = items[i], items[j]
+                if ts_a == ts_b or not a or not b:
+                    continue          # same review is not a recurrence
+                if len(a & b) / len(a | b) >= 0.5:
+                    near += 1
+    print(f"near-duplicates: {near} cross-review pairs on the same file with Jaccard >= 0.5")
 
 
 if __name__ == "__main__":

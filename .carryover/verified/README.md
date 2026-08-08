@@ -26,7 +26,9 @@ python3 -m venv venv && venv/bin/pip install pyte
 # own declared cannot-measure sentinel, not an environment skip), a live server, or a skip budget.
 # MEASURED 2026-08-07, two sweeps about an hour apart in a checkout-free worktree: probe_backend
 # went rc=0 (0 skips) then rc=1, stable at rc=1 over three consecutive re-runs; probe_fleet went
-# 5/8 then 8/10. Its exit 3 is the no-transcript path and is NOT what moved here. probe_arm_factory and
+# 5/8 then 8/10. probe_backend's exit 3 is the no-transcript path and is NOT what moved here —
+# naming it rather than writing "its", because the nearest antecedent was probe_fleet, which has no
+# transcript path and exits only 0 or 1 (probe_fleet.py:110). probe_arm_factory and
 # probe_on_grid also differed, but that one is MY artifact, not theirs — the second sweep used a
 # 120s cap where the first used 180s, and both need a server boot. Stated separately because a
 # measurement that blames the subject for the instrument is the error this file keeps finding.

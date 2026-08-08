@@ -141,8 +141,9 @@ Domain, and the standing preferences every session on this map must consult:
   [a non-blocking finding leaves as a proposed stub](tickets/23-findings-leave-as-stubs.md), and the
   one open decision,
   [does the path escalation apply to a push that only closes findings](tickets/21-escalation-on-a-closing-push.md)
-  — ticket 12's narrowed escalation set still touches 38% of pushes and, on a repair push,
-  obligates 4.25x more work than severity does.
+  — ticket 12's narrowing went the wrong way, keeping a set that touches 55% of the last 60
+  commits and dropping one that touches 32%, and on a repair push that set obligates 4.25x more
+  work than severity does.
 - **Three more push-exit stages are unowned, and one of them is ready to close.** Found 2026-08-08
   while ticketing the checkout counter.
   [Chain state has nowhere to live](tickets/24-chain-state-has-nowhere-to-live.md): the attempt cap

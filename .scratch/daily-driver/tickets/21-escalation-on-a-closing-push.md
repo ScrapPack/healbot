@@ -10,10 +10,22 @@ Blocked by: -
 
 [When does the automatic review run](12-when-does-the-review-run.md) narrowed the path
 escalation to `gate/`, `fork/` and `.carryover/verified/probe_*`, dropping plain `harness/`
-because it fired on 25 of the last 60 commits. **The narrowing barely narrowed.** Replayed over
-the 73-record window, the narrowed set still touches a finding in 38% of pushes against the 42%
-that got `harness/` dropped. Evidence and the runnable replay:
-[21-push-exit-backtest.py](../research/21-push-exit-backtest.py).
+because it fired on 25 of the last 60 commits.
+
+**The narrowing went the wrong way: it dropped the narrower path and kept the wider one.**
+Measured in ticket 12's own unit, commits that touch the path, over one identical 60-commit
+window:
+
+| escalation set | commits touched |
+|---|---|
+| `gate/` \| `fork/` \| `probe_*` — the set ticket 12 KEPT | **33/60 (55%)** |
+| `harness/` — the set ticket 12 DROPPED for firing too often | 19/60 (32%) |
+
+Both rows are printed by [21-push-exit-backtest.py](../research/21-push-exit-backtest.py). An
+earlier draft of this ticket claimed 38% against 42%, which compared a share of pushes where a
+finding LANDED on an escalation path against a share of commits that TOUCH one — two different
+quantities. The model review of the 4c60a9e push caught it. The corrected comparison is the
+stronger claim, not a weaker one.
 
 That is tolerable on a push opening new surface. On a push whose entire content is a correction of
 the previous review it is the loop:
